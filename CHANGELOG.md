@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.4.55] - 2026-11-20
+
+### Changed
+- **Faster adaptive glass ink:** Mini Player and Home bar dock now sample backdrop luminance every 100 ms with a 120 ms ink fade (~2× snappier response while scrolling).
+
 ## [5.4.54] - 2026-11-20
 
 ### Added
