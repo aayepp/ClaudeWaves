@@ -4,6 +4,7 @@ import com.lastwave.app.ui.comic.clipOnly
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.draw.drawBehind
+import com.lastwave.app.ui.theme.comicPanel
 import com.lastwave.app.ui.theme.isDeviceGlassCapable
 import com.lastwave.app.ui.theme.liquidGlass
 import com.lastwave.app.ui.theme.liquidGlassSource
@@ -743,6 +744,39 @@ private fun LiquidGlassLivePreview(modifier: Modifier = Modifier) {
                     color = scheme.onSurface,
                 )
             }
+        }
+    }
+}
+
+private val SettingsTileShape = RoundedCornerShape(20.dp)
+
+/** One area of Settings on the landing grid: a large icon over its name and a one-line status. */
+@Composable
+internal fun SettingsTile(
+    icon: ImageVector,
+    container: Color,
+    content: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isHighlighted: Boolean = false,
+) {
+    Column(
+        modifier
+            .height(104.dp)
+            .settingHighlightGlow(isHighlighted = isHighlighted, shape = SettingsTileShape)
+            .comicPanel(SettingsTileShape)
+            .clip(SettingsTileShape)
+            .background(container)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(26.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = content.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

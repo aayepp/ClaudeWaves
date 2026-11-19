@@ -678,122 +678,103 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                        // Grouped like iOS Settings: spacing separates the groups, no section headings.
+                        // Dashboard tiles instead of the inherited sectioned list: each area at a glance.
                         item {
-                            SettingsGroup(rowCount = 3) { index, position ->
-                                when (index) {
-                                0 -> SettingsActionCard(
-                                    icon = Icons.Filled.CloudSync,
-                                    iconContainer = MaterialTheme.colorScheme.error,
-                                    iconTint = MaterialTheme.colorScheme.onError,
-                                    title = stringResource(R.string.set_cat_yt),
-                                    subtitle = if (ytConnection.isConnected) {
-                                        "Connected as ${ytConnection.accountName} • 24/7 library sync"
-                                    } else {
-                                        "YouTube Music account, channels, history & 24/7 sync"
-                                    },
-                                    onClick = { activeTab = SettingsTab.YOUTUBE },
-                                    position = position,
-                                )
-                                1 -> SettingsActionCard(
-                                    icon = Icons.Filled.PlayCircle,
-                                    iconContainer = MaterialTheme.colorScheme.tertiary,
-                                    iconTint = MaterialTheme.colorScheme.onTertiary,
-                                    title = stringResource(R.string.set_cat_spotify),
-                                    subtitle = if (spotifyConnected) {
-                                        "Connected (sp_dc) • Canvas, playlist imports & Liked Songs sync"
-                                    } else {
-                                        "Account connection, Canvas, playlist imports & Liked Songs sync"
-                                    },
-                                    onClick = { activeTab = SettingsTab.SPOTIFY },
-                                    position = position,
-                                )
-                                else -> SettingsActionCard(
-                                    icon = Icons.Filled.Album,
-                                    iconContainer = MaterialTheme.colorScheme.primary,
-                                    iconTint = MaterialTheme.colorScheme.onPrimary,
-                                    title = stringResource(R.string.set_cat_lfm),
-                                    subtitle = if (isLastFmConnected) "Connected as ${session.username} \u2022 Scrobbling active" else "Connect account, scrobbles & statistics sync",
-                                    onClick = { activeTab = SettingsTab.LAST_FM },
-                                    position = position,
-                                )
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    SettingsTile(
+                                        icon = Icons.Filled.GraphicEq,
+                                        container = MaterialTheme.colorScheme.primaryContainer,
+                                        content = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        title = stringResource(R.string.set_cat_audio),
+                                        subtitle = streamingQualityLabel(misc.wifiStreamingQuality),
+                                        onClick = { activeTab = SettingsTab.AUDIO },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    SettingsTile(
+                                        icon = Icons.Filled.Palette,
+                                        container = MaterialTheme.colorScheme.tertiaryContainer,
+                                        content = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        title = stringResource(R.string.set_cat_appear),
+                                        subtitle = stringResource(R.string.set_cat_appear_sub),
+                                        onClick = { activeTab = SettingsTab.APPEARANCE },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    SettingsTile(
+                                        icon = Icons.Filled.CloudSync,
+                                        container = MaterialTheme.colorScheme.errorContainer,
+                                        content = MaterialTheme.colorScheme.onErrorContainer,
+                                        title = stringResource(R.string.set_cat_yt),
+                                        subtitle = if (ytConnection.isConnected) "Connected" else "Not connected",
+                                        onClick = { activeTab = SettingsTab.YOUTUBE },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    SettingsTile(
+                                        icon = Icons.Filled.PlayCircle,
+                                        container = MaterialTheme.colorScheme.tertiaryContainer,
+                                        content = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        title = stringResource(R.string.set_cat_spotify),
+                                        subtitle = if (spotifyConnected) "Connected" else "Not connected",
+                                        onClick = { activeTab = SettingsTab.SPOTIFY },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    SettingsTile(
+                                        icon = Icons.Filled.Album,
+                                        container = MaterialTheme.colorScheme.primaryContainer,
+                                        content = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        title = stringResource(R.string.set_cat_lfm),
+                                        subtitle = if (isLastFmConnected) "Scrobbling" else "Not connected",
+                                        onClick = { activeTab = SettingsTab.LAST_FM },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    SettingsTile(
+                                        icon = Icons.Filled.QueueMusic,
+                                        container = MaterialTheme.colorScheme.secondaryContainer,
+                                        content = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        title = stringResource(R.string.set_cat_lib),
+                                        subtitle = if (downloadCount > 0) "$downloadCount downloaded" else "Downloads • Imports",
+                                        onClick = { activeTab = SettingsTab.LIBRARY },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    SettingsTile(
+                                        icon = Icons.Filled.Extension,
+                                        container = MaterialTheme.colorScheme.secondaryContainer,
+                                        content = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        title = stringResource(R.string.settings_modules_title),
+                                        subtitle = stringResource(R.string.settings_modules_sub),
+                                        onClick = onOpenModules,
+                                        modifier = Modifier.weight(1f),
+                                        isHighlighted = highlightedSettingId == "services.modules" || highlightedSettingId == "library.modules",
+                                    )
+                                    SettingsTile(
+                                        icon = Icons.Filled.Backup,
+                                        container = MaterialTheme.colorScheme.secondaryContainer,
+                                        content = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        title = stringResource(R.string.set_cat_data),
+                                        subtitle = stringResource(R.string.set_cat_data_sub),
+                                        onClick = { activeTab = SettingsTab.DATA_BACKUP },
+                                        modifier = Modifier.weight(1f),
+                                    )
                                 }
                             }
                         }
                         item {
-                            SettingsGroup(rowCount = 2) { index, position ->
-                                when (index) {
-                                0 -> SettingsActionCard(
-                                    icon = Icons.Filled.Palette,
-                                    iconContainer = MaterialTheme.colorScheme.secondary,
-                                    iconTint = MaterialTheme.colorScheme.onSecondary,
-                                    title = stringResource(R.string.set_cat_appear),
-                                    subtitle = stringResource(R.string.set_cat_appear_sub),
-                                    onClick = { activeTab = SettingsTab.APPEARANCE },
-                                    position = position,
-                                )
-                                else -> SettingsActionCard(
-                                    icon = Icons.Filled.GraphicEq,
-                                    iconContainer = MaterialTheme.colorScheme.primary,
-                                    iconTint = MaterialTheme.colorScheme.onPrimary,
-                                    title = stringResource(R.string.set_cat_audio),
-                                    subtitle = stringResource(R.string.set_cat_audio_sub),
-                                    onClick = { activeTab = SettingsTab.AUDIO },
-                                    position = position,
-                                )
-                                }
-                            }
-                        }
-                        item {
-                            SettingsGroup(rowCount = 2) { index, position ->
-                                when (index) {
-                                0 -> SettingsActionCard(
-                                    icon = Icons.Filled.QueueMusic,
-                                    iconContainer = MaterialTheme.colorScheme.tertiary,
-                                    iconTint = MaterialTheme.colorScheme.onTertiary,
-                                    title = stringResource(R.string.set_cat_lib),
-                                    subtitle = run {
-                                        val count = downloadCount
-                                        if (count > 0) "$count songs downloaded • Imports, Home layout" else "Home layout, Playlist imports, Downloads, Exclusions"
-                                    },
-                                    onClick = { activeTab = SettingsTab.LIBRARY },
-                                    position = position,
-                                )
-                                else -> SettingsActionCard(
-                                    icon = Icons.Filled.Extension,
-                                    iconContainer = MaterialTheme.colorScheme.secondary,
-                                    iconTint = MaterialTheme.colorScheme.onSecondary,
-                                    title = stringResource(R.string.settings_modules_title),
-                                    subtitle = stringResource(R.string.settings_modules_sub),
-                                    onClick = onOpenModules,
-                                    position = position,
-                                    isHighlighted = (highlightedSettingId == "services.modules" || highlightedSettingId == "library.modules"),
-                                )
-                                }
-                            }
-                        }
-                        item {
-                            SettingsGroup(rowCount = 2) { index, position ->
-                                when (index) {
-                                0 -> SettingsActionCard(
-                                    icon = Icons.Filled.Backup,
-                                    iconContainer = MaterialTheme.colorScheme.secondary,
-                                    iconTint = MaterialTheme.colorScheme.onSecondary,
-                                    title = stringResource(R.string.set_cat_data),
-                                    subtitle = stringResource(R.string.set_cat_data_sub),
-                                    onClick = { activeTab = SettingsTab.DATA_BACKUP },
-                                    position = position,
-                                )
-                                else -> SettingsActionCard(
+                            SettingsGroup(rowCount = 1) { _, position ->
+                                SettingsActionCard(
                                     icon = Icons.Filled.Info,
-                                    iconContainer = MaterialTheme.colorScheme.primary,
-                                    iconTint = MaterialTheme.colorScheme.onPrimary,
+                                    iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     title = stringResource(R.string.set_cat_about),
-                                    subtitle = if (updateInfo.isUpdateAvailable) "Update Available (${updateInfo.latestVersion}) \u2022 v${appVersionName(context)}" else "v${appVersionName(context)} \u2022 Language, Community, Source code",
+                                    subtitle = if (updateInfo.isUpdateAvailable) "Update Available (${updateInfo.latestVersion}) \u2022 v${appVersionName(context)}" else "v${appVersionName(context)} \u2022 Language, Community",
                                     onClick = { activeTab = SettingsTab.ABOUT },
                                     position = position,
                                 )
-                                }
                             }
                         }
                     }
