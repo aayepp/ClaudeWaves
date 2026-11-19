@@ -282,7 +282,8 @@ val LocalToggleDetailViewer = staticCompositionLocalOf<((ToggleDetailInfo) -> Un
 
 // -- Expressive shape scale used only within this screen --
 internal val CardOuterShape = RoundedCornerShape(28.dp)
-internal val IconBadgeShape = RoundedCornerShape(14.dp)
+// iOS-style icon tile: a small rounded square rather than a pill.
+internal val IconBadgeShape = RoundedCornerShape(9.dp)
 
 /** Where a row sits within a visually-connected group of settings rows —
  *  drives per-row corner radii so a multi-row group reads as one premium
@@ -359,12 +360,12 @@ internal fun SectionLabel(text: String) {
 internal fun IconBadge(icon: ImageVector, container: Color, tint: Color, modifier: Modifier = Modifier) {
     Box(
         modifier
-            .size(44.dp)
+            .size(36.dp)
             .clip(IconBadgeShape)
             .background(container),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -372,12 +373,12 @@ internal fun IconBadge(icon: ImageVector, container: Color, tint: Color, modifie
 internal fun IconBadge(painter: Painter, container: Color, tint: Color, modifier: Modifier = Modifier) {
     Box(
         modifier
-            .size(44.dp)
+            .size(36.dp)
             .clip(IconBadgeShape)
             .background(container),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painter, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(painter, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
     }
 }
 

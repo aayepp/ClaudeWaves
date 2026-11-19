@@ -501,7 +501,6 @@ fun LastWaveNavHost(
                     onOpenSpotifyLogin = { navController.navigate(Screen.SpotifyLogin.route) },
                     onOpenSpotifyTokenImport = { navController.navigate(Screen.SpotifyTokenImport.route) },
                     onOpenExternalImport = { navController.navigate(Screen.ExternalPlaylistImport.route) },
-                    onOpenJam = { navController.navigate(Screen.Jam.createRoute()) },
                     onRepeatTutorial = { navController.navigate(Screen.Onboarding.createRoute(repeat = true)) },
                 )
             }
