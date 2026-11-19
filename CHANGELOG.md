@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.4.56] - 2026-11-20
+
+### Changed
+- **Higher-precision adaptive glass ink:** switched backdrop sampling to a center-weighted 16×8 WCAG 2.1 linear luminance calculation focused on the text/icon band (excluding the Mini Player's cover art), and gave the Search button its own independent backdrop sample so even subtle background shifts flip accurately.
+
 ## [5.4.55] - 2026-11-20
 
 ### Changed
