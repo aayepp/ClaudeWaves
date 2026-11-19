@@ -637,7 +637,7 @@ private fun FloatingNavBar(
         } else {
             MaterialTheme.colorScheme.onSurface
         },
-        animationSpec = tween(240),
+        animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "floatingSearchInk",
     )
 
@@ -777,7 +777,7 @@ private fun FloatingNavPill(
         } else {
             MaterialTheme.colorScheme.onSurface
         },
-        animationSpec = tween(240),
+        animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "floatingNavPillInk",
     )
     Surface(

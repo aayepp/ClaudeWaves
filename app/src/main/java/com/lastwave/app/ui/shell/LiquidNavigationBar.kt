@@ -183,7 +183,7 @@ private fun LiquidNavigationBarContent(
     }
     val ink by animateColorAsState(
         targetValue = targetInk,
-        animationSpec = tween(240),
+        animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "liquidNavInk",
     )
     val accent = MaterialTheme.colorScheme.primary
@@ -422,7 +422,7 @@ internal fun LiquidNavigationPill(
             isDark -> Color(0xFF111319)
             else -> MaterialTheme.colorScheme.onSurface
         },
-        animationSpec = tween(240),
+        animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "liquidNavPillInk",
     )
     Box(

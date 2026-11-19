@@ -598,7 +598,7 @@ internal fun MiniPlayer(
     )
     val miniGlassInk by animateColorAsState(
         targetValue = if (miniUseLightInk) Color.White else Color.Black,
-        animationSpec = tween(240),
+        animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "miniGlassInk",
     )
     val barInteraction = remember { MutableInteractionSource() }

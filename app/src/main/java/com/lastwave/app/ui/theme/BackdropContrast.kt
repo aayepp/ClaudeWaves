@@ -30,10 +30,11 @@ import kotlinx.coroutines.ensureActive
 
 private const val SAMPLE_W = 8
 private const val SAMPLE_H = 4
-private const val INITIAL_SAMPLE_DELAY_MS = 60L
-private const val SAMPLE_INTERVAL_MS = 200L
+private const val INITIAL_SAMPLE_DELAY_MS = 40L
+private const val SAMPLE_INTERVAL_MS = 100L
 private const val DARK_TO_LIGHT_THRESHOLD = 0.42f
 private const val LIGHT_TO_DARK_THRESHOLD = 0.56f
+internal const val ADAPTIVE_INK_FADE_MS = 120
 
 /** Plain holder so layout updates do not recompose the chrome on every scroll frame. */
 internal class BackdropBoundsHolder {

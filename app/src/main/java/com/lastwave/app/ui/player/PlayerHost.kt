@@ -1146,7 +1146,7 @@ private fun HomeDockButton(
         } else {
             MaterialTheme.colorScheme.onSurface
         },
-        animationSpec = androidx.compose.animation.core.tween(240),
+        animationSpec = androidx.compose.animation.core.tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "homeDockButtonInk",
     )
     Surface(
