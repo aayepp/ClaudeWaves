@@ -1,0 +1,15 @@
+ClaudeWaves is licensed under the GNU General Public License v3.0. See LICENSE.
+
+Copyright (C) 2026 aayepp. Based on LastWave by Duxtami, Ajisth Singh, Ayush K
+and contributors (GPL-3.0), modified by aayepp from October 2026.
+
+Design credits
+--------------
+Auris (BitChord) by OreoMuncher45 — GPL-3.0
+https://github.com/OreoMuncher45/Auris
+
+  The dock's travelling selection pill (NavSelectionPill in ui/shell/MainShell.kt),
+  the critically damped Now Playing sheet spring and the mini player pull-up
+  (ui/player/PlayerHost.kt, ui/player/MiniPlayer.kt) follow the motion of Auris'
+  GlassSelectionPill and PlayerSheetMotion. They are reimplementations on this
+  app's own code, not copied source.
