@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.4.53] - 2026-11-19
+
+### Changed
+- **New Settings home:** Settings now opens on a grid of large tiles (Audio, Appearance, YouTube Music, Spotify, Last.fm, Library, Add-ons, Data & Backup), each showing its status at a glance, with About below.
+
+### Removed
+- **Jam in Settings:** the Collaboration & Social section is gone from Settings. Listen Together still opens from Home and the song menu.
+
 ## [5.4.52] - 2026-11-19
 
 ### Fixed
