@@ -317,7 +317,10 @@ import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
 import com.lastwave.app.ui.theme.LocalLiquidGlassOverlayBackdrop
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.Backdrop
+import com.lastwave.app.ui.theme.BackdropBoundsHolder
+import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
 import com.lastwave.app.ui.theme.rememberLayerBackdrop
+import com.lastwave.app.ui.theme.trackBackdropBounds
 import android.graphics.Bitmap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -1129,6 +1132,23 @@ private fun HomeDockButton(
     modifier: Modifier = Modifier,
 ) {
     val liquidGlass = LocalLiquidGlass.current
+    val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
+    val buttonBounds = remember { BackdropBoundsHolder() }
+    val useLightInk = rememberBackdropUseLightInk(
+        backdrop = backdrop,
+        bounds = buttonBounds,
+        enabled = glassActive,
+        scrimBaseAlpha = 0.28f,
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (glassActive) {
+            if (useLightInk) Color.White else Color(0xFF111319)
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = androidx.compose.animation.core.tween(240),
+        label = "homeDockButtonInk",
+    )
     Surface(
         onClick = onClick,
         shape = CircleShape,
@@ -1137,10 +1157,11 @@ private fun HomeDockButton(
             enabled = liquidGlass,
             backdrop = backdrop,
         ),
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        contentColor = contentColor,
         tonalElevation = if (liquidGlass) 0.dp else 6.dp,
         shadowElevation = if (liquidGlass) 0.dp else 12.dp,
         modifier = modifier
+            .trackBackdropBounds(buttonBounds)
             .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop)
             .then(if (liquidGlass) Modifier.glassRim() else Modifier),
     ) {

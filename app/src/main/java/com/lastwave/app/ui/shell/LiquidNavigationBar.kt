@@ -1,7 +1,9 @@
 package com.lastwave.app.ui.shell
 
 import com.lastwave.app.ui.comic.clipOnly
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
 import com.lastwave.app.ui.player.kick
 import kotlinx.coroutines.launch
@@ -73,9 +75,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.lastwave.app.R
+import com.lastwave.app.ui.theme.BackdropBoundsHolder
 import com.lastwave.app.ui.theme.GlassRecipe
 import com.lastwave.app.ui.theme.LiquidGlassIntensity
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
+import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
+import com.lastwave.app.ui.theme.trackBackdropBounds
 import com.lastwave.app.ui.theme.waterDropJiggle
 import io.github.fletchmckee.liquid.LiquidState
 import io.github.fletchmckee.liquid.liquefiable
@@ -163,7 +169,23 @@ private fun LiquidNavigationBarContent(
         }
     }
 
-    val ink = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val dockBounds = remember { BackdropBoundsHolder() }
+    val useLightInk = rememberBackdropUseLightInk(
+        backdrop = LocalLiquidGlassBackdrop.current,
+        bounds = dockBounds,
+        enabled = true,
+        scrimBaseAlpha = if (isDark) 0.32f else 0.30f,
+    )
+    val targetInk = when {
+        useLightInk -> Color.White
+        isDark -> Color(0xFF111319)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    val ink by animateColorAsState(
+        targetValue = targetInk,
+        animationSpec = tween(240),
+        label = "liquidNavInk",
+    )
     val accent = MaterialTheme.colorScheme.primary
     val neutralInk = ink.copy(alpha = 0.92f)
     val pageColor = MaterialTheme.colorScheme.background
@@ -196,6 +218,7 @@ private fun LiquidNavigationBarContent(
         BoxWithConstraints(
             Modifier.weight(1f, fill = false).widthIn(max = railMaxWidth)
                 .fillMaxWidth().height(railHeight)
+                .trackBackdropBounds(dockBounds)
                 .testTag("liquid_navigation_bar")
                 .waterDropJiggle(amplitude = 0.022f)
                 .railShadow(),
@@ -386,8 +409,25 @@ internal fun LiquidNavigationPill(
     modifier: Modifier = Modifier,
 ) {
     val isDark = LocalIsDarkTheme.current
+    val pillBounds = remember { BackdropBoundsHolder() }
+    val useLightInk = rememberBackdropUseLightInk(
+        backdrop = LocalLiquidGlassBackdrop.current,
+        bounds = pillBounds,
+        enabled = true,
+        scrimBaseAlpha = if (isDark) 0.32f else 0.30f,
+    )
+    val pillInk by animateColorAsState(
+        targetValue = when {
+            useLightInk -> Color.White
+            isDark -> Color(0xFF111319)
+            else -> MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = tween(240),
+        label = "liquidNavPillInk",
+    )
     Box(
-        modifier.railShadow()
+        modifier.trackBackdropBounds(pillBounds)
+            .railShadow()
             .background(MaterialTheme.colorScheme.surface, CircleShape)
             .navigationRail(liquidState, railTint(isDark))
             .glassRim()
@@ -398,7 +438,7 @@ internal fun LiquidNavigationPill(
         Icon(
             item.icon,
             contentDescription = item.label,
-            tint = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+            tint = pillInk,
             modifier = Modifier.size(24.dp),
         )
     }

@@ -162,12 +162,15 @@ import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.ui.theme.liquidGlassContainerColor
 import com.lastwave.app.ui.theme.waterDropJiggle
+import com.lastwave.app.ui.theme.BackdropBoundsHolder
 import com.lastwave.app.ui.theme.LayerBackdrop
 import com.lastwave.app.ui.theme.glassRim
 import com.lastwave.app.ui.theme.SquircleShape
+import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
 import com.lastwave.app.ui.theme.rememberLayerBackdrop
 import com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported
 import com.lastwave.app.ui.theme.liquidGlassSource
+import com.lastwave.app.ui.theme.trackBackdropBounds
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
@@ -620,6 +623,23 @@ private fun FloatingNavBar(
     val dockInteraction = remember { MutableInteractionSource() }
     val searchInteraction = remember { MutableInteractionSource() }
     val comic = LocalComicTheme.current
+    val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
+    val dockBackdropBounds = remember { BackdropBoundsHolder() }
+    val dockUseLightInk = rememberBackdropUseLightInk(
+        backdrop = backdrop,
+        bounds = dockBackdropBounds,
+        enabled = glassActive,
+        scrimBaseAlpha = 0.28f,
+    )
+    val searchContentColor by animateColorAsState(
+        targetValue = if (glassActive) {
+            if (dockUseLightInk) Color.White else Color(0xFF111319)
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = tween(240),
+        label = "floatingSearchInk",
+    )
 
 
     Box(
@@ -648,7 +668,7 @@ private fun FloatingNavBar(
                 ),
                 tonalElevation = if (liquidGlass) 0.dp else 6.dp,
                 shadowElevation = if (liquidGlass || comic) 0.dp else 12.dp,
-                modifier = Modifier.weight(1f).widthIn(max = 420.dp).waterDropJiggle(amplitude = 0.022f).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
+                modifier = Modifier.weight(1f).widthIn(max = 420.dp).trackBackdropBounds(dockBackdropBounds).waterDropJiggle(amplitude = 0.022f).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
                     .then(if (liquidGlass) Modifier.glassRim(DockShape) else Modifier),
             ) {
                 val latestSelectedIndex by androidx.compose.runtime.rememberUpdatedState(selectedIndex)
@@ -695,6 +715,7 @@ private fun FloatingNavBar(
                             icon = tab.icon(),
                             selected = selectedIndex == index,
                             onClick = onClick,
+                            adaptiveUseLightInk = if (glassActive) dockUseLightInk else null,
                             modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
                                 glassNavBounds[index] = coords.boundsInParent()
                             },
@@ -712,7 +733,7 @@ private fun FloatingNavBar(
                     enabled = liquidGlass,
                     backdrop = backdrop,
                 ),
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                contentColor = searchContentColor,
                 tonalElevation = if (liquidGlass) 0.dp else 6.dp,
                 shadowElevation = if (liquidGlass || comic) 0.dp else 12.dp,
                 interactionSource = searchInteraction,
@@ -742,6 +763,23 @@ private fun FloatingNavPill(
     modifier: Modifier = Modifier,
 ) {
     val liquidGlass = LocalLiquidGlass.current
+    val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
+    val pillBounds = remember { BackdropBoundsHolder() }
+    val useLightInk = rememberBackdropUseLightInk(
+        backdrop = backdrop,
+        bounds = pillBounds,
+        enabled = glassActive,
+        scrimBaseAlpha = 0.28f,
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (glassActive) {
+            if (useLightInk) Color.White else Color(0xFF111319)
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = tween(240),
+        label = "floatingNavPillInk",
+    )
     Surface(
         onClick = onClick,
         shape = PillShape,
@@ -750,10 +788,11 @@ private fun FloatingNavPill(
             enabled = liquidGlass,
             backdrop = backdrop,
         ),
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        contentColor = contentColor,
         tonalElevation = if (liquidGlass) 0.dp else 6.dp,
         shadowElevation = if (liquidGlass) 0.dp else 12.dp,
         modifier = modifier
+            .trackBackdropBounds(pillBounds)
             .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop)
             .then(if (liquidGlass) Modifier.glassRim() else Modifier),
     ) {
@@ -774,10 +813,15 @@ private fun FloatingNavItem(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    adaptiveUseLightInk: Boolean? = null,
 ) {
     val comic = LocalComicTheme.current
     val contentColor by animateColorAsState(
         targetValue = when {
+            adaptiveUseLightInk != null -> {
+                val baseInk = if (adaptiveUseLightInk) Color.White else Color(0xFF111319)
+                if (selected) baseInk else baseInk.copy(alpha = 0.72f)
+            }
             !selected -> MaterialTheme.colorScheme.onSurfaceVariant
             comic -> ComicInk
             else -> MaterialTheme.colorScheme.onPrimaryContainer

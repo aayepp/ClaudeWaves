@@ -329,7 +329,10 @@ import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
 import com.lastwave.app.ui.theme.LocalLiquidGlassOverlayBackdrop
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.Backdrop
+import com.lastwave.app.ui.theme.BackdropBoundsHolder
+import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
 import com.lastwave.app.ui.theme.rememberLayerBackdrop
+import com.lastwave.app.ui.theme.trackBackdropBounds
 import android.graphics.Bitmap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -585,6 +588,19 @@ internal fun MiniPlayer(
     val resolvedMiniTint = if (artworkTintRaw != null) miniGlassTint else Color.Unspecified
     val artFlight = LocalArtworkFlight.current
     val luminance = 0.5f // Fixed luminance to avoid heavy GPU readback which causes stuttering
+    val miniBackdropBounds = remember { BackdropBoundsHolder() }
+    val miniUseLightInk = rememberBackdropUseLightInk(
+        backdrop = backdrop,
+        bounds = miniBackdropBounds,
+        enabled = isGlass,
+        scrimBaseAlpha = 0.28f,
+        tintColor = resolvedMiniTint,
+    )
+    val miniGlassInk by animateColorAsState(
+        targetValue = if (miniUseLightInk) Color.White else Color.Black,
+        animationSpec = tween(240),
+        label = "miniGlassInk",
+    )
     val barInteraction = remember { MutableInteractionSource() }
     val miniTrackKey = remember(track.videoId, track.title, track.artist) {
         track.videoId?.takeIf(String::isNotBlank) ?: "${track.title}|${track.artist}"
@@ -678,7 +694,7 @@ internal fun MiniPlayer(
                 color = Color.Transparent,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                modifier = Modifier.fillMaxWidth().then(
+                modifier = Modifier.fillMaxWidth().trackBackdropBounds(miniBackdropBounds).then(
                     if (backdrop != null) {
                         Modifier.liquidGlass(backdrop, luminance, shape, tintColor = resolvedMiniTint)
                     } else Modifier
@@ -717,15 +733,13 @@ internal fun MiniPlayer(
                                         )
                                     }
                                 }
-                                val miniTitleColor = if (LocalIsDarkTheme.current) Color.White else Color.Black
-                                val miniArtistColor = if (LocalIsDarkTheme.current) Color.White.copy(alpha = 0.7f)
-                                    else Color.Black.copy(alpha = 0.7f)
+                                val miniArtistColor = miniGlassInk.copy(alpha = 0.72f)
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                     Text(
                                         activeTrack.title,
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = miniTitleColor,
+                                        color = miniGlassInk,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.fillMaxWidth().playingMarquee(state.isPlaying && windowActive),
@@ -737,16 +751,16 @@ internal fun MiniPlayer(
                                         color = miniArtistColor,
                                         style = MaterialTheme.typography.bodySmall,
                                         marqueeActive = state.isPlaying && windowActive,
-                                        isDark = LocalIsDarkTheme.current,
+                                        isDark = miniUseLightInk,
                                     )
                                 }
                             }
                         }
-                        val miniTitleColor = if (LocalIsDarkTheme.current) Color.White else Color.Black
                         // Inner controls sit plain on the glass card (no nested glass).
                         MiniPlayerFavoriteButton(
                             isLiked = isLiked,
-                            tintColor = miniTitleColor,
+                            tintColor = miniGlassInk,
+                            useLightInk = miniUseLightInk,
                             onClick = {
                                 miniHaptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                                 onToggleLiked()
@@ -756,7 +770,7 @@ internal fun MiniPlayer(
                             onClick = onToggle,
                             shape = CircleShape,
                             color = Color.Transparent,
-                            contentColor = miniTitleColor,
+                            contentColor = miniGlassInk,
                             modifier = Modifier.size(44.dp).collapseScale(0.85f, compactProgress),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -779,7 +793,7 @@ internal fun MiniPlayer(
                             Icon(
                                 Icons.Filled.SkipNext,
                                 "Next",
-                                tint = miniTitleColor.copy(alpha = if (state.queueSize > 1) 1f else 0.38f),
+                                tint = miniGlassInk.copy(alpha = if (state.queueSize > 1) 1f else 0.38f),
                                 modifier = Modifier.graphicsLayer { translationX = 6.dp.toPx() * nextNudge.value },
                             )
                         }
@@ -927,9 +941,10 @@ internal fun MiniPlayer(
 private fun MiniPlayerFavoriteButton(
     isLiked: Boolean,
     tintColor: Color,
+    useLightInk: Boolean = LocalIsDarkTheme.current,
     onClick: () -> Unit,
 ) {
-    val activeTint = if (LocalIsDarkTheme.current) LikedHeartRedOnDark else LikedHeartRed
+    val activeTint = if (useLightInk) LikedHeartRedOnDark else LikedHeartRed
     val tapMotion = rememberLikedTapMotion(isLiked, initialScale = 0.6f)
     IconButton(
         onClick = onClick,
