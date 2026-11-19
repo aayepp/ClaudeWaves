@@ -242,6 +242,12 @@ When the user says **"git pull"**, pull, then re-read `AGENTS.md` and `DESIGN.md
 machine or agent may have changed the rules, and the copy loaded at session start
 is stale. If local edits block the pull, ask before stashing or discarding them.
 
+When the user's whole message is a greeting (**"hi"**, "hai", "hello", "helo"),
+do the same pull and re-read, then switch to caveman **ultra** for the rest of the
+session (Claude Code: `.claude/skills/hi/SKILL.md`). Pull with `--ff-only`: `main`
+has been force-rewritten before, and a plain pull on an old clone merges the old
+history back. If it can't fast-forward, stop and ask before any reset.
+
 ## 10. Visual fixes cover every theme
 
 Any visual or UI fix applies to every theme in light and dark mode: Comic Pop
