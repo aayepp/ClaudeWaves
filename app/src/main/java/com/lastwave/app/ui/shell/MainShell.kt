@@ -625,15 +625,26 @@ private fun FloatingNavBar(
     val comic = LocalComicTheme.current
     val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
     val dockBackdropBounds = remember { BackdropBoundsHolder() }
+    val searchBackdropBounds = remember { BackdropBoundsHolder() }
     val dockUseLightInk = rememberBackdropUseLightInk(
         backdrop = backdrop,
         bounds = dockBackdropBounds,
         enabled = glassActive,
         scrimBaseAlpha = 0.28f,
     )
+    val searchUseLightInk = rememberBackdropUseLightInk(
+        backdrop = backdrop,
+        bounds = searchBackdropBounds,
+        enabled = glassActive,
+        scrimBaseAlpha = 0.28f,
+        cropStartX = 0.20f,
+        cropEndX = 0.80f,
+        cropStartY = 0.20f,
+        cropEndY = 0.80f,
+    )
     val searchContentColor by animateColorAsState(
         targetValue = if (glassActive) {
-            if (dockUseLightInk) Color.White else Color(0xFF111319)
+            if (searchUseLightInk) Color.White else Color(0xFF111319)
         } else {
             MaterialTheme.colorScheme.onSurface
         },
@@ -738,6 +749,7 @@ private fun FloatingNavBar(
                 shadowElevation = if (liquidGlass || comic) 0.dp else 12.dp,
                 interactionSource = searchInteraction,
                 modifier = Modifier.size(60.dp)
+                    .trackBackdropBounds(searchBackdropBounds)
                     .comicPanel(CircleShape, translucent = liquidGlass)
                     .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = searchInteraction)
                     .then(if (liquidGlass) Modifier.glassRim() else Modifier),
@@ -770,6 +782,10 @@ private fun FloatingNavPill(
         bounds = pillBounds,
         enabled = glassActive,
         scrimBaseAlpha = 0.28f,
+        cropStartX = 0.20f,
+        cropEndX = 0.80f,
+        cropStartY = 0.20f,
+        cropEndY = 0.80f,
     )
     val contentColor by animateColorAsState(
         targetValue = if (glassActive) {

@@ -595,6 +595,9 @@ internal fun MiniPlayer(
         enabled = isGlass,
         scrimBaseAlpha = 0.28f,
         tintColor = resolvedMiniTint,
+        // Skip the opaque cover art on the left so sampling focuses on the text & control area.
+        cropStartX = 0.20f,
+        cropEndX = 0.96f,
     )
     val miniGlassInk by animateColorAsState(
         targetValue = if (miniUseLightInk) Color.White else Color.Black,

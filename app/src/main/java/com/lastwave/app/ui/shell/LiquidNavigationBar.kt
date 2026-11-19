@@ -365,10 +365,31 @@ private fun LiquidNavigationBarContent(
         }
         // Standalone search circle beside the tab rail, cut from the same glass.
         // The lens tilts as if looking, then springs back.
+        val searchBounds = remember { BackdropBoundsHolder() }
+        val searchUseLightInk = rememberBackdropUseLightInk(
+            backdrop = LocalLiquidGlassBackdrop.current,
+            bounds = searchBounds,
+            enabled = true,
+            scrimBaseAlpha = if (isDark) 0.32f else 0.30f,
+            cropStartX = 0.20f,
+            cropEndX = 0.80f,
+            cropStartY = 0.20f,
+            cropEndY = 0.80f,
+        )
+        val searchInk by animateColorAsState(
+            targetValue = when {
+                searchUseLightInk -> Color.White
+                isDark -> Color(0xFF111319)
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+            animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
+            label = "liquidSearchInk",
+        )
         val searchTilt = remember { Animatable(0f) }
         val searchScope = rememberCoroutineScope()
         Box(
             Modifier.size(railHeight)
+                .trackBackdropBounds(searchBounds)
                 .testTag("liquid_navigation_search")
                 .waterDropJiggle(amplitude = 0.038f)
                 .shadow(8.dp, CircleShape, clip = false,
@@ -387,7 +408,7 @@ private fun LiquidNavigationBarContent(
             Icon(
                 Icons.Filled.Search,
                 contentDescription = stringResource(R.string.search_cd),
-                tint = ink,
+                tint = searchInk,
                 modifier = Modifier.size(24.dp).graphicsLayer {
                     rotationZ = -22f * searchTilt.value
                     val s = 1f + 0.12f * searchTilt.value
@@ -415,6 +436,10 @@ internal fun LiquidNavigationPill(
         bounds = pillBounds,
         enabled = true,
         scrimBaseAlpha = if (isDark) 0.32f else 0.30f,
+        cropStartX = 0.20f,
+        cropEndX = 0.80f,
+        cropStartY = 0.20f,
+        cropEndY = 0.80f,
     )
     val pillInk by animateColorAsState(
         targetValue = when {

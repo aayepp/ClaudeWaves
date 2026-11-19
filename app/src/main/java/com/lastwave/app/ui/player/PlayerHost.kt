@@ -1139,6 +1139,10 @@ private fun HomeDockButton(
         bounds = buttonBounds,
         enabled = glassActive,
         scrimBaseAlpha = 0.28f,
+        cropStartX = 0.20f,
+        cropEndX = 0.80f,
+        cropStartY = 0.20f,
+        cropEndY = 0.80f,
     )
     val contentColor by animateColorAsState(
         targetValue = if (glassActive) {
