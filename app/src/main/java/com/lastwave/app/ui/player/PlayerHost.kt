@@ -318,6 +318,8 @@ import com.lastwave.app.ui.theme.LocalLiquidGlassOverlayBackdrop
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.Backdrop
 import com.lastwave.app.ui.theme.BackdropBoundsHolder
+import com.lastwave.app.ui.theme.LocalBackdropContrastCoordinator
+import com.lastwave.app.ui.theme.rememberBackdropContrastCoordinator
 import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
 import com.lastwave.app.ui.theme.rememberLayerBackdrop
 import com.lastwave.app.ui.theme.trackBackdropBounds
@@ -576,6 +578,10 @@ fun PlayerHost(
             android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
         }
     }
+    val backdropContrastCoordinator = rememberBackdropContrastCoordinator(
+        backdrop = if (miniGlass) miniBackdrop else null,
+        paused = { contentCovered },
+    )
     CompositionLocalProvider(
         LocalMusicPlayer provides viewModel.player,
         LocalAddToPlaylist provides requestAddToPlaylist,
@@ -593,6 +599,7 @@ fun PlayerHost(
         LocalBottomNavSlot provides bottomNavSlot,
         LocalChromeCollapse provides chromeCollapse,
         LocalLiquidGlassBackdrop provides (if (miniGlass) miniBackdrop else null),
+        LocalBackdropContrastCoordinator provides backdropContrastCoordinator,
         LocalLikeNudge provides likeNudge,
         LocalArtworkFlight provides artworkFlight,
         LocalHomeOnRight provides settings.homeButtonRight,
@@ -913,8 +920,10 @@ private fun EdgeFade(
     modifier: Modifier,
 ) {
     val page = MaterialTheme.colorScheme.background
-    val ramp = arrayOf(0f to Color.Transparent, 0.5f to Color.Black.copy(alpha = 0.9f), 1f to Color.Black)
-    val mask = Brush.verticalGradient(*if (atTop) ramp.map { (1f - it.first) to it.second }.reversed().toTypedArray() else ramp)
+    val mask = remember(atTop) {
+        val ramp = arrayOf(0f to Color.Transparent, 0.5f to Color.Black.copy(alpha = 0.9f), 1f to Color.Black)
+        Brush.verticalGradient(*if (atTop) ramp.map { (1f - it.first) to it.second }.reversed().toTypedArray() else ramp)
+    }
     Box(
         modifier
             .fillMaxWidth()

@@ -392,9 +392,12 @@ fun FeedScreen(
         // the list in a Column and sampled only its own flat background, so
         // it read as a tinted bar. The list is the backdrop source and the
         // header a sibling on top of it (never inside it: no self-capture).
-        // Without glass (or on the transparent Podcasts hero) the list keeps
-        // starting below the header exactly as before.
-        val feedGlass = com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported() && !isPodcastsActive
+        // Only record a feed backdrop when Liquid Glass is active AND the chip glass header is actually shown.
+        // Recording an unused full-screen LayerBackdrop on default Home doubled offscreen passes every scroll frame.
+        val feedGlass = com.lastwave.app.ui.theme.LocalLiquidGlass.current &&
+            com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported() &&
+            state.isChipActive &&
+            !isPodcastsActive
         // Drawn on screen as well: a flat fill hid the page wash / background image on Home.
         val feedPageWash = com.lastwave.app.ui.theme.rememberPageWash()
         val feedBackdrop = if (feedGlass) {

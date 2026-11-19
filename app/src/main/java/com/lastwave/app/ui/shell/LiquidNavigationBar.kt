@@ -106,9 +106,10 @@ internal fun LiquidNavigationBar(
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
     style: LiquidNavigationStyle = LiquidNavigationStyle.Tabs,
+    isVisible: () -> Boolean = { true },
 ) {
     key(style) {
-        LiquidNavigationBarContent(liquidState, items, selectedIndex, onSelect, onScrubSelect, onSearch, modifier, style)
+        LiquidNavigationBarContent(liquidState, items, selectedIndex, onSelect, onScrubSelect, onSearch, modifier, style, isVisible)
     }
 }
 
@@ -122,6 +123,7 @@ private fun LiquidNavigationBarContent(
     onSearch: () -> Unit,
     modifier: Modifier,
     style: LiquidNavigationStyle,
+    isVisible: () -> Boolean,
 ) {
     if (items.isEmpty()) return
     val compact = style == LiquidNavigationStyle.Material3
@@ -175,6 +177,7 @@ private fun LiquidNavigationBarContent(
         bounds = dockBounds,
         enabled = true,
         scrimBaseAlpha = if (isDark) 0.32f else 0.30f,
+        isVisible = isVisible,
     )
     val targetInk = when {
         useLightInk -> Color.White
@@ -375,6 +378,7 @@ private fun LiquidNavigationBarContent(
             cropEndX = 0.80f,
             cropStartY = 0.20f,
             cropEndY = 0.80f,
+            isVisible = isVisible,
         )
         val searchInk by animateColorAsState(
             targetValue = when {
@@ -428,6 +432,7 @@ internal fun LiquidNavigationPill(
     item: LiquidNavigationItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isVisible: () -> Boolean = { true },
 ) {
     val isDark = LocalIsDarkTheme.current
     val pillBounds = remember { BackdropBoundsHolder() }
@@ -440,6 +445,7 @@ internal fun LiquidNavigationPill(
         cropEndX = 0.80f,
         cropStartY = 0.20f,
         cropEndY = 0.80f,
+        isVisible = isVisible,
     )
     val pillInk by animateColorAsState(
         targetValue = when {

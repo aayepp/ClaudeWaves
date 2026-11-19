@@ -564,6 +564,8 @@ fun MainShell(
                             .align(if (homeOnRight) Alignment.BottomEnd else Alignment.BottomStart)
                             .collapsedNavPill(collapseProgress)
                         val expand = { collapse?.expand(); Unit }
+                        val barVisible = { collapseProgress() < 0.95f }
+                        val pillVisible = { collapseProgress() > 0.05f }
                         if (navigationLiquidState != null) {
                             val items = tabs.map { tab ->
                                 LiquidNavigationItem(
@@ -585,8 +587,9 @@ fun MainShell(
                                 } else {
                                     LiquidNavigationStyle.Tabs
                                 },
+                                isVisible = barVisible,
                             )
-                            LiquidNavigationPill(navigationLiquidState, items[currentSelectedIndex], expand, pillModifier)
+                            LiquidNavigationPill(navigationLiquidState, items[currentSelectedIndex], expand, pillModifier, isVisible = pillVisible)
                         } else {
                             FloatingNavBar(
                                 backdrop = navigationBackdrop,
@@ -595,8 +598,9 @@ fun MainShell(
                                 onSelect = currentOnSelect,
                                 modifier = barModifier,
                                 onOpenSearch = currentOnOpenSearch,
+                                isVisible = barVisible,
                             )
-                            FloatingNavPill(navigationBackdrop, tabs[currentSelectedIndex], expand, pillModifier)
+                            FloatingNavPill(navigationBackdrop, tabs[currentSelectedIndex], expand, pillModifier, isVisible = pillVisible)
                         }
                     }
                 }
@@ -617,6 +621,7 @@ private fun FloatingNavBar(
     onSelect: (Int) -> Unit,
     onOpenSearch: () -> Unit,
     modifier: Modifier = Modifier,
+    isVisible: () -> Boolean = { true },
 ) {
     val liquidGlass = LocalLiquidGlass.current
     val glassNavBounds = remember { mutableStateMapOf<Int, Rect>() }
@@ -624,16 +629,18 @@ private fun FloatingNavBar(
     val searchInteraction = remember { MutableInteractionSource() }
     val comic = LocalComicTheme.current
     val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
+    val sharedBackdrop = com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop.current ?: backdrop
     val dockBackdropBounds = remember { BackdropBoundsHolder() }
     val searchBackdropBounds = remember { BackdropBoundsHolder() }
     val dockUseLightInk = rememberBackdropUseLightInk(
-        backdrop = backdrop,
+        backdrop = sharedBackdrop,
         bounds = dockBackdropBounds,
         enabled = glassActive,
         scrimBaseAlpha = 0.28f,
+        isVisible = isVisible,
     )
     val searchUseLightInk = rememberBackdropUseLightInk(
-        backdrop = backdrop,
+        backdrop = sharedBackdrop,
         bounds = searchBackdropBounds,
         enabled = glassActive,
         scrimBaseAlpha = 0.28f,
@@ -641,6 +648,7 @@ private fun FloatingNavBar(
         cropEndX = 0.80f,
         cropStartY = 0.20f,
         cropEndY = 0.80f,
+        isVisible = isVisible,
     )
     val searchContentColor by animateColorAsState(
         targetValue = if (glassActive) {
@@ -773,12 +781,13 @@ private fun FloatingNavPill(
     tab: MainTab,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isVisible: () -> Boolean = { true },
 ) {
     val liquidGlass = LocalLiquidGlass.current
     val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
     val pillBounds = remember { BackdropBoundsHolder() }
     val useLightInk = rememberBackdropUseLightInk(
-        backdrop = backdrop,
+        backdrop = com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop.current ?: backdrop,
         bounds = pillBounds,
         enabled = glassActive,
         scrimBaseAlpha = 0.28f,
@@ -786,6 +795,7 @@ private fun FloatingNavPill(
         cropEndX = 0.80f,
         cropStartY = 0.20f,
         cropEndY = 0.80f,
+        isVisible = isVisible,
     )
     val contentColor by animateColorAsState(
         targetValue = if (glassActive) {

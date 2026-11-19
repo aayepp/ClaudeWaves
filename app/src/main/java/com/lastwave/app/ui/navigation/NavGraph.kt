@@ -222,6 +222,19 @@ fun LastWaveNavHost(
         }
     }
 
+    // Freeze heavy glass lens refraction & backdrop readbacks briefly during route transitions
+    // so screen-to-screen slides stay smooth without RenderThread stalls.
+    LaunchedEffect(navController) {
+        var first = true
+        navController.currentBackStackEntryFlow.collect {
+            if (first) {
+                first = false
+            } else {
+                com.lastwave.app.ui.theme.GlassMotion.stampSheet()
+            }
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Screen.Splash.route,
