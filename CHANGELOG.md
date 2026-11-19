@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.4.57] - 2026-11-20
+
+### Fixed
+- **Smoother scrolling & navigation:** batched all adaptive glass ink checks (Mini Player, Home dock, Search button, nav pill) into a single shared backdrop readback (~9× fewer GPU stalls), skipped hidden dock/pill sampling, stopped Home Feed from recording an unused full-screen offscreen backdrop pass on every scroll frame, and paused heavy glass refraction/readbacks during route transitions.
+
 ## [5.4.56] - 2026-11-20
 
 ### Changed
