@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.4.54] - 2026-11-20
+
+### Added
+- **Adaptive text & icons on glass Mini Player and Home bar:** with Liquid Glass on, text, icons, and quality tags on the Mini Player, bottom navigation dock, Search button, and Home pill smoothly switch between light and dark ink to stay legible over bright or dark content while scrolling.
+
 ## [5.4.53] - 2026-11-19
 
 ### Changed
