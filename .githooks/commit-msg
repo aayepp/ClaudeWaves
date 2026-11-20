@@ -1,9 +1,0 @@
-#!/bin/sh
-# Reject commit messages containing attribution trailers or bot signatures.
-MSG_FILE="$1"
-
-if grep -qiE 'co-authored-by:|noreply@anthropic\.com|claude-session|generated with' "$MSG_FILE"; then
-  echo "ERROR: Commit message contains forbidden attribution trailer." >&2
-  echo "Remove Co-Authored-By / session / generated-with lines and retry." >&2
-  exit 1
-fi
