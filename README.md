@@ -65,7 +65,7 @@ Most Android music clients wrap a basic player around a list of songs. **ClaudeW
 | **Smart 3-Layer Best-Part Jump** | Jumps straight to the chorus, viral bridge, or beat drop using YouTube heatmaps (including official MV counterparts), chapter markers, fuzzy/CJK chorus analysis, and on-device audio energy fallback. |
 | **Word-by-Word &amp; Duet Lyrics** | Karaoke word-sync, overlapping duet vocal focus, instant next-track lyric preloading, offline caching, per-track timing offset, built-in translation &amp; romanization, and shareable lyric cards. |
 | **Living Visuals &amp; Synced Video** | Animated album covers (Canvas) that keep playing **offline** once viewed, plus one-tap synced **Music Video** mode inside Now Playing. |
-| **Hi-Res Lossless Addons &amp; Offline** | Built-in tutorial addon websites (`Palv`, `Radha`) and custom HTTP addon support for Hi-Res FLAC streaming, automatic smart offline caching, full downloads, and local device audio scanning. |
+| **Custom HTTP Audio Addons &amp; Offline** | Optional support for user-configured third-party or self-hosted HTTP audio addons, automatic smart offline caching, full downloads, and local device audio scanning. |
 
 ---
 
@@ -75,7 +75,7 @@ Most Android music clients wrap a basic player around a list of songs. **ClaudeW
 - **Bit-Perfect USB DAC Output:** Dedicated exclusive USB audio driver bypasses Android's mixer and sample-rate conversion for unaltered playback.
 - **10-Band Parametric EQ &amp; AutoEQ:** Fine-tune frequency, gain, and Q-factor per band or load measured AutoEQ profiles for your exact headphones/IEMs.
 - **Automix Crossfade:** Tempo- and phrase-aware DJ-style transitions between tracks.
-- **Hi-Res Lossless Addons:** Connect personal or custom HTTP addon servers to stream and download lossless FLAC alongside YouTube Music (with `Palv` and `Radha` generator websites ready in Settings).
+- **Custom HTTP Audio Addons:** Optionally connect your own self-hosted or third-party HTTP audio addon servers alongside YouTube Music and local audio.
 - **16 KB Page-Aligned Native Libraries:** Built for Android 15–17 devices with modern native audio libraries.
 
 ### 2. Signature Design, Liquid Motion &amp; Themes
@@ -117,14 +117,20 @@ Every official release includes `SHA256SUMS.txt` alongside `ClaudeWaves.apk`, si
 </details>
 
 <details>
-<summary><strong>How do Hi-Res Lossless Addons work?</strong></summary>
-<p>Open <strong>Settings → Addons</strong>. Generator websites (<code>Palv</code> and <code>Radha</code>) are listed by default under <em>Addon websites</em> so you can open one, copy your personal addon URL, and connect it in a tap.</p>
+<summary><strong>How do custom HTTP audio addons work?</strong></summary>
+<p>Open <strong>Settings → Addons</strong> to connect any self-hosted or community third-party HTTP addon server that implements the addon protocol. Third-party sites listed under <em>Addon websites</em> are independent community links and can be edited or removed anytime.</p>
 </details>
 
 <details>
 <summary><strong>How do I report a bug or request a feature?</strong></summary>
 <p>Open <strong>Settings → About → Report a Bug</strong> inside the app — it opens GitHub Issues with your app version, Android version, and device info pre-filled, or tap <strong>Copy Debug Info</strong> to paste it manually.</p>
 </details>
+
+---
+
+## Disclaimer
+
+ClaudeWaves is an independent open-source project and is **not affiliated with, endorsed by, or sponsored by** YouTube, Google, Spotify, Apple, or any third-party addon provider. ClaudeWaves does not host, store, or distribute any media streams or third-party servers. Users are solely responsible for complying with applicable laws and the terms of service of any external services or addons they choose to connect.
 
 ---
 

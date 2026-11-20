@@ -994,7 +994,7 @@
     <string name="mod_drag_cd">Drag to change priority</string>
     <string name="mod_remove_cd">Remove Addon</string>
     <string name="mod_sites_title">Addon websites</string>
-    <string name="mod_sites_sub">Save where you get addons, then renew one in a tap.</string>
+    <string name="mod_sites_sub">Independent third-party community websites (not hosted by or affiliated with ClaudeWaves). Edit or remove anytime.</string>
     <string name="mod_site_add">Add website</string>
     <string name="mod_site_name">Name</string>
     <string name="mod_site_url">Website URL</string>
