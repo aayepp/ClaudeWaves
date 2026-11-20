@@ -504,3 +504,193 @@ internal fun startActivitySafely(context: android.content.Context, intent: Inten
         false
     }
 }
+
+internal const val CLAUDEWAVES_REPO_URL = "https://github.com/aayepp/ClaudeWaves"
+internal const val CLAUDEWAVES_RELEASES_URL = "https://github.com/aayepp/ClaudeWaves/releases/latest"
+
+internal fun buildDeviceDebugSummary(
+    context: android.content.Context,
+    versionName: String,
+    liquidGlassEnabled: Boolean,
+): String {
+    val versionCode = runCatching {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info)
+    }.getOrDefault(0L)
+    val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty().ifBlank { "unknown" }
+    val glassSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    val glassStatus = when {
+        !glassSupported -> "Unsupported (API ${android.os.Build.VERSION.SDK_INT})"
+        liquidGlassEnabled -> "Active"
+        else -> "Off"
+    }
+    val refreshHz = runCatching {
+        val dm = context.getSystemService(android.content.Context.DISPLAY_SERVICE) as? android.hardware.display.DisplayManager
+        dm?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.refreshRate?.toInt()
+    }.getOrNull()
+    val device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
+    return buildString {
+        appendLine("App: ClaudeWaves v$versionName ($versionCode)")
+        appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        appendLine("Device: $device ($abi)")
+        if (refreshHz != null && refreshHz > 0) appendLine("Display: ${refreshHz} Hz")
+        appendLine("Liquid Glass: $glassStatus")
+        append("Audio Engine: C++ / Oboe (16 KB aligned)")
+    }
+}
+
+@Composable
+internal fun DeviceDiagnosticsCard(
+    versionName: String,
+    liquidGlassEnabled: Boolean,
+) {
+    val context = LocalContext.current
+    val versionCode = remember(context) {
+        runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info)
+        }.getOrDefault(0L)
+    }
+    val abi = remember { android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty().ifBlank { "unknown" } }
+    val refreshHz = remember(context) {
+        runCatching {
+            val dm = context.getSystemService(android.content.Context.DISPLAY_SERVICE) as? android.hardware.display.DisplayManager
+            dm?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.refreshRate?.toInt()
+        }.getOrNull()
+    }
+    val glassSupported = com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported()
+    val glassStatus = remember(liquidGlassEnabled, glassSupported) {
+        when {
+            !glassSupported -> "Fallback (Android < 12)"
+            liquidGlassEnabled -> "Active"
+            else -> "Off"
+        }
+    }
+    val rows = remember(versionName, versionCode, abi, refreshHz, glassStatus) {
+        listOf(
+            "App Version" to "v$versionName ($versionCode)",
+            "Android" to "${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})",
+            "Device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim(),
+            "Architecture" to abi,
+            "Display" to (refreshHz?.takeIf { it > 0 }?.let { "${it} Hz" } ?: "Default"),
+            "Liquid Glass" to glassStatus,
+            "Audio Engine" to "C++ / Oboe • USB DAC ready",
+        )
+    }
+
+    Card(
+        shape = CardOuterShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Device & Audio Engine",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                com.lastwave.app.ui.comic.FilledTonalButton(
+                    onClick = {
+                        val summary = buildDeviceDebugSummary(context, versionName, liquidGlassEnabled)
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("ClaudeWaves Debug Info", summary))
+                        android.widget.Toast.makeText(context, "Debug info copied", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text("Copy Info", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            rows.forEach { (label, value) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun GesturesTipsSheet(onDismiss: () -> Unit) {
+    val tips = remember {
+        listOf(
+            "Scrub Bottom Bar" to "Drag your finger across the bottom navigation bar to glide smoothly between Feed, Stats, and Library.",
+            "Pull Up Mini Player" to "Swipe up on the mini player to expand Now Playing with a flying artwork transition.",
+            "Best Part Pill" to "Tap the glowing Best Part pill above the seek bar to jump straight to the chorus, viral bridge, or drop.",
+            "Swipe Songs to Queue" to "Swipe track rows to quickly add songs to Up Next without opening menus.",
+            "Long-Press Cards" to "Hold any song or shelf card to lift it into a quick floating preview & action tray.",
+            "Reorder Home Shelves" to "Long-press any section header on Home to move, hide, or rearrange your Feed layout.",
+            "Double-Tap Feed Tab" to "Tap the Feed tab again to jump back to top and refresh your recommendations.",
+        )
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Gestures & Shortcuts",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            tips.forEach { (title, desc) ->
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = desc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

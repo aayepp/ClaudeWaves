@@ -121,6 +121,9 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.BubbleChart
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -2393,6 +2396,11 @@ fun SettingsScreen(
                         onOpenChangelog = viewModel::openChangelog,
                     )
 
+                    var showGesturesSheet by remember { mutableStateOf(false) }
+                    if (showGesturesSheet) {
+                        GesturesTipsSheet(onDismiss = { showGesturesSheet = false })
+                    }
+
                     SettingsActionCard(
                         icon = Icons.Filled.AutoAwesome,
                         iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
@@ -2401,6 +2409,15 @@ fun SettingsScreen(
                         subtitle = "Repeat the first-time setup (profile, accounts, theme, addons & gesture tour)",
                         onClick = onRepeatTutorial,
                         isHighlighted = (highlightedSettingId == "about.tutorial"),
+                    )
+
+                    SettingsActionCard(
+                        icon = Icons.Filled.TouchApp,
+                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        title = "Gestures & Shortcuts",
+                        subtitle = "Quick guide to scrubbing tabs, Best Part jump, swipe-to-queue & shelf reordering",
+                        onClick = { showGesturesSheet = true },
                     )
 
                     SettingsActionCard(
@@ -2437,6 +2454,73 @@ fun SettingsScreen(
                             }
                         },
                         isHighlighted = (highlightedSettingId == "about.check_updates"),
+                    )
+
+                    SectionLabel("Links & Support")
+                    SettingsGroup(rowCount = 3) { index, position ->
+                        when (index) {
+                            0 -> SettingsActionCard(
+                                icon = Icons.Filled.Code,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = "GitHub Repository",
+                                subtitle = "View source code, releases & roadmap on GitHub",
+                                onClick = {
+                                    startActivitySafely(
+                                        context,
+                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(CLAUDEWAVES_REPO_URL)),
+                                    )
+                                },
+                                position = position,
+                            )
+                            1 -> SettingsActionCard(
+                                icon = Icons.Filled.BugReport,
+                                iconContainer = MaterialTheme.colorScheme.errorContainer,
+                                iconTint = MaterialTheme.colorScheme.onErrorContainer,
+                                title = "Report a Bug / Request Feature",
+                                subtitle = "Opens GitHub Issues with your device & version info pre-filled",
+                                onClick = {
+                                    val debugBody = buildDeviceDebugSummary(
+                                        context = context,
+                                        versionName = appVersionName(context),
+                                        liquidGlassEnabled = theme?.liquidGlass != false,
+                                    )
+                                    val encodedBody = android.net.Uri.encode("## Issue / Suggestion\n\n\n---\n### Device Info\n```\n$debugBody\n```")
+                                    val issueUrl = "$CLAUDEWAVES_REPO_URL/issues/new?body=$encodedBody"
+                                    startActivitySafely(
+                                        context,
+                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(issueUrl)),
+                                    )
+                                },
+                                position = position,
+                            )
+                            2 -> SettingsActionCard(
+                                icon = Icons.Filled.Share,
+                                iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                title = "Share ClaudeWaves",
+                                subtitle = "Share the official APK download link with friends",
+                                onClick = {
+                                    val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            android.content.Intent.EXTRA_TEXT,
+                                            "Check out ClaudeWaves — native Android audiophile music player:\n$CLAUDEWAVES_RELEASES_URL",
+                                        )
+                                    }
+                                    startActivitySafely(
+                                        context,
+                                        android.content.Intent.createChooser(shareIntent, "Share ClaudeWaves"),
+                                    )
+                                },
+                                position = position,
+                            )
+                        }
+                    }
+
+                    DeviceDiagnosticsCard(
+                        versionName = appVersionName(context),
+                        liquidGlassEnabled = theme?.liquidGlass != false,
                     )
                 }
             }
