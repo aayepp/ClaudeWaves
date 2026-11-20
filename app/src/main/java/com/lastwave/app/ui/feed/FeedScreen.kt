@@ -178,6 +178,7 @@ import com.lastwave.app.playback.MediaType
 import com.lastwave.app.playback.PlayableTrack
 import com.lastwave.app.ui.common.ArtworkImage
 import com.lastwave.app.ui.common.ExpressiveHeader
+import com.lastwave.app.ui.common.fadeBelow
 import com.lastwave.app.ui.common.ExpressiveShuffleButton
 import com.lastwave.app.ui.common.HeaderActionIcon
 import com.lastwave.app.ui.common.TrackContextMenuSheet
@@ -388,33 +389,15 @@ fun FeedScreen(
             )
         }
 
-        // Liquid glass: the feed scrolls *under* the header so the glass has
-        // real content to frost and refract. Previously the header sat above
-        // the list in a Column and sampled only its own flat background, so
-        // it read as a tinted bar. The list is the backdrop source and the
-        // header a sibling on top of it (never inside it: no self-capture).
-        // Only record a feed backdrop when Liquid Glass is active AND the chip glass header is actually shown.
-        // Recording an unused full-screen LayerBackdrop on default Home doubled offscreen passes every scroll frame.
-        val feedGlass = com.lastwave.app.ui.theme.LocalLiquidGlass.current &&
-            com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported() &&
-            state.isChipActive &&
-            !isPodcastsActive
-        // Drawn on screen as well: a flat fill hid the page wash / background image on Home.
-        val feedPageWash = com.lastwave.app.ui.theme.rememberPageWash()
-        val feedBackdrop = if (feedGlass) {
-            com.lastwave.app.ui.theme.rememberLayerBackdrop {
-                feedPageWash()
-                drawContent()
-            }
-        } else null
-        val useFeedGlass = feedBackdrop != null
+        // Skip full-screen offscreen LayerBackdrop capture on Feed (both default Home and mood chips):
+        // recording the whole LazyColumn into an extra GraphicsLayer doubled GPU frame cost every scroll frame.
         var topBarHeightPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
         val topBarHeight = if (state.isChipActive) {
             with(androidx.compose.ui.platform.LocalDensity.current) { topBarHeightPx.toDp() }
         } else {
             0.dp
         }
-        val listTopInset = if (useFeedGlass && state.isChipActive) topBarHeight else 0.dp
+        val listTopInset = 0.dp
         val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
 
         val config = LocalConfiguration.current
@@ -440,14 +423,7 @@ fun FeedScreen(
                 },
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = if (useFeedGlass) 0.dp else topBarHeight)
-                    .then(
-                        if (feedBackdrop != null) {
-                            Modifier.liquidGlassSource(feedBackdrop)
-                        } else {
-                            Modifier
-                        },
-                    ),
+                    .padding(top = topBarHeight),
             ) {
                 // No full-screen skeleton: greeting, search, quick access and chips need no
                 // network, and each data section stays out until its data arrives.
@@ -1647,47 +1623,44 @@ fun FeedScreen(
             }
         }
 
-            // Glass header shown only in chip sub-views (e.g. Podcasts); default Home puts Section A inside scroll.
+            // Unified header shown in chip sub-views (e.g. Workout, Relax, Podcasts).
+            // PinnedChipsBar sits inside ExpressiveHeader.bottomContent so the header's
+            // bottom edge/fade never overlaps the chip pills on any theme.
             if (state.isChipActive) {
-                val chipStripColor = MaterialTheme.colorScheme.background
-                Column(
-                    Modifier
+                val headerBg = MaterialTheme.colorScheme.background
+                ExpressiveHeader(
+                    modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
-                        .onSizeChanged { if (it.height != topBarHeightPx) topBarHeightPx = it.height },
-                ) {
-                    ExpressiveHeader(
-                        title = stringResource(R.string.feed_home),
-                        containerColor = if (isPodcastsActive) Color.Transparent else Color.Unspecified,
-                        backdrop = if (useFeedGlass) feedBackdrop else null,
-                        leadingContent = {
-                            HeaderActionIcon(
-                                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back to Home",
-                                onClick = { viewModel.selectChip(null) },
-                            )
-                        },
-                        actions = {
-                            HeaderActionIcon(Icons.Filled.Search, "Search", onOpenSearch)
-                            IconButton(onClick = onOpenSettings) {
-                                com.lastwave.app.ui.home.ProfileAvatar(avatarUrl = effectiveAvatarUrl, modifier = Modifier.size(38.dp))
-                            }
-                        },
-                    )
-                    if (state.homeChips.isNotEmpty()) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .then(if (useFeedGlass) Modifier.background(chipStripColor) else Modifier),
-                        ) {
+                        .onSizeChanged { if (it.height != topBarHeightPx) topBarHeightPx = it.height }
+                        .then(if (isPodcastsActive) Modifier else Modifier.fadeBelow(headerBg)),
+                    title = stringResource(R.string.feed_home),
+                    containerColor = if (isPodcastsActive) Color.Transparent else Color.Unspecified,
+                    backdrop = null,
+                    leadingContent = {
+                        HeaderActionIcon(
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to Home",
+                            onClick = { viewModel.selectChip(null) },
+                        )
+                    },
+                    actions = {
+                        HeaderActionIcon(Icons.Filled.Search, "Search", onOpenSearch)
+                        IconButton(onClick = onOpenSettings) {
+                            com.lastwave.app.ui.home.ProfileAvatar(avatarUrl = effectiveAvatarUrl, modifier = Modifier.size(38.dp))
+                        }
+                    },
+                    bottomContent = if (state.homeChips.isNotEmpty()) {
+                        {
                             PinnedChipsBar(
                                 chips = state.homeChips,
                                 selectedChip = state.selectedChip,
                                 onChipClick = viewModel::onHomeChipSelected,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
                             )
                         }
-                    }
-                }
+                    } else null,
+                )
             }
     }
         // Cards scrolling under the clock and battery icons are softened by PlayerHost's

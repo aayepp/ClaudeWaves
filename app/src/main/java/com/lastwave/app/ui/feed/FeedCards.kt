@@ -435,25 +435,28 @@ internal fun <T> FeedMediaShelfRow(
     itemContent: @Composable (Int, T) -> Unit,
 ) {
     if (items.isEmpty()) return
+    // Compute shelf geometry from window width without BoxWithConstraints so
+    // scrolling a shelf into view never triggers layout-time subcomposition.
     // 15.dp outer + 1.dp pager contentPadding keeps card edges flush at 16.dp without clipping 2.dp ink strokes.
-    BoxWithConstraints(
+    val maxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.coerceAtMost(1160.dp) - 30.dp)
+        .coerceAtLeast(120.dp)
+    val innerWidth = (maxWidth - 2.dp - ShelfShadowRoom).coerceAtLeast(100.dp)
+    val safeColumns = minItemWidth
+        ?.let { ((innerWidth + gap) / (it + gap)).toInt() }
+        ?.coerceAtLeast(1)
+        ?: columns.coerceAtLeast(1)
+    val pages = remember(items, safeColumns) { items.chunked(safeColumns) }
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+    val slotWidth = ((innerWidth - gap * (safeColumns - 1)) / safeColumns).coerceAtLeast(60.dp)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 15.dp)
             .padding(top = topPadding),
     ) {
-        // The pager clips sideways, so the last card's hard shadow needs room inside it;
-        // card plus shadow then ends on the 16.dp margin, mirroring the left edge.
-        val innerWidth = (maxWidth - 2.dp - ShelfShadowRoom).coerceAtLeast(100.dp)
-        val safeColumns = minItemWidth
-            ?.let { ((innerWidth + gap) / (it + gap)).toInt() }
-            ?.coerceAtLeast(1)
-            ?: columns.coerceAtLeast(1)
-        val pages = remember(items, safeColumns) { items.chunked(safeColumns) }
-        val pagerState = rememberPagerState(pageCount = { pages.size })
-        val slotWidth = ((innerWidth - gap * (safeColumns - 1)) / safeColumns).coerceAtLeast(60.dp)
         HorizontalPager(
             state = pagerState,
+            key = { it },
             contentPadding = PaddingValues(horizontal = 1.dp),
             pageSpacing = gap,
             modifier = Modifier.fillMaxWidth(),

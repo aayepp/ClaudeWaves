@@ -1169,6 +1169,7 @@ internal fun PlaylistArtCard(item: HomePlaylistItem) {
                 artist = "Mix",
                 embeddedUrl = item.artworkUrl,
                 fallbackIcon = Icons.AutoMirrored.Filled.QueueMusic,
+                decodeSizePx = 360,
                 modifier = Modifier.fillMaxSize(),
             )
             // Legible dark bottom fade + subtle halftone accent so artwork stays punchy and labels read crisply.

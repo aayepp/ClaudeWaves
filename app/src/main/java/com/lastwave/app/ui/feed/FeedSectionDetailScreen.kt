@@ -422,6 +422,7 @@ private fun TrackSectionList(
                             artist = track.artist,
                             embeddedUrl = track.artworkUrl,
                             fallbackIcon = Icons.Filled.MusicNote,
+                            decodeSizePx = 160,
                             modifier = Modifier.fillMaxSize(),
                         )
                         if (isPlayingThis) {
