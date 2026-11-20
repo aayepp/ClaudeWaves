@@ -256,17 +256,19 @@ internal fun HomeShelfCard(
             onSeeAllShelf != null && shelf.items.size > 1 -> { { onSeeAllShelf(shelf) } }
             else -> null
         }
-        com.lastwave.app.ui.feed.cards.ShelfHeaderV2(
+        val cleanSubtitle = remember(shelf.subtitle, shelf.strapline) {
+            formatShelfSubtitle(shelf.subtitle, shelf.strapline)
+        }
+        SectionHeader(
             title = displayTitle,
-            eyebrow = shelf.strapline,
-            subtitle = shelf.subtitle,
-            showMore = seeAllAction != null,
-            onMoreClick = seeAllAction,
+            subtitle = cleanSubtitle,
+            onSeeAll = seeAllAction,
             onShuffle = if (tracksInShelf.isNotEmpty()) {
                 { onShuffleTracksQueue(tracksInShelf, shelf.title) }
             } else null,
             onLongClick = onHeaderLongClick?.let { { it(shelf.title) } },
         )
+        Spacer(Modifier.height(12.dp))
         val hasWideOrLargeCards = remember(shelf.items) {
             shelf.items.any { com.lastwave.app.ui.feed.cards.selectCardVariant(it, shelf) != com.lastwave.app.ui.feed.cards.HomeCardVariant.SQUARE }
         }
@@ -274,6 +276,7 @@ internal fun HomeShelfCard(
         FeedMediaShelfRow(
             items = shelf.items,
             columns = columns,
+            topPadding = 0.dp,
         ) { _, shelfItem ->
             NativeShelfItemCard(
                 shelfItem = shelfItem,
@@ -745,6 +748,20 @@ internal fun FriendAvatarCard(
     }
 }
 
+/** Single deduplicated subtitle for a YT Music shelf; normalizes ALL-CAPS straplines to sentence case. */
+internal fun formatShelfSubtitle(subtitle: String?, strapline: String?): String? {
+    val raw = subtitle?.trim()?.takeIf(String::isNotEmpty)
+        ?: strapline?.trim()?.takeIf(String::isNotEmpty)
+        ?: return null
+    val hasLower = raw.any { it.isLowerCase() }
+    val hasUpper = raw.any { it.isUpperCase() }
+    return if (hasUpper && !hasLower && raw.length > 3) {
+        raw.lowercase().replaceFirstChar { it.uppercase() }
+    } else {
+        raw
+    }
+}
+
 @Composable
 internal fun HomeContainerSection(
     modifier: Modifier = Modifier,
@@ -755,7 +772,7 @@ internal fun HomeContainerSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 12.dp),
         content = content,
     )
 }

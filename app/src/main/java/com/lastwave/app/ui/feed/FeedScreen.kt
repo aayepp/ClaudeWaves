@@ -415,10 +415,6 @@ fun FeedScreen(
             0.dp
         }
         val listTopInset = if (useFeedGlass && state.isChipActive) topBarHeight else 0.dp
-        val feedCornerDensity = androidx.compose.ui.platform.LocalDensity.current
-        val feedCornerInsetPx = with(feedCornerDensity) { 16.dp.toPx() }
-        val feedCornerRadiusPx = with(feedCornerDensity) { 28.dp.toPx() }
-        val feedCornerTopPx = with(feedCornerDensity) { listTopInset.toPx() }
         val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
 
         val config = LocalConfiguration.current
@@ -1282,62 +1278,10 @@ fun FeedScreen(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .safeHorizontalContentPadding()
-                        // A generic Shape here promoted the whole scrolling viewport to an
-                        // offscreen layer: frames re-recorded and re-uploaded its sections
-                        // instead of drawing straight to the window. Mask the rounded top
-                        // corners at draw time instead, with or without glass (top = 0
-                        // when the list starts below the header).
-                        .drawWithContent {
-                            drawContent()
-                            if (!state.isChipActive || isComic) return@drawWithContent
-                            val left = feedCornerInsetPx
-                            val right = size.width - feedCornerInsetPx
-                            val top = feedCornerTopPx
-                            if (right <= left || size.height <= top) return@drawWithContent
-                            val radius = feedCornerRadiusPx
-                                .coerceAtMost((right - left) / 2f)
-                                .coerceAtMost(size.height - top)
-                            if (radius <= 0f) return@drawWithContent
-                            // The masks repaint the page itself (wash or background image),
-                            // not a flat colour: flat bars showed over the user's image.
-                            clipRect(0f, 0f, left, top + radius) { feedPageWash() }
-                            // No band above `top`: the content there is what the glass
-                            // header refracts. Masking it left the glass a flat bar.
-                            val topLeft = Path().apply {
-                                moveTo(left, top)
-                                lineTo(left, top + radius)
-                                arcTo(
-                                    Rect(left, top, left + 2f * radius, top + 2f * radius),
-                                    180f,
-                                    90f,
-                                    false,
-                                )
-                                close()
-                            }
-                            clipPath(topLeft) { feedPageWash() }
-                            // Right gutter and corner as ONE path. As a rect plus a
-                            // corner path they met along x = right, and the two
-                            // antialiased edges left a hairline of feed showing through.
-                            val topRight = Path().apply {
-                                moveTo(right, 0f)
-                                lineTo(size.width, 0f)
-                                lineTo(size.width, top + radius)
-                                lineTo(right, top + radius)
-                                arcTo(
-                                    Rect(right - 2f * radius, top, right, top + 2f * radius),
-                                    0f,
-                                    -90f,
-                                    false,
-                                )
-                                lineTo(right, top)
-                                close()
-                            }
-                            clipPath(topRight) { feedPageWash() }
-                        },
+                        .safeHorizontalContentPadding(),
                     contentPadding = PaddingValues(
                         bottom = FloatingNavDefaults.contentBottomPadding(),
-                        top = if (state.isChipActive) 16.dp + listTopInset else 0.dp,
+                        top = if (state.isChipActive) 12.dp + listTopInset else 0.dp,
                     ),
                     verticalArrangement = Arrangement.Top,
                 ) {

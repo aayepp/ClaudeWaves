@@ -42,18 +42,23 @@ internal fun CommunityDiscoverShelf(
         onSeeAllShelf != null && shelf.items.size > 1 -> { { onSeeAllShelf(shelf) } }
         else -> null
     }
+    val cleanSubtitle = remember(shelf.subtitle, shelf.strapline) {
+        formatShelfSubtitle(shelf.subtitle, shelf.strapline)
+    }
     Column(modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-        ShelfHeaderV2(
-            title = shelf.title, eyebrow = shelf.strapline, subtitle = shelf.subtitle,
-            showMore = seeAllAction != null, onMoreClick = seeAllAction,
+        SectionHeader(
+            title = shelf.title,
+            subtitle = cleanSubtitle,
+            onSeeAll = seeAllAction,
             onShuffle = if (tracks.isNotEmpty()) { { onPlayTracksQueue(tracks.shuffled(), 0, shelf.title) } } else null,
             onLongClick = onHeaderLongClick,
         )
+        Spacer(Modifier.height(12.dp))
         // Same single-column shelf on every theme (DESIGN.md 3a).
         FeedMediaShelfRow(
             items = shelf.items,
             columns = 1,
-            topPadding = 10.dp,
+            topPadding = 0.dp,
         ) { index, item ->
             val width = com.lastwave.app.ui.feed.cards.LocalSymmetricCardWidth.current ?: 320.dp
             when {

@@ -107,10 +107,13 @@ fun ShelfHeaderV2(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics { heading() },
             )
-            if (!subtitle.isNullOrBlank()) {
+            val distinctSubtitle = subtitle?.trim()?.takeIf {
+                it.isNotEmpty() && !it.equals(eyebrow?.trim(), ignoreCase = true)
+            }
+            if (distinctSubtitle != null) {
                 Spacer(Modifier.height(1.dp))
                 Text(
-                    subtitle,
+                    distinctSubtitle,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     maxLines = 1,
