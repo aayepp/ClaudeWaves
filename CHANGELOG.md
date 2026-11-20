@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.6] - 2026-11-20
+
+### Added
+- **Expanded Settings → About:** added a **Gestures & Shortcuts** guide sheet, **Links & Support** (`GitHub Repository`, pre-filled `Report a Bug`, and `Share ClaudeWaves`), and a **Device & Audio Engine** diagnostics card with one-tap **Copy Info**.
+
 ## [1.0.5] - 2026-11-20
 
 ### Added
