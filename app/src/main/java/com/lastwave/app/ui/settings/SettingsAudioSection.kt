@@ -181,7 +181,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import com.lastwave.app.ui.comic.OutlinedButton
-import androidx.compose.material3.Slider
+import com.lastwave.app.ui.comic.Slider
 import com.lastwave.app.ui.comic.Surface
 import com.lastwave.app.ui.comic.RadioButton
 import com.lastwave.app.ui.comic.Switch

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.7] - 2026-11-20
+
+### Improved
+- **iOS 26 Liquid Glass switches:** toggle switches on normal Light, Dark, and AMOLED themes now support both tapping and dragging with rubber-banding, lifting past the track edges into a clear refracting glass lens and settling back with a gentle jelly wobble.
+- **Draggable Liquid Glass segmented controls:** `System / Light / Dark`, `Refresh Rate`, and other segmented selectors now feature a floating glass selection lens you can tap or scrub across options with haptic ticks.
+- **Liquid Glass lens sliders:** Settings sliders (Liquid Glass intensity, custom accent HSL, Audio, Storage, and AutoEQ) now inflate their thumb into a crystal glass lens while dragging with rubber-banding at the stops.
+
 ## [1.0.6] - 2026-11-20
 
 ### Added

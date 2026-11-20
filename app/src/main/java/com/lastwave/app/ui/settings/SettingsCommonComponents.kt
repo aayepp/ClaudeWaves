@@ -187,7 +187,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import com.lastwave.app.ui.comic.OutlinedButton
-import androidx.compose.material3.Slider
+import com.lastwave.app.ui.comic.Slider
 import com.lastwave.app.ui.comic.Surface
 import com.lastwave.app.ui.comic.RadioButton
 import com.lastwave.app.ui.comic.Switch
@@ -652,7 +652,7 @@ internal fun LiquidGlassIntensitySlider(saved: Float, onCommit: (Float) -> Unit)
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            androidx.compose.material3.Slider(
+            Slider(
                 value = value,
                 onValueChange = {
                     value = it

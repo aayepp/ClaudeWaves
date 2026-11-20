@@ -14,27 +14,53 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.SliderColors
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.material3.Slider as M3Slider
 import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.sign
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -506,9 +532,10 @@ fun Switch(
 }
 
 /**
- * Liquid Glass Droplet toggle switch for normal Light / Dark / AMOLED themes.
- * Pressing or toggling stretches the thumb into a translucent frosted glass droplet
- * with spring physics, specular rim lighting, and subtle haptic feedback.
+ * iOS 26-inspired Liquid Glass toggle switch for normal Light / Dark / AMOLED themes.
+ * Supports both tap and horizontal drag with rubber-banding: touching lifts the knob
+ * beyond the track into a clear glass lens, and releasing settles it back into a white
+ * pill with a volume-preserving jelly wobble.
  */
 @Composable
 private fun LiquidGlassSwitch(
@@ -521,131 +548,238 @@ private fun LiquidGlassSwitch(
 ) {
     val isDark = LocalIsDarkTheme.current
     val haptics = LocalHapticFeedback.current
-    val isPressed by interactionSource.collectIsPressedAsState()
+    val density = LocalDensity.current
 
+    val trackWidth = 56.dp
+    val trackHeight = 32.dp
+    val inset = 3.dp
+    val thumbRestWidth = 28.dp
+    val thumbHeight = trackHeight - inset * 2
+    val travelPx = with(density) { (trackWidth - inset * 2 - thumbRestWidth).toPx() }
+
+    val latestChecked by rememberUpdatedState(checked)
+    val latestOnChange by rememberUpdatedState(onCheckedChange)
+    val latestEnabled by rememberUpdatedState(enabled)
+
+    var isPressed by remember { mutableStateOf(false) }
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
+    var rubberOvershoot by remember { mutableFloatStateOf(0f) }
     var isMorphing by remember { mutableStateOf(false) }
     var initialized by remember { mutableStateOf(false) }
+
     LaunchedEffect(checked) {
         if (!initialized) {
             initialized = true
+            dragFraction = if (checked) 1f else 0f
             return@LaunchedEffect
         }
-        isMorphing = true
-        delay(190L)
-        isMorphing = false
+        if (!isDragging) {
+            dragFraction = if (checked) 1f else 0f
+            isMorphing = true
+            delay(180L)
+            isMorphing = false
+        }
     }
 
-    val stretched = (isPressed || isMorphing) && enabled
-    val trackWidth = 54.dp
-    val trackHeight = 32.dp
-    val inset = 3.dp
-    val thumbHeight = trackHeight - inset * 2
+    val lifted = (isPressed || isDragging || isMorphing) && enabled
+    val targetFraction = if (isDragging) dragFraction else if (checked) 1f else 0f
 
-    val thumbWidth by animateDpAsState(
-        targetValue = if (stretched) 34.dp else 26.dp,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = 850f),
-        label = "liquidSwitchThumbWidth",
-    )
-    val thumbOffsetX by animateDpAsState(
-        targetValue = if (checked) trackWidth - inset - thumbWidth else inset,
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = 560f),
-        label = "liquidSwitchThumbOffset",
-    )
-    val dropletGlassAlpha by animateFloatAsState(
-        targetValue = if (stretched) 0.36f else 0.96f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 700f),
-        label = "liquidSwitchDropletAlpha",
-    )
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) {
-            MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.88f else 0.94f)
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = if (isDragging) {
+            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 2400f)
         } else {
-            MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.12f)
+            spring(dampingRatio = 0.68f, stiffness = 520f)
         },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 620f),
-        label = "liquidSwitchTrackColor",
+        label = "liquidSwitchFraction",
     )
+    // Lift inflates the knob beyond the track edges into a clear refracting lens;
+    // release settles back with a short jelly wobble.
+    val liftProgress by animateFloatAsState(
+        targetValue = if (lifted) 1f else 0f,
+        animationSpec = if (lifted) {
+            spring(dampingRatio = 0.74f, stiffness = 780f)
+        } else {
+            spring(dampingRatio = 0.54f, stiffness = 520f)
+        },
+        label = "liquidSwitchLift",
+    )
+    // Glass clarity follows lift up, then falls cleanly without flashing back on bounce.
+    val glassClarity by animateFloatAsState(
+        targetValue = if (lifted) 1f else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 680f),
+        label = "liquidSwitchGlass",
+    )
+    val rubberAnimated by animateFloatAsState(
+        targetValue = if (isDragging) rubberOvershoot else 0f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 540f),
+        label = "liquidSwitchRubber",
+    )
+
+    val offTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.12f)
+    val onTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.88f else 0.94f)
+    val trackColor = lerp(offTrackColor, onTrackColor, animatedFraction.coerceIn(0f, 1f))
+    val isVisualOn = animatedFraction >= 0.5f
+
     val rimTopColor = Color.White.copy(alpha = when {
-        checked && isDark -> 0.42f
-        checked -> 0.62f
+        isVisualOn && isDark -> 0.44f
+        isVisualOn -> 0.64f
         isDark -> 0.22f
         else -> 0.55f
     })
     val rimBottomColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.10f)
 
-    val toggleModifier = if (onCheckedChange != null) {
-        Modifier.toggleable(
-            value = checked,
-            enabled = enabled,
-            role = Role.Switch,
-            interactionSource = interactionSource,
-            indication = null,
-            onValueChange = { next ->
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onCheckedChange(next)
-            },
-        )
-    } else {
-        Modifier
-    }
+    val gestureModifier = Modifier
+        .semantics(mergeDescendants = true) {
+            role = Role.Switch
+            toggleableState = ToggleableState(checked)
+            if (enabled && onCheckedChange != null) {
+                onClick {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCheckedChange(!checked)
+                    true
+                }
+            }
+        }
+        .pointerInput(travelPx) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                if (!latestEnabled || latestOnChange == null) return@awaitEachGesture
+                isPressed = true
+                var dragged = false
+                var totalDx = 0f
+                val startFraction = if (latestChecked) 1f else 0f
+                dragFraction = startFraction
+                rubberOvershoot = 0f
+                var lastCrossedOn = latestChecked
 
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                    val dx = change.positionChange().x
+                    if (dx != 0f) {
+                        totalDx += dx
+                        if (!dragged && abs(totalDx) > viewConfiguration.touchSlop * 0.45f) {
+                            dragged = true
+                            isDragging = true
+                        }
+                        if (dragged && travelPx > 1f) {
+                            change.consume()
+                            val raw = startFraction + totalDx / travelPx
+                            dragFraction = raw.coerceIn(0f, 1f)
+                            val over = when {
+                                raw < 0f -> raw
+                                raw > 1f -> raw - 1f
+                                else -> 0f
+                            }
+                            rubberOvershoot = sign(over) * (abs(over) / (1f + abs(over) * 2.2f)) * 0.18f
+                            val nowOn = dragFraction >= 0.5f
+                            if (nowOn != lastCrossedOn) {
+                                lastCrossedOn = nowOn
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        }
+                    }
+                }
+
+                val targetNext = if (dragged) dragFraction >= 0.5f else !latestChecked
+                isPressed = false
+                isDragging = false
+                rubberOvershoot = 0f
+                if (targetNext != latestChecked) {
+                    if (!dragged) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    latestOnChange?.invoke(targetNext)
+                }
+            }
+        }
+
+    // Outer container does NOT clip so the lifted glass lens can visibly inflate past the track rim.
     Box(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .alpha(if (enabled) 1f else 0.42f)
-            .then(toggleModifier),
+            .then(gestureModifier),
         contentAlignment = Alignment.Center,
     ) {
-        // Translucent liquid glass track with top specular rim + soft inner gloss
         Box(
-            modifier = Modifier
-                .size(width = trackWidth, height = trackHeight)
-                .uiClip(CircleShape)
-                .background(trackColor)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.White.copy(alpha = if (checked) 0.24f else if (isDark) 0.10f else 0.22f),
-                        0.55f to Color.Transparent,
-                        1.0f to Color.Black.copy(alpha = if (isDark) 0.16f else 0.06f),
-                    ),
-                )
-                .border(
-                    width = 1.dp,
-                    brush = Brush.verticalGradient(listOf(rimTopColor, rimBottomColor)),
-                    shape = CircleShape,
-                ),
+            modifier = Modifier.size(width = trackWidth, height = trackHeight),
             contentAlignment = Alignment.CenterStart,
         ) {
-            // Liquid Glass Droplet thumb
-            val thumbBorderAlpha = if (stretched) 0.92f else 0.78f
+            // Translucent liquid glass track with specular rim + subtle inner gloss
             Box(
                 modifier = Modifier
-                    .offset(x = thumbOffsetX)
-                    .size(width = thumbWidth, height = thumbHeight)
-                    .shadow(
-                        elevation = if (stretched) 6.dp else 3.dp,
-                        shape = CircleShape,
-                        ambientColor = Color.Black.copy(alpha = 0.30f),
-                        spotColor = Color.Black.copy(alpha = 0.32f),
-                    )
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val stretchX = 1f + abs(rubberAnimated) * 0.35f
+                        val stretchY = 1f - abs(rubberAnimated) * 0.12f
+                        scaleX = stretchX
+                        scaleY = stretchY
+                        translationX = rubberAnimated * 16f
+                    }
                     .uiClip(CircleShape)
+                    .background(trackColor)
                     .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = (dropletGlassAlpha + 0.14f).coerceAtMost(1f)),
-                                Color.White.copy(alpha = dropletGlassAlpha),
-                                Color.White.copy(alpha = (dropletGlassAlpha * 0.72f).coerceAtLeast(0.18f)),
-                            ),
-                            center = Offset(14f, 10f),
-                            radius = 52f,
+                        Brush.verticalGradient(
+                            0.0f to Color.White.copy(alpha = if (isVisualOn) 0.24f else if (isDark) 0.10f else 0.22f),
+                            0.55f to Color.Transparent,
+                            1.0f to Color.Black.copy(alpha = if (isDark) 0.16f else 0.06f),
                         ),
                     )
                     .border(
-                        width = if (stretched) 1.3.dp else 0.9.dp,
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(listOf(rimTopColor, rimBottomColor)),
+                        shape = CircleShape,
+                    ),
+            )
+
+            // Lifted iOS 26 Liquid Glass lens knob (drawn as sibling so it expands cleanly past track bounds)
+            val safeLift = liftProgress.coerceAtLeast(-0.18f)
+            val lensStretch = abs(rubberAnimated) * 0.45f
+            val knobScaleX = 1f + safeLift * 0.26f + lensStretch
+            val knobScaleY = 1f + safeLift * 0.20f - lensStretch * 0.35f
+            val dropletAlpha = (0.97f - glassClarity.coerceIn(0f, 1f) * 0.72f).coerceIn(0.20f, 0.98f)
+            val borderAlpha = 0.76f + glassClarity.coerceIn(0f, 1f) * 0.22f
+            val baseOffsetPx = with(density) { inset.toPx() } +
+                animatedFraction.coerceIn(0f, 1f) * travelPx +
+                rubberAnimated * 22f
+
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(baseOffsetPx.roundToInt(), 0) }
+                    .size(width = thumbRestWidth, height = thumbHeight)
+                    .graphicsLayer {
+                        scaleX = knobScaleX
+                        scaleY = knobScaleY
+                    }
+                    .shadow(
+                        elevation = (3f + safeLift.coerceAtLeast(0f) * 5f).dp,
+                        shape = CircleShape,
+                        ambientColor = Color.Black.copy(alpha = 0.28f),
+                        spotColor = Color.Black.copy(alpha = 0.32f),
+                    )
+                    .uiClip(CircleShape)
+                    // Subtle refracted track tint glowing inside the lifted clear lens
+                    .background(trackColor.copy(alpha = glassClarity.coerceIn(0f, 1f) * 0.38f))
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = (dropletAlpha + 0.16f).coerceAtMost(1f)),
+                                Color.White.copy(alpha = dropletAlpha),
+                                Color.White.copy(alpha = (dropletAlpha * 0.65f).coerceAtLeast(0.14f)),
+                            ),
+                            center = Offset(16f, 10f),
+                            radius = 58f,
+                        ),
+                    )
+                    .border(
+                        width = (0.9f + glassClarity.coerceIn(0f, 1f) * 0.6f).dp,
                         brush = Brush.verticalGradient(
                             listOf(
-                                Color.White.copy(alpha = thumbBorderAlpha),
-                                Color.White.copy(alpha = thumbBorderAlpha * 0.35f),
+                                Color.White.copy(alpha = borderAlpha),
+                                Color.White.copy(alpha = borderAlpha * 0.32f),
+                                Color.White.copy(alpha = borderAlpha * 0.65f),
                             ),
                         ),
                         shape = CircleShape,
@@ -655,6 +789,215 @@ private fun LiquidGlassSwitch(
                 thumbContent?.invoke()
             }
         }
+    }
+}
+
+/**
+ * Theme-aware Slider: Comic Pop keeps M3 Slider, while normal Light / Dark / AMOLED themes
+ * render an iOS 26-inspired Liquid Glass Slider whose thumb inflates into a clear glass lens
+ * while dragging or tapping.
+ */
+@Composable
+fun Slider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    steps: Int = 0,
+    onValueChangeFinished: (() -> Unit)? = null,
+    colors: SliderColors = SliderDefaults.colors(),
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+) {
+    if (LocalComicTheme.current) {
+        M3Slider(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = modifier,
+            enabled = enabled,
+            valueRange = valueRange,
+            steps = steps,
+            onValueChangeFinished = onValueChangeFinished,
+            colors = colors,
+            interactionSource = interactionSource,
+        )
+        return
+    }
+
+    val isDark = LocalIsDarkTheme.current
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+
+    val span = (valueRange.endInclusive - valueRange.start).coerceAtLeast(1e-6f)
+    val fraction = ((value - valueRange.start) / span).coerceIn(0f, 1f)
+
+    val latestOnValueChange by rememberUpdatedState(onValueChange)
+    val latestOnFinished by rememberUpdatedState(onValueChangeFinished)
+    val latestEnabled by rememberUpdatedState(enabled)
+    val latestRange by rememberUpdatedState(valueRange)
+    val latestSteps by rememberUpdatedState(steps)
+
+    var trackWidthPx by remember { mutableIntStateOf(1) }
+    var isDragging by remember { mutableStateOf(false) }
+    var rubberOvershoot by remember { mutableFloatStateOf(0f) }
+
+    val thumbRestW = 28.dp
+    val thumbRestH = 19.dp
+    val thumbRestWPx = with(density) { thumbRestW.toPx() }
+    val usableTravelPx = (trackWidthPx - thumbRestWPx).coerceAtLeast(1f)
+
+    val liftProgress by animateFloatAsState(
+        targetValue = if (isDragging && enabled) 1f else 0f,
+        animationSpec = if (isDragging) {
+            spring(dampingRatio = 0.74f, stiffness = 780f)
+        } else {
+            spring(dampingRatio = 0.56f, stiffness = 540f)
+        },
+        label = "liquidSliderLift",
+    )
+    val glassClarity by animateFloatAsState(
+        targetValue = if (isDragging && enabled) 1f else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 680f),
+        label = "liquidSliderGlass",
+    )
+    val rubberAnimated by animateFloatAsState(
+        targetValue = if (isDragging) rubberOvershoot else 0f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 540f),
+        label = "liquidSliderRubber",
+    )
+
+    fun quantize(rawFraction: Float): Float {
+        val clamped = rawFraction.coerceIn(0f, 1f)
+        val snapped = if (latestSteps > 0) {
+            val intervals = latestSteps + 1
+            (clamped * intervals).roundToInt().toFloat() / intervals
+        } else clamped
+        return latestRange.start + snapped * (latestRange.endInclusive - latestRange.start)
+    }
+
+    val trackOffColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.12f)
+    val activeColor = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .alpha(if (enabled) 1f else 0.42f)
+            .onSizeChanged { if (it.width > 0) trackWidthPx = it.width }
+            .pointerInput(usableTravelPx, thumbRestWPx) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (!latestEnabled) return@awaitEachGesture
+                    isDragging = true
+                    var lastEmitted = quantize((down.position.x - thumbRestWPx / 2f) / usableTravelPx)
+                    latestOnValueChange(lastEmitted)
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        change.consume()
+                        val raw = (change.position.x - thumbRestWPx / 2f) / usableTravelPx
+                        val over = when {
+                            raw < 0f -> raw
+                            raw > 1f -> raw - 1f
+                            else -> 0f
+                        }
+                        rubberOvershoot = sign(over) * (abs(over) / (1f + abs(over) * 2.5f)) * 0.16f
+                        val next = quantize(raw)
+                        if (abs(next - lastEmitted) > 1e-4f) {
+                            if (latestSteps > 0) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            lastEmitted = next
+                            latestOnValueChange(next)
+                        }
+                    }
+
+                    isDragging = false
+                    rubberOvershoot = 0f
+                    latestOnFinished?.invoke()
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        // Translucent pill track + active liquid fill
+        val trackHeight = (6f + liftProgress.coerceAtLeast(0f) * 1.5f).dp
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(trackHeight)
+                .uiClip(CircleShape)
+                .background(trackOffColor)
+                .border(
+                    width = 0.8.dp,
+                    color = Color.White.copy(alpha = if (isDark) 0.16f else 0.45f),
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                    .background(activeColor)
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color.White.copy(alpha = 0.28f),
+                            1.0f to Color.Transparent,
+                        ),
+                    ),
+            )
+        }
+
+        // Lifted iOS 26 Liquid Glass lens thumb
+        val safeLift = liftProgress.coerceAtLeast(-0.15f)
+        val thumbScaleX = 1f + safeLift * 0.30f + abs(rubberAnimated) * 0.35f
+        val thumbScaleY = 1f + safeLift * 0.28f - abs(rubberAnimated) * 0.18f
+        val lensAlpha = (0.97f - glassClarity.coerceIn(0f, 1f) * 0.70f).coerceIn(0.22f, 0.98f)
+        val borderAlpha = 0.78f + glassClarity.coerceIn(0f, 1f) * 0.20f
+        val offsetPx = fraction * usableTravelPx + rubberAnimated * 18f
+
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(offsetPx.roundToInt(), 0) }
+                .size(width = thumbRestW, height = thumbRestH)
+                .graphicsLayer {
+                    scaleX = thumbScaleX
+                    scaleY = thumbScaleY
+                }
+                .shadow(
+                    elevation = (3f + safeLift.coerceAtLeast(0f) * 5f).dp,
+                    shape = CircleShape,
+                    ambientColor = Color.Black.copy(alpha = 0.26f),
+                    spotColor = Color.Black.copy(alpha = 0.30f),
+                )
+                .uiClip(CircleShape)
+                .background(activeColor.copy(alpha = glassClarity.coerceIn(0f, 1f) * 0.24f))
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = (lensAlpha + 0.15f).coerceAtMost(1f)),
+                            Color.White.copy(alpha = lensAlpha),
+                            Color.White.copy(alpha = (lensAlpha * 0.68f).coerceAtLeast(0.16f)),
+                        ),
+                        center = Offset(18f, 8f),
+                        radius = 56f,
+                    ),
+                )
+                .border(
+                    width = (0.9f + glassClarity.coerceIn(0f, 1f) * 0.6f).dp,
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = borderAlpha),
+                            Color.White.copy(alpha = borderAlpha * 0.30f),
+                            Color.White.copy(alpha = borderAlpha * 0.62f),
+                        ),
+                    ),
+                    shape = CircleShape,
+                ),
+        )
     }
 }
 
