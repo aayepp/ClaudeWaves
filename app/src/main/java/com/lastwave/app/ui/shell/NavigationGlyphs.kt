@@ -27,7 +27,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.lastwave.app.ui.player.kick
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import com.lastwave.app.ui.theme.inkHalo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -45,6 +49,15 @@ private fun TabIcon(item: LiquidNavigationItem, play: () -> Float, tint: Color, 
     else Icon(item.icon, contentDescription = null, tint = tint, modifier = modifier)
 }
 
+/** The glyph over a blurred copy of itself in [halo], so it reads on any backdrop. */
+@Composable
+private fun HaloTabIcon(item: LiquidNavigationItem, play: () -> Float, tint: Color, halo: Color, modifier: Modifier) {
+    Box(modifier) {
+        TabIcon(item, play, halo, Modifier.matchParentSize().blur(3.dp, BlurredEdgeTreatment.Unbounded))
+        TabIcon(item, play, tint, Modifier.matchParentSize())
+    }
+}
+
 /** Shared, stationary geometry for the visible rail and the lens's captured glyph plane. */
 @Composable
 internal fun NavigationGlyphs(
@@ -52,15 +65,15 @@ internal fun NavigationGlyphs(
     selectedIndex: Int,
     captionIndex: Int,
     compact: Boolean,
-    neutral: Color,
-    active: Color,
+    ink: (index: Int) -> Color,
     captured: Boolean,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         items.forEachIndexed { index, item ->
-            val tint = if (selectedIndex == index) active else neutral
+            val tint = ink(index)
+            val halo = inkHalo(tint)
             // A small hop as a tab becomes selected. Keyed on the selection, not the tap,
             // so the optical copy and the touch layer hop together.
             val hop = remember(index) { Animatable(0f) }
@@ -107,13 +120,13 @@ internal fun NavigationGlyphs(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TabIcon(item, { hop.value }, tint, Modifier.size(24.dp).then(iconMotion))
+                        HaloTabIcon(item, { hop.value }, tint, halo, Modifier.size(24.dp).then(iconMotion))
                         if (captionIndex == index) {
                             Text(
                                 text = item.label,
                                 modifier = Modifier.weight(1f, fill = false).padding(start = 6.dp).then(textSemantics),
                                 color = tint,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelMedium.copy(shadow = Shadow(halo, blurRadius = 8f)),
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -125,13 +138,13 @@ internal fun NavigationGlyphs(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        TabIcon(item, { hop.value }, tint, Modifier.size(23.dp).then(iconMotion))
+                        HaloTabIcon(item, { hop.value }, tint, halo, Modifier.size(23.dp).then(iconMotion))
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = item.label,
                             modifier = textSemantics,
                             color = tint,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelSmall.copy(shadow = Shadow(halo, blurRadius = 8f)),
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

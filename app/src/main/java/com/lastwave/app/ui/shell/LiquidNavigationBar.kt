@@ -81,6 +81,7 @@ import com.lastwave.app.ui.theme.LiquidGlassIntensity
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
 import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
 import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
+import com.lastwave.app.ui.theme.rememberBackdropUseLightInkPerSlot
 import com.lastwave.app.ui.theme.trackBackdropBounds
 import com.lastwave.app.ui.theme.waterDropJiggle
 import io.github.fletchmckee.liquid.LiquidState
@@ -172,25 +173,27 @@ private fun LiquidNavigationBarContent(
     }
 
     val dockBounds = remember { BackdropBoundsHolder() }
-    val useLightInk = rememberBackdropUseLightInk(
+    val useLightInk = rememberBackdropUseLightInkPerSlot(
         backdrop = LocalLiquidGlassBackdrop.current,
         bounds = dockBounds,
         enabled = true,
+        slots = count,
         scrimBaseAlpha = if (isDark) 0.32f else 0.30f,
         isVisible = isVisible,
     )
-    val targetInk = when {
-        useLightInk -> Color.White
-        isDark -> Color(0xFF111319)
-        else -> MaterialTheme.colorScheme.onSurface
+    val darkInk = if (isDark) Color(0xFF111319) else MaterialTheme.colorScheme.onSurface
+    val inks = useLightInk.mapIndexed { i, light ->
+        key(i) {
+            animateColorAsState(
+                targetValue = if (light) Color.White else darkInk,
+                animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
+                label = "liquidNavInk",
+            ).value
+        }
     }
-    val ink by animateColorAsState(
-        targetValue = targetInk,
-        animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
-        label = "liquidNavInk",
-    )
+    // Slots are visual positions; in RTL the first item sits in the last slot.
+    val inkAt = { index: Int -> inks[if (isRtl) count - 1 - index else index] }
     val accent = MaterialTheme.colorScheme.primary
-    val neutralInk = ink.copy(alpha = 0.92f)
     val pageColor = MaterialTheme.colorScheme.background
     val surfaceColor = MaterialTheme.colorScheme.surface
     val railTint = railTint(isDark)
@@ -253,7 +256,7 @@ private fun LiquidNavigationBarContent(
                 Box(Modifier.matchParentSize().background(surfaceColor, CircleShape)
                     .navigationRail(pageState, railTint, blurRadius = 24.dp))
                 NavigationGlyphs(
-                    items, selectedIndex, captionIndex, compact, ink, ink,
+                    items, selectedIndex, captionIndex, compact, inkAt,
                     captured = true, onSelect = {}, modifier = Modifier.fillMaxSize().padding(4.dp),
                 )
             }
@@ -320,7 +323,7 @@ private fun LiquidNavigationBarContent(
             ) {
                 NavigationGlyphs(
                     items, selectedIndex, captionIndex, compact,
-                    neutralInk, if (pressed) neutralInk else ink,
+                    { i -> inkAt(i).let { if (i == selectedIndex && !pressed) it else it.copy(alpha = 0.92f) } },
                     captured = false, onSelect = { select(it) }, modifier = Modifier.fillMaxSize(),
                 )
                 Box(

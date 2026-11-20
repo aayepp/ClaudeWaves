@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -15,6 +16,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
@@ -39,6 +41,10 @@ private const val STANDALONE_W = 16
 private const val STANDALONE_H = 8
 private const val INITIAL_SAMPLE_DELAY_MS = 80L
 private const val SAMPLE_INTERVAL_MS = 220L
+// While the backdrop under the chrome is changing (scroll, pager swipe) ink must keep up.
+private const val MOVING_SAMPLE_INTERVAL_MS = 100L
+// Mean per-channel change (0-255) across the atlas that counts as "the backdrop moved".
+private const val MOTION_DELTA = 3
 // True WCAG 2.1 crossover between white and black ink is L = sqrt(1.05 * 0.05) - 0.05 ~= 0.179.
 private const val DARK_TO_LIGHT_THRESHOLD = 0.165f
 private const val LIGHT_TO_DARK_THRESHOLD = 0.215f
@@ -112,8 +118,10 @@ internal fun rememberBackdropContrastCoordinator(
 
     LaunchedEffect(coordinator, isDark, lifecycleOwner) {
         val pixels = IntArray(ATLAS_W * ATLAS_H)
+        val previous = IntArray(ATLAS_W * ATLAS_H)
         delay(INITIAL_SAMPLE_DELAY_MS)
         while (true) {
+            var moving = false
             val active = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 !latestPaused() &&
                 !GlassMotion.isSheetMoving()
@@ -167,6 +175,8 @@ internal fun rememberBackdropContrastCoordinator(
                         false
                     }
                     if (captured) {
+                        moving = atlasDelta(pixels, previous) > MOTION_DELTA
+                        pixels.copyInto(previous)
                         for (t in activeTargets) {
                             if (!t.isVisible()) continue
                             val r = t.bounds.rect ?: continue
@@ -195,12 +205,55 @@ internal fun rememberBackdropContrastCoordinator(
                     }
                 }
             }
-            delay(SAMPLE_INTERVAL_MS)
+            delay(if (moving) MOVING_SAMPLE_INTERVAL_MS else SAMPLE_INTERVAL_MS)
         }
     }
 
     return coordinator
 }
+
+private fun atlasDelta(a: IntArray, b: IntArray): Int {
+    var sum = 0L
+    for (i in a.indices) {
+        val x = a[i]
+        val y = b[i]
+        sum += kotlin.math.abs(((x ushr 16) and 0xFF) - ((y ushr 16) and 0xFF)) +
+            kotlin.math.abs(((x ushr 8) and 0xFF) - ((y ushr 8) and 0xFF)) +
+            kotlin.math.abs((x and 0xFF) - (y and 0xFF))
+    }
+    return (sum / (a.size * 3)).toInt()
+}
+
+/**
+ * One ink decision per equal-width slot of [bounds]. A dock spanning dark artwork and a light
+ * page averaged to "light" and painted every tab dark, burying the tab over the artwork.
+ * Slots share the coordinator's single readback, so this costs no extra GPU work.
+ */
+@Composable
+internal fun rememberBackdropUseLightInkPerSlot(
+    backdrop: Backdrop?,
+    bounds: BackdropBoundsHolder,
+    enabled: Boolean,
+    slots: Int,
+    scrimBaseAlpha: Float,
+    isVisible: () -> Boolean,
+): List<Boolean> = List(slots) { i ->
+    key(i) {
+        rememberBackdropUseLightInk(
+            backdrop = backdrop,
+            bounds = bounds,
+            enabled = enabled,
+            scrimBaseAlpha = scrimBaseAlpha,
+            cropStartX = (i + 0.2f) / slots,
+            cropEndX = (i + 0.8f) / slots,
+            isVisible = isVisible,
+        )
+    }
+}
+
+/** Soft opposite-tone halo so glyphs stay legible over mid-tone backdrops where neither ink wins. */
+internal fun inkHalo(ink: Color): Color =
+    if (ink.luminance() > 0.5f) Color.Black.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.5f)
 
 /**
  * Returns whether foreground text/icons over [backdrop] at [bounds] should use light (white) ink.

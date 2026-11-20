@@ -144,6 +144,7 @@ import com.lastwave.app.ui.playlist.PlaylistScreen
 import androidx.compose.foundation.shape.CornerBasedShape
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import androidx.compose.ui.draw.blur as drawBlur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.effects.lens
@@ -632,13 +633,15 @@ private fun FloatingNavBar(
     val sharedBackdrop = com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop.current ?: backdrop
     val dockBackdropBounds = remember { BackdropBoundsHolder() }
     val searchBackdropBounds = remember { BackdropBoundsHolder() }
-    val dockUseLightInk = rememberBackdropUseLightInk(
+    val dockUseLightInk = com.lastwave.app.ui.theme.rememberBackdropUseLightInkPerSlot(
         backdrop = sharedBackdrop,
         bounds = dockBackdropBounds,
         enabled = glassActive,
+        slots = tabs.size,
         scrimBaseAlpha = 0.28f,
         isVisible = isVisible,
     )
+    val dockRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     val searchUseLightInk = rememberBackdropUseLightInk(
         backdrop = sharedBackdrop,
         bounds = searchBackdropBounds,
@@ -734,7 +737,7 @@ private fun FloatingNavBar(
                             icon = tab.icon(),
                             selected = selectedIndex == index,
                             onClick = onClick,
-                            adaptiveUseLightInk = if (glassActive) dockUseLightInk else null,
+                            adaptiveUseLightInk = if (glassActive) dockUseLightInk[if (dockRtl) tabs.size - 1 - index else index] else null,
                             modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
                                 glassNavBounds[index] = coords.boundsInParent()
                             },
@@ -869,15 +872,17 @@ private fun FloatingNavItem(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(horizontal = 4.dp),
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(22.dp),
-            )
+            // Halo only over adaptive glass, where the backdrop can be any tone.
+            val halo = if (adaptiveUseLightInk != null) com.lastwave.app.ui.theme.inkHalo(contentColor) else Color.Transparent
+            Box(Modifier.size(22.dp)) {
+                if (adaptiveUseLightInk != null) {
+                    Icon(icon, null, tint = halo, modifier = Modifier.matchParentSize().drawBlur(3.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded))
+                }
+                Icon(icon, null, tint = contentColor, modifier = Modifier.matchParentSize())
+            }
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(shadow = androidx.compose.ui.graphics.Shadow(halo, blurRadius = 8f)),
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 color = contentColor,
                 maxLines = 1,
