@@ -810,13 +810,16 @@ internal fun PinnedChipsBar(
     val measureStyle = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
     var overflowExpanded by remember { mutableStateOf(false) }
 
-    BoxWithConstraints(
+    val rowMaxWidth = (
+        androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.coerceAtMost(1160.dp) -
+            horizontalPadding * 2 - 3.dp
+        ).coerceAtLeast(120.dp)
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding, vertical = 4.dp)
             .padding(end = 3.dp, bottom = 2.dp),
     ) {
-        val rowMaxWidth = maxWidth.coerceAtLeast(120.dp)
         val gapDp = 8.dp
         val chipPadDp = 30.dp
         val chevronReserveDp = 20.dp

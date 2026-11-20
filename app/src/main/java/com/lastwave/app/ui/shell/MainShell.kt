@@ -373,12 +373,14 @@ fun MainShell(
         LocalLiquidGlass.current && !hideNavTabs
     val navigationLiquidState = if (useLiquidNavigation) rememberLiquidState() else null
     val navGlass = isLiquidGlassBackdropSupported()
+    val sharedBackdrop = com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop.current as? com.lastwave.app.ui.theme.LayerBackdrop
     val navigationBackdrop = if (!useLiquidNavigation && navGlass) {
-        rememberLayerBackdrop {
+        sharedBackdrop ?: rememberLayerBackdrop {
             pageWash()
             drawContent()
         }
     } else null
+    val ownsNavigationBackdrop = navigationBackdrop != null && navigationBackdrop !== sharedBackdrop
     val chromeCollapse = LocalChromeCollapse.current
     // Each tab keeps its own scroll offset: a compact bar carried onto a tab
     // resting at its top would have nothing to scroll back up to expand it.
@@ -400,7 +402,7 @@ fun MainShell(
                 if (navigationLiquidState != null) {
                     Modifier.liquefiable(navigationLiquidState).drawBehind(pageWash)
                 } else {
-                    Modifier.liquidGlassSource(if (navGlass) navigationBackdrop else null)
+                    Modifier.liquidGlassSource(if (ownsNavigationBackdrop) navigationBackdrop else null)
                 },
             ),
         ) { page ->
@@ -632,7 +634,7 @@ private fun FloatingNavBar(
     val searchInteraction = remember { MutableInteractionSource() }
     val comic = LocalComicTheme.current
     val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
-    val sharedBackdrop = com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop.current ?: backdrop
+    val sharedBackdrop = com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop.current as? com.lastwave.app.ui.theme.LayerBackdrop ?: backdrop
     val dockBackdropBounds = remember { BackdropBoundsHolder() }
     val searchBackdropBounds = remember { BackdropBoundsHolder() }
     val dockUseLightInk = com.lastwave.app.ui.theme.rememberBackdropUseLightInkPerSlot(

@@ -74,29 +74,29 @@ object ExpressiveMotion {
     // Legacy alias
     fun <T> smoothSpring() = effectsDefault<T>()
 
-    // Screen transitions: physics-driven spring slide + fast fade so 120Hz/165Hz
-    // panels track fluid deceleration without dual full-screen scale offscreen layers.
+    // Screen transitions: critically-damped liquid-flow spring slide + gentle parallax
+    // so 120Hz/165Hz panels glide cleanly without dual full-screen scale offscreen layers.
     private val navSlideSpring = spring<IntOffset>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = 620f,
+        dampingRatio = 0.96f,
+        stiffness = 520f,
         visibilityThreshold = IntOffset.VisibilityThreshold,
     )
 
     fun forwardEnter(): EnterTransition =
-        slideInHorizontally(navSlideSpring) { it / 8 } +
-            fadeIn(tween(150))
+        slideInHorizontally(navSlideSpring) { it / 5 } +
+            fadeIn(tween(180))
 
     fun forwardExit(): ExitTransition =
-        slideOutHorizontally(navSlideSpring) { -it / 20 } +
-            fadeOut(tween(120))
+        slideOutHorizontally(navSlideSpring) { -it / 14 } +
+            fadeOut(tween(140))
 
     fun backEnter(): EnterTransition =
-        slideInHorizontally(navSlideSpring) { -it / 20 } +
-            fadeIn(tween(140))
+        slideInHorizontally(navSlideSpring) { -it / 14 } +
+            fadeIn(tween(160))
 
     fun backExit(): ExitTransition =
-        slideOutHorizontally(navSlideSpring) { it / 8 } +
-            fadeOut(tween(120))
+        slideOutHorizontally(navSlideSpring) { it / 5 } +
+            fadeOut(tween(140))
 }
 
 /**

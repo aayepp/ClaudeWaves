@@ -50,7 +50,7 @@ fun ArtworkImage(
     embeddedUrl: String?,
     fallbackIcon: ImageVector,
     modifier: Modifier = Modifier,
-    decodeSizePx: Int? = null,
+    decodeSizePx: Int? = 384,
     alignment: Alignment = Alignment.Center,
     transformations: List<Transformation> = emptyList(),
     artworkViewModel: ArtworkViewModel = LocalArtworkViewModel.current ?: hiltViewModel(),
@@ -133,7 +133,9 @@ fun ArtworkImage(
                 val builder = ImageRequest.Builder(context)
                     .data(requestUrl)
                     .diskCacheKey(requestUrl)
-                    .crossfade(300)
+                    .precision(coil.size.Precision.INEXACT)
+                    .allowHardware(transformations.isEmpty())
+                    .crossfade(120)
                 if (decodeSizePx != null) builder.size(decodeSizePx)
                 if (transformations.isNotEmpty()) builder.transformations(transformations)
                 builder.build()

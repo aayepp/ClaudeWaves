@@ -478,14 +478,15 @@ internal fun ChartQuickChipsRow(
         }
         topTwo
     }
-    BoxWithConstraints(
+    val availWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - horizontalPadding * 2 - 3.dp
+    val chipPad = if (availWidth < 430.dp) 7.dp else 10.dp
+    val chipGap = if (availWidth < 430.dp) 4.dp else 6.dp
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding)
             .padding(end = 3.dp, bottom = 2.dp),
     ) {
-        val chipPad = if (maxWidth < 430.dp) 7.dp else 10.dp
-        val chipGap = if (maxWidth < 430.dp) 4.dp else 6.dp
         JustifiedChipFlowLayout(
             horizontalGap = chipGap,
             verticalGap = 8.dp,
@@ -914,9 +915,9 @@ internal fun ContinueListeningRow(
 ) {
     if (items.isEmpty()) return
     // Six songs in a fixed grid on every theme: a row of wide cards showed two
-    // and hid the rest behind a swipe.
-    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        val columns = if (maxWidth >= 600.dp) 3 else 2
+    // and hid the rest behind a swipe. Avoid BoxWithConstraints subcomposition during scroll.
+    val columns = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp >= 632.dp) 3 else 2
+    Box(modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items.take(CONTINUE_GRID_SIZE).chunked(columns).forEach { row ->
                 // End padding leaves the last card's 2.dp shadow inside the margin.
