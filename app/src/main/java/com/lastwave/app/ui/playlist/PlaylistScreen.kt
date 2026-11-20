@@ -364,14 +364,16 @@ fun PlaylistScreen(
                     localSongsPlaylist == null && filteredPlaylists.isEmpty() && !state.isGenerating &&
                         effectiveSpotify.isEmpty() && (downloadedCount == 0 || !showDownloadsCard) -> Box(Modifier.padding(top = headerInset)) { EmptyState() }
                     else -> LazyColumn(
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp + headerInset, bottom = FloatingNavDefaults.contentBottomPadding()),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            // Clear the 16.dp glass fade below the pinned Search playlists bar so
+                            // "Songs from this device" sits cleanly below it on every theme.
+                            top = 18.dp + headerInset,
+                            bottom = FloatingNavDefaults.contentBottomPadding(),
+                        ),
                         verticalArrangement = Arrangement.spacedBy(com.lastwave.app.ui.common.GroupGap),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(
-                                if (LocalComicTheme.current) Modifier
-                                else Modifier.clip(TopCurvedSectionClipShape(horizontalInset = 16.dp, cornerRadius = 28.dp)),
-                            ),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (localSongsPlaylist != null) {
                             val hasPlaylistsBelow = showDownloadsCard ||
@@ -383,7 +385,7 @@ fun PlaylistScreen(
                                 Box(
                                     modifier = Modifier
                                         .animateItem()
-                                        .then(if (hasPlaylistsBelow) Modifier.padding(bottom = 6.dp) else Modifier),
+                                        .then(if (hasPlaylistsBelow) Modifier.padding(bottom = 10.dp) else Modifier),
                                 ) {
                                     LocalSongsHeroCard(
                                         playlist = localSongsPlaylist,

@@ -82,6 +82,12 @@ class ThemePreferences @Inject constructor(
         val REFRESH_RATE = intPreferencesKey("lw_refresh_rate")
         val LASTWAVE_THEME = booleanPreferencesKey("lw_lastwave_theme")
         val COMIC_THEME = booleanPreferencesKey("lw_comic_theme")
+        val COMIC_ACCENT_MODE = stringPreferencesKey("lw_comic_accentMode")
+        val COMIC_ACCENT_COLOR = stringPreferencesKey("lw_comic_accent")
+        val COMIC_ACCENT_LIGHT = stringPreferencesKey("lw_comic_accentLight")
+        val NORMAL_ACCENT_MODE = stringPreferencesKey("lw_normal_accentMode")
+        val NORMAL_ACCENT_COLOR = stringPreferencesKey("lw_normal_accent")
+        val NORMAL_ACCENT_LIGHT = stringPreferencesKey("lw_normal_accentLight")
         val APP_ICON = stringPreferencesKey("lw_app_icon")
         val LIGHT_DYNAMIC_DEFAULTED = booleanPreferencesKey("lw_light_dynamic_defaulted")
     }
@@ -119,6 +125,15 @@ class ThemePreferences @Inject constructor(
             it[Keys.ACCENT_LIGHT] = light
             it[Keys.ACCENT_MODE] = AccentMode.MANUAL.storageValue
             it[Keys.LASTWAVE_THEME] = false
+            if (it[Keys.COMIC_THEME] == true) {
+                it[Keys.COMIC_ACCENT_MODE] = AccentMode.MANUAL.storageValue
+                it[Keys.COMIC_ACCENT_COLOR] = color
+                it[Keys.COMIC_ACCENT_LIGHT] = light
+            } else {
+                it[Keys.NORMAL_ACCENT_MODE] = AccentMode.MANUAL.storageValue
+                it[Keys.NORMAL_ACCENT_COLOR] = color
+                it[Keys.NORMAL_ACCENT_LIGHT] = light
+            }
         }
     }
 
@@ -128,18 +143,52 @@ class ThemePreferences @Inject constructor(
             if (mode != AccentMode.MANUAL) {
                 it[Keys.LASTWAVE_THEME] = false
             }
+            if (it[Keys.COMIC_THEME] == true) {
+                it[Keys.COMIC_ACCENT_MODE] = mode.storageValue
+            } else {
+                it[Keys.NORMAL_ACCENT_MODE] = mode.storageValue
+            }
         }
     }
 
-    /** On starts from the skin's own palette; off leaves Monochrome only if that palette was in use. */
+    /**
+     * Remembers Comic Pop's last picked accent (and the normal theme's last picked accent)
+     * so toggling Comic Pop off and back on restores the user's chosen palette instead of resetting.
+     */
     suspend fun setComicTheme(enabled: Boolean) {
         dataStore.edit {
+            val wasComic = it[Keys.COMIC_THEME] == true
+            val currentMode = AccentMode.fromStorage(it[Keys.ACCENT_MODE])
             it[Keys.COMIC_THEME] = enabled
             if (enabled) {
-                it[Keys.ACCENT_MODE] = AccentMode.COMIC.storageValue
+                if (!wasComic && currentMode != AccentMode.COMIC) {
+                    it[Keys.NORMAL_ACCENT_MODE] = currentMode.storageValue
+                    it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.NORMAL_ACCENT_COLOR] = c }
+                    it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.NORMAL_ACCENT_LIGHT] = l }
+                }
+                val savedComicMode = it[Keys.COMIC_ACCENT_MODE]?.let(AccentMode::fromStorage) ?: AccentMode.COMIC
+                it[Keys.ACCENT_MODE] = savedComicMode.storageValue
+                if (savedComicMode == AccentMode.MANUAL) {
+                    it[Keys.COMIC_ACCENT_COLOR]?.let { c -> it[Keys.ACCENT_COLOR] = c }
+                    it[Keys.COMIC_ACCENT_LIGHT]?.let { l -> it[Keys.ACCENT_LIGHT] = l }
+                }
                 it[Keys.LASTWAVE_THEME] = false
-            } else if (AccentMode.fromStorage(it[Keys.ACCENT_MODE]) == AccentMode.COMIC) {
-                it[Keys.ACCENT_MODE] = AccentMode.MONOCHROME.storageValue
+            } else {
+                if (wasComic) {
+                    it[Keys.COMIC_ACCENT_MODE] = currentMode.storageValue
+                    it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.COMIC_ACCENT_COLOR] = c }
+                    it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.COMIC_ACCENT_LIGHT] = l }
+                }
+                val savedNormalMode = it[Keys.NORMAL_ACCENT_MODE]?.let(AccentMode::fromStorage)
+                if (savedNormalMode != null && savedNormalMode != AccentMode.COMIC) {
+                    it[Keys.ACCENT_MODE] = savedNormalMode.storageValue
+                    if (savedNormalMode == AccentMode.MANUAL) {
+                        it[Keys.NORMAL_ACCENT_COLOR]?.let { c -> it[Keys.ACCENT_COLOR] = c }
+                        it[Keys.NORMAL_ACCENT_LIGHT]?.let { l -> it[Keys.ACCENT_LIGHT] = l }
+                    }
+                } else if (currentMode == AccentMode.COMIC) {
+                    it[Keys.ACCENT_MODE] = AccentMode.MONOCHROME.storageValue
+                }
             }
         }
     }
@@ -174,6 +223,11 @@ class ThemePreferences @Inject constructor(
 
     suspend fun setLastWaveTheme(enabled: Boolean) {
         dataStore.edit {
+            if (enabled && it[Keys.COMIC_THEME] == true) {
+                it[Keys.COMIC_ACCENT_MODE] = AccentMode.fromStorage(it[Keys.ACCENT_MODE]).storageValue
+                it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.COMIC_ACCENT_COLOR] = c }
+                it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.COMIC_ACCENT_LIGHT] = l }
+            }
             it[Keys.LASTWAVE_THEME] = enabled
             if (enabled) {
                 it[Keys.COMIC_THEME] = false

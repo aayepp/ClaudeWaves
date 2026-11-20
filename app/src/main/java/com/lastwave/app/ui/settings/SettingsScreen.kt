@@ -1274,6 +1274,17 @@ fun SettingsScreen(
                                 icon = Icons.Filled.AutoAwesome,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = stringResource(R.string.settings_comic_theme),
+                                subtitle = stringResource(R.string.settings_comic_theme_sub),
+                                checked = theme?.isComic == true,
+                                onCheckedChange = viewModel::setComicTheme,
+                                position = position,
+                                isHighlighted = (highlightedSettingId == "appearance.comic_theme"),
+                            )
+                            2 -> SettingsToggleCard(
+                                icon = Icons.Filled.AutoAwesome,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 title = stringResource(R.string.settings_lastwave_theme),
                                 subtitle = stringResource(R.string.settings_lastwave_theme_sub),
                                 checked = theme?.isLastWaveTheme ?: false,
@@ -1281,7 +1292,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.lastwave_theme"),
                             )
-                            2 -> SettingsToggleCard(
+                            3 -> SettingsToggleCard(
                                 icon = Icons.Filled.Contrast,
                                 iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1293,7 +1304,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.amoled"),
                             )
-                            3 -> SettingsToggleCard(
+                            4 -> SettingsToggleCard(
                                 icon = Icons.Filled.Palette,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1309,7 +1320,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.dynamic_color"),
                             )
-                            4 -> Column {
+                            5 -> Column {
                                 SettingsToggleCard(
                                     icon = Icons.Filled.BubbleChart,
                                     iconContainer = MaterialTheme.colorScheme.primaryContainer,
@@ -1329,7 +1340,7 @@ fun SettingsScreen(
                                     )
                                 }
                             }
-                            5 -> SettingsToggleCard(
+                            6 -> SettingsToggleCard(
                                 icon = Icons.Filled.Apps,
                                 iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1340,7 +1351,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.md3_nav_bar"),
                             )
-                            6 -> SettingsToggleCard(
+                            7 -> SettingsToggleCard(
                                 icon = Icons.Filled.VisibilityOff,
                                 iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1351,7 +1362,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.hide_nav_tabs"),
                             )
-                            7 -> SettingsToggleCard(
+                            8 -> SettingsToggleCard(
                                 icon = Icons.Filled.Album,
                                 iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1362,7 +1373,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.dynamic_now_playing"),
                             )
-                            8 -> SettingsToggleCard(
+                            9 -> SettingsToggleCard(
                                 icon = Icons.Filled.TextFields,
                                 iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1373,7 +1384,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.app_font"),
                             )
-                            9 -> SettingsToggleCard(
+                            10 -> SettingsToggleCard(
                                 icon = Icons.Filled.FormatBold,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1383,7 +1394,7 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setUseBoldFont,
                                 position = position,
                             )
-                            10 -> SettingsToggleCard(
+                            11 -> SettingsToggleCard(
                                 icon = Icons.Filled.Vibration,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1394,7 +1405,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
                             )
-                            11 -> SettingsToggleCard(
+                            12 -> SettingsToggleCard(
                                 icon = Icons.Filled.Apps,
                                 iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1404,6 +1415,12 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setCollapsingNavBar,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.collapsing_nav_bar"),
+                            )
+                            13 -> RefreshRateSelectorCard(
+                                currentRate = theme?.refreshRate ?: 0,
+                                onSelectRate = viewModel::setRefreshRate,
+                                position = position,
+                                isHighlighted = (highlightedSettingId == "appearance.refresh_rate"),
                             )
                             14 -> SettingsToggleCard(
                                 icon = Icons.Filled.Home,
@@ -1415,23 +1432,6 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setHomeButtonRight,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.home_button_right"),
-                            )
-                            12 -> SettingsToggleCard(
-                                icon = Icons.Filled.AutoAwesome,
-                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                title = stringResource(R.string.settings_comic_theme),
-                                subtitle = stringResource(R.string.settings_comic_theme_sub),
-                                checked = theme?.isComic == true,
-                                onCheckedChange = viewModel::setComicTheme,
-                                position = position,
-                                isHighlighted = (highlightedSettingId == "appearance.comic_theme"),
-                            )
-                            13 -> RefreshRateSelectorCard(
-                                currentRate = theme?.refreshRate ?: 0,
-                                onSelectRate = viewModel::setRefreshRate,
-                                position = position,
-                                isHighlighted = (highlightedSettingId == "appearance.refresh_rate"),
                             )
                         }
                     }

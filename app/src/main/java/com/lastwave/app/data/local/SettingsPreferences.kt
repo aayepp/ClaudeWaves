@@ -728,10 +728,11 @@ class SettingsPreferences @Inject constructor(
         dataStore.edit { it[Keys.ADDON_WEBSITES_JSON] = Json.encodeToString(change(readAddonWebsites(it))) }
     }
 
-    private fun readAddonWebsites(prefs: Preferences): List<AddonWebsite> =
-        prefs.readSafely(Keys.ADDON_WEBSITES_JSON)
-            ?.let { runCatching { Json.decodeFromString<List<AddonWebsite>>(it) }.getOrNull() }
-            .orEmpty()
+    private fun readAddonWebsites(prefs: Preferences): List<AddonWebsite> {
+        val raw = prefs.readSafely(Keys.ADDON_WEBSITES_JSON)
+            ?: return DEFAULT_ADDON_WEBSITES
+        return runCatching { Json.decodeFromString<List<AddonWebsite>>(raw) }.getOrDefault(DEFAULT_ADDON_WEBSITES)
+    }
 
     suspend fun addHttpAddon(url: String, name: String): HttpAddonConfig {
         val trimmedUrl = url.trim()
@@ -1396,6 +1397,10 @@ class SettingsPreferences @Inject constructor(
         val compactJson = Json { ignoreUnknownKeys = true; isLenient = true }
         val STREAMING_QUALITIES = setOf(-1, 4, 5, 6, 27, 28)
         val DOWNLOAD_QUALITIES = setOf(-1, 4, 5, 6, 7, 27, 28)
+        val DEFAULT_ADDON_WEBSITES = listOf(
+            AddonWebsite(name = "Palv", url = "https://addon.palv.org/"),
+            AddonWebsite(name = "Radha", url = "https://radha-50047163825.development.catalystappsail.in/"),
+        )
     }
 
     private fun normalizeStreamingQuality(quality: Int): Int? = when (quality) {

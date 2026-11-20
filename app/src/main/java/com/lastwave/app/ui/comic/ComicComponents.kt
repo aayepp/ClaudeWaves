@@ -3,14 +3,38 @@
 package com.lastwave.app.ui.comic
 
 import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import kotlinx.coroutines.delay
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -464,10 +488,174 @@ fun Switch(
     interactionSource: MutableInteractionSource? = null,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    M3Switch(
-        checked = checked, onCheckedChange = onCheckedChange, modifier = modifier.comicPress(source),
-        thumbContent = thumbContent, enabled = enabled, colors = colors, interactionSource = source,
+    if (LocalComicTheme.current) {
+        M3Switch(
+            checked = checked, onCheckedChange = onCheckedChange, modifier = modifier.comicPress(source),
+            thumbContent = thumbContent, enabled = enabled, colors = colors, interactionSource = source,
+        )
+    } else {
+        LiquidGlassSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = modifier,
+            thumbContent = thumbContent,
+            enabled = enabled,
+            interactionSource = source,
+        )
+    }
+}
+
+/**
+ * Liquid Glass Droplet toggle switch for normal Light / Dark / AMOLED themes.
+ * Pressing or toggling stretches the thumb into a translucent frosted glass droplet
+ * with spring physics, specular rim lighting, and subtle haptic feedback.
+ */
+@Composable
+private fun LiquidGlassSwitch(
+    checked: Boolean,
+    onCheckedChange: ((Boolean) -> Unit)?,
+    modifier: Modifier = Modifier,
+    thumbContent: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
+    interactionSource: MutableInteractionSource,
+) {
+    val isDark = LocalIsDarkTheme.current
+    val haptics = LocalHapticFeedback.current
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    var isMorphing by remember { mutableStateOf(false) }
+    var initialized by remember { mutableStateOf(false) }
+    LaunchedEffect(checked) {
+        if (!initialized) {
+            initialized = true
+            return@LaunchedEffect
+        }
+        isMorphing = true
+        delay(190L)
+        isMorphing = false
+    }
+
+    val stretched = (isPressed || isMorphing) && enabled
+    val trackWidth = 54.dp
+    val trackHeight = 32.dp
+    val inset = 3.dp
+    val thumbHeight = trackHeight - inset * 2
+
+    val thumbWidth by animateDpAsState(
+        targetValue = if (stretched) 34.dp else 26.dp,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 850f),
+        label = "liquidSwitchThumbWidth",
     )
+    val thumbOffsetX by animateDpAsState(
+        targetValue = if (checked) trackWidth - inset - thumbWidth else inset,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 560f),
+        label = "liquidSwitchThumbOffset",
+    )
+    val dropletGlassAlpha by animateFloatAsState(
+        targetValue = if (stretched) 0.36f else 0.96f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 700f),
+        label = "liquidSwitchDropletAlpha",
+    )
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) {
+            MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.88f else 0.94f)
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.12f)
+        },
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 620f),
+        label = "liquidSwitchTrackColor",
+    )
+    val rimTopColor = Color.White.copy(alpha = when {
+        checked && isDark -> 0.42f
+        checked -> 0.62f
+        isDark -> 0.22f
+        else -> 0.55f
+    })
+    val rimBottomColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.10f)
+
+    val toggleModifier = if (onCheckedChange != null) {
+        Modifier.toggleable(
+            value = checked,
+            enabled = enabled,
+            role = Role.Switch,
+            interactionSource = interactionSource,
+            indication = null,
+            onValueChange = { next ->
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onCheckedChange(next)
+            },
+        )
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .alpha(if (enabled) 1f else 0.42f)
+            .then(toggleModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Translucent liquid glass track with top specular rim + soft inner gloss
+        Box(
+            modifier = Modifier
+                .size(width = trackWidth, height = trackHeight)
+                .uiClip(CircleShape)
+                .background(trackColor)
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to Color.White.copy(alpha = if (checked) 0.24f else if (isDark) 0.10f else 0.22f),
+                        0.55f to Color.Transparent,
+                        1.0f to Color.Black.copy(alpha = if (isDark) 0.16f else 0.06f),
+                    ),
+                )
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(listOf(rimTopColor, rimBottomColor)),
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            // Liquid Glass Droplet thumb
+            val thumbBorderAlpha = if (stretched) 0.92f else 0.78f
+            Box(
+                modifier = Modifier
+                    .offset(x = thumbOffsetX)
+                    .size(width = thumbWidth, height = thumbHeight)
+                    .shadow(
+                        elevation = if (stretched) 6.dp else 3.dp,
+                        shape = CircleShape,
+                        ambientColor = Color.Black.copy(alpha = 0.30f),
+                        spotColor = Color.Black.copy(alpha = 0.32f),
+                    )
+                    .uiClip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = (dropletGlassAlpha + 0.14f).coerceAtMost(1f)),
+                                Color.White.copy(alpha = dropletGlassAlpha),
+                                Color.White.copy(alpha = (dropletGlassAlpha * 0.72f).coerceAtLeast(0.18f)),
+                            ),
+                            center = Offset(14f, 10f),
+                            radius = 52f,
+                        ),
+                    )
+                    .border(
+                        width = if (stretched) 1.3.dp else 0.9.dp,
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = thumbBorderAlpha),
+                                Color.White.copy(alpha = thumbBorderAlpha * 0.35f),
+                            ),
+                        ),
+                        shape = CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                thumbContent?.invoke()
+            }
+        }
+    }
 }
 
 @Composable
