@@ -135,4 +135,101 @@ class BestPartTest {
         assertThat(pickBestPart(listOf(40_000L, 120_000L), emptyList())).isEqualTo(40_000L)
         assertThat(pickBestPart(emptyList(), emptyList())).isNull()
     }
+
+    @Test
+    fun cjkChorusWithoutSpacesIsDetected() {
+        val lines = listOf(
+            LyricLine(5_000, text = "静かな夜に歩いていた"),
+            LyricLine(35_000, text = "君と見た星空を忘れない"),
+            LyricLine(65_000, text = "新しい朝がやってくる"),
+            LyricLine(95_000, text = "君と見た星空を忘れない"),
+        )
+        assertThat(chorusStarts(lines)).containsExactly(34_400L, 94_400L).inOrder()
+    }
+
+    @Test
+    fun fuzzyChorusMatchHandlesMinorWordVariations() {
+        val lines = listOf(
+            LyricLine(5_000, text = "Malam sunyi berjalan sendiri"),
+            LyricLine(40_000, text = "Aku cinta padamu selamanya kasih"),
+            LyricLine(70_000, text = "Angin lalu membawa rindu"),
+            LyricLine(105_000, text = "Ku cinta padamu selamanya kasih"),
+        )
+        assertThat(chorusStarts(lines)).containsExactly(39_400L, 104_400L).inOrder()
+    }
+
+    @Test
+    fun realChorusAcrossSectionsBeatsRepetitiveOutroChant() {
+        val lines = listOf(
+            LyricLine(30_000, text = "Take me back to the summer lights"),
+            LyricLine(85_000, text = "Take me back to the summer lights"),
+            LyricLine(140_000, text = "Take me back to the summer lights"),
+            // Outro chant repeated 5 times inside 12 seconds at the end.
+            LyricLine(190_000, text = "Fade away into the dark now"),
+            LyricLine(193_000, text = "Fade away into the dark now"),
+            LyricLine(196_000, text = "Fade away into the dark now"),
+            LyricLine(199_000, text = "Fade away into the dark now"),
+            LyricLine(202_000, text = "Fade away into the dark now"),
+        )
+        assertThat(chorusStarts(lines)).containsExactly(29_400L, 84_400L, 139_400L).inOrder()
+    }
+
+    @Test
+    fun viralStandaloneBridgePeakOverridesCoolerChoruses() {
+        // 60 slices of 3 s (180 s). Choruses at 30 s and 90 s sit at 0.45;
+        // a viral bridge rises at 129 s..132 s and spikes to 0.96 at 135 s..147 s.
+        val markers = (0 until 60).map { i ->
+            val intensity = when (i) {
+                43 -> 0.55
+                44 -> 0.78
+                in 45..49 -> 0.96
+                in 10..15, in 30..35 -> 0.45
+                else -> 0.30
+            }
+            HeatMarker(startMs = i * 3_000L, intensity = intensity)
+        }
+        val result = pickBestPart(
+            choruses = listOf(30_000L, 90_000L),
+            heatmap = markers,
+            lineStarts = listOf(30_000L, 90_000L, 128_000L),
+        )
+        // Peak at slice 45 (135 s) -> lead-in slice 43 (129 s) -> snapped to bridge line at 128 s minus 600 ms.
+        assertThat(result).isEqualTo(127_400L)
+    }
+
+    @Test
+    fun flatNoisyHeatmapFallsBackToFirstChorus() {
+        val markers = (0 until 50).map { i ->
+            HeatMarker(startMs = i * 4_000L, intensity = if (i in 30..34) 0.54 else 0.50)
+        }
+        assertThat(pickBestPart(listOf(40_000L, 120_000L), markers)).isEqualTo(40_000L)
+    }
+
+    @Test
+    fun chapterMarkersProvideChorusWhenLyricsMissing() {
+        val chapters = listOf(
+            ChapterMarker("Intro", 0L),
+            ChapterMarker("Verse 1", 15_000L),
+            ChapterMarker("Pre-Chorus", 40_000L),
+            ChapterMarker("Reff / Chorus", 52_000L),
+            ChapterMarker("サビ", 118_000L),
+        )
+        assertThat(chapterChorusStarts(chapters)).containsExactly(51_400L, 117_400L).inOrder()
+        assertThat(pickBestPart(emptyList(), emptyList(), chapters = chapters)).isEqualTo(51_400L)
+    }
+
+    @Test
+    fun audioEnergyCurveDetectsDropClimaxAndBacksUpToArrival() {
+        val samples = listOf(
+            EnergySample(30_000L, 0.15),
+            EnergySample(40_000L, 0.20),
+            EnergySample(50_000L, 0.35), // buildup
+            EnergySample(60_000L, 0.92), // drop!
+            EnergySample(70_000L, 0.88),
+            EnergySample(80_000L, 0.40),
+        )
+        // Peak at 60 s with buildup at 50 s (< 75% of peak) -> starts at 50 s to catch the drop arrival.
+        assertThat(bestPartFromEnergyCurve(samples)).isEqualTo(50_000L)
+        assertThat(pickBestPart(emptyList(), emptyList(), audioPeakMs = 50_000L)).isEqualTo(50_000L)
+    }
 }

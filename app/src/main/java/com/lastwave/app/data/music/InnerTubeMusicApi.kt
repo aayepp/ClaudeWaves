@@ -1720,8 +1720,15 @@ class InnerTubeMusicApi @Inject constructor(
      * YouTube's "Most replayed" heatmap for [videoId] (WEB /next); empty when the video
      * has none (new or little-watched uploads) or the request fails.
      */
-    suspend fun mostReplayedHeatmap(videoId: String): List<HeatMarker> = withContext(Dispatchers.IO) {
-        if (videoId.isBlank()) return@withContext emptyList()
+    suspend fun mostReplayedHeatmap(videoId: String): List<HeatMarker> =
+        fetchBestPartSignals(videoId).heatmap
+
+    /**
+     * Fetches YouTube's "Most replayed" heatmap, chapter markers (Chorus / Reff / Drop),
+     * and video duration in a single WEB /next request.
+     */
+    suspend fun fetchBestPartSignals(videoId: String): VideoBestPartSignals = withContext(Dispatchers.IO) {
+        if (videoId.isBlank()) return@withContext VideoBestPartSignals()
         val root = runCatching {
             post(
                 url = "$YOUTUBE_API/next?key=AIzaSyAO_FJ2SlqAz8GlBg1fA54p0wDE7Xk80mU&prettyPrint=false",
@@ -1736,17 +1743,54 @@ class InnerTubeMusicApi @Inject constructor(
                 referer = "$YOUTUBE_ORIGIN/",
                 callTimeoutMs = SEARCH_REQUEST_TIMEOUT_MS,
             )
-        }.getOrNull() ?: return@withContext emptyList()
+        }.getOrNull() ?: return@withContext VideoBestPartSignals()
+
         val lists = mutableListOf<JsonObject>()
         collectObjects(root, "markersList", lists)
-        lists.firstOrNull { it.string("markerType") == "MARKER_TYPE_HEATMAP" }
+
+        var heatmapDurationMs: Long? = null
+        val heatmap = lists.firstOrNull { it.string("markerType") == "MARKER_TYPE_HEATMAP" }
             ?.array("markers").orEmpty()
             .mapNotNull { it.asObject() }
             .mapNotNull { marker ->
                 val start = marker.string("startMillis")?.toLongOrNull() ?: return@mapNotNull null
+                val dur = marker.string("durationMillis")?.toLongOrNull() ?: 0L
+                val end = start + dur
+                if (end > (heatmapDurationMs ?: 0L)) heatmapDurationMs = end
                 val intensity = marker.string("intensityScoreNormalized")?.toDoubleOrNull() ?: return@mapNotNull null
                 HeatMarker(start, intensity)
             }
+
+        val chapterRenderers = mutableListOf<JsonObject>()
+        collectObjects(root, "chapterRenderer", chapterRenderers)
+        val chaptersFromRenderers = chapterRenderers.mapNotNull { ch ->
+            val title = ch.obj("title")?.string("simpleText")
+                ?: ch.obj("title")?.array("runs")?.firstOrNull()?.asObject()?.string("text")
+                ?: return@mapNotNull null
+            val start = ch.string("timeRangeStartMillis")?.toLongOrNull() ?: return@mapNotNull null
+            ChapterMarker(title, start)
+        }
+        val chaptersFromList = lists.firstOrNull { it.string("markerType") == "MARKER_TYPE_CHAPTER" }
+            ?.array("markers").orEmpty()
+            .mapNotNull { it.asObject() }
+            .mapNotNull { marker ->
+                val title = marker.string("title")
+                    ?: marker.obj("title")?.string("simpleText")
+                    ?: return@mapNotNull null
+                val start = marker.string("startMillis")?.toLongOrNull()
+                    ?: marker.string("timeRangeStartMillis")?.toLongOrNull()
+                    ?: return@mapNotNull null
+                ChapterMarker(title, start)
+            }
+        val chapters = (chaptersFromRenderers + chaptersFromList)
+            .distinctBy { it.startMs }
+            .sortedBy { it.startMs }
+
+        VideoBestPartSignals(
+            heatmap = heatmap,
+            chapters = chapters,
+            durationMs = heatmapDurationMs?.takeIf { it > 0L },
+        )
     }
 
     /**

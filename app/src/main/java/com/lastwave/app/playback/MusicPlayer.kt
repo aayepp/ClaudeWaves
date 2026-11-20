@@ -3033,21 +3033,99 @@ class MusicPlayer @Inject constructor(
         }
     }
 
-    /** Best-part starts by media id, so the seek-bar marker and the menu ask once per song. */
+    /** Best-part starts by media id, backed by SharedPreferences so repeat plays are instant. */
     private val bestPartCache = ConcurrentHashMap<String, Long>()
+    private val bestPartInFlight = ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Long?>>()
+    private val bestPartPrefs by lazy {
+        appContext.getSharedPreferences("best_part_cache_v2", Context.MODE_PRIVATE)
+    }
+
+    private fun readPersistedBestPart(key: String): Long? {
+        val v = bestPartPrefs.getLong(key, -1L)
+        return v.takeIf { it >= 0L }
+    }
+
+    private fun persistBestPart(key: String, startMs: Long) {
+        bestPartCache[key] = startMs
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching {
+                val all = bestPartPrefs.all
+                val editor = bestPartPrefs.edit()
+                if (all.size >= 500 && !all.containsKey(key)) {
+                    // Evict oldest-looking ~100 keys when cap is reached.
+                    all.keys.take(100).forEach { editor.remove(it) }
+                }
+                editor.putLong(key, startMs).apply()
+            }
+        }
+    }
 
     /**
-     * Start of [track]'s best part: its chorus (Apple's labels, else repeated lyrics),
-     * picking the one YouTube listeners replay most; without lyrics, the replay peak.
-     * Null when neither source knows the song.
+     * Start of [track]'s best part using a 3-layer pipeline:
+     *  1. YouTube watch signals: heatmap + chapters for [track.videoId], falling back to the
+     *     duration-matched Official Music Video (OMV) counterpart when the audio track has no heatmap.
+     *  2. Lyrics chorus detection (Apple TTML labels, multi-section repeats, CJK & fuzzy matching)
+     *     combined with crowd heatmap & viral standalone peak detection.
+     *  3. On-device audio RMS energy/drop scan for instrumentals, EDM, Phonk, and local tracks
+     *     when neither lyrics nor YouTube signals know the song.
      */
-    suspend fun findBestPartMs(track: PlayableTrack): Long? = coroutineScope {
+    suspend fun findBestPartMs(track: PlayableTrack): Long? {
         val key = track.mediaIdKey()
-        bestPartCache[key]?.let { return@coroutineScope it }
-        val heatmap = async {
-            track.videoId?.let { id -> runCatching { innerTube.mostReplayedHeatmap(id) }.getOrNull() }.orEmpty()
+        bestPartCache[key]?.let {
+            prewarmNextTrackBestPart(track)
+            return it
         }
-        val lines = async {
+        val persisted = withContext(Dispatchers.IO) { readPersistedBestPart(key) }
+        if (persisted != null) {
+            bestPartCache[key] = persisted
+            prewarmNextTrackBestPart(track)
+            return persisted
+        }
+
+        val existing = bestPartInFlight[key]
+        if (existing != null) return existing.await()
+
+        val job = applicationScope.async(Dispatchers.IO) {
+            try {
+                computeBestPartMs(track)?.also { persistBestPart(key, it) }
+            } finally {
+                bestPartInFlight.remove(key)
+            }
+        }
+        val active = bestPartInFlight.putIfAbsent(key, job) ?: job
+        if (active !== job) job.cancel()
+        return active.await().also { prewarmNextTrackBestPart(track) }
+    }
+
+    private suspend fun computeBestPartMs(track: PlayableTrack): Long? = coroutineScope {
+        val signalsDeferred = async {
+            val id = track.videoId?.takeIf { it.isNotBlank() }
+                ?: return@async com.lastwave.app.data.music.VideoBestPartSignals()
+            val primary = runCatching { innerTube.fetchBestPartSignals(id) }.getOrNull()
+                ?: com.lastwave.app.data.music.VideoBestPartSignals()
+            if (primary.heatmap.size >= 10) return@async primary
+
+            // ATV (Topic) tracks rarely accumulate watch-page heatmaps; borrow from the
+            // official music video (OMV) counterpart only when durations match closely (<= 12 s)
+            // so long cinematic MV intros cannot shift timestamps.
+            val omvId = runCatching { innerTube.findCounterpartVideoId(id) }.getOrNull()
+                ?.takeIf { it.isNotBlank() && it != id }
+                ?: return@async primary
+            val omv = runCatching { innerTube.fetchBestPartSignals(omvId) }.getOrNull()
+                ?: return@async primary
+            val refDuration = primary.durationMs ?: track.durationMs?.takeIf { it > 0L }
+            val omvDuration = omv.durationMs
+            val durationCompatible = refDuration == null || omvDuration == null ||
+                kotlin.math.abs(omvDuration - refDuration) <= 12_000L
+            if (!durationCompatible) return@async primary
+
+            com.lastwave.app.data.music.VideoBestPartSignals(
+                heatmap = omv.heatmap.ifEmpty { primary.heatmap },
+                chapters = primary.chapters.ifEmpty { omv.chapters },
+                durationMs = refDuration ?: omvDuration,
+            )
+        }
+        val linesDeferred = async {
             runCatching {
                 val lyrics = lyricsRepository.get().getLyrics(
                     title = track.title,
@@ -3059,9 +3137,45 @@ class MusicPlayer @Inject constructor(
                 lyrics?.takeIf { it.isSynced }?.lines
             }.getOrNull().orEmpty()
         }
-        val synced = lines.await()
-        pickBestPart(chorusStarts(synced), heatmap.await(), synced.map { it.timeMs })
-            ?.also { bestPartCache[key] = it }
+
+        val signals = signalsDeferred.await()
+        val synced = linesDeferred.await()
+        val choruses = chorusStarts(synced)
+        val lineStarts = synced.map { it.timeMs }
+
+        pickBestPart(
+            choruses = choruses,
+            heatmap = signals.heatmap,
+            lineStarts = lineStarts,
+            chapters = signals.chapters,
+        )?.let { return@coroutineScope it }
+
+        // Layer 3 fallback: on-device audio RMS energy/drop scan (instrumentals, EDM, local files).
+        val audioSource = track.playbackUrl?.takeIf { it.isNotBlank() }
+        val energyPeak = BestPartAudioAnalyzer.analyzeBestPartMs(
+            context = appContext,
+            sourceUrl = audioSource,
+            durationHintMs = track.durationMs ?: signals.durationMs,
+        )
+        pickBestPart(
+            choruses = emptyList(),
+            heatmap = emptyList(),
+            lineStarts = lineStarts,
+            chapters = emptyList(),
+            audioPeakMs = energyPeak,
+        )
+    }
+
+    private fun prewarmNextTrackBestPart(currentTrack: PlayableTrack) {
+        val snap = _state.value
+        if (snap.current?.mediaIdKey() != currentTrack.mediaIdKey()) return
+        val next = snap.queue.getOrNull(snap.currentIndex + 1) ?: return
+        val nextKey = next.mediaIdKey()
+        if (bestPartCache.containsKey(nextKey) || bestPartInFlight.containsKey(nextKey)) return
+        applicationScope.launch(Dispatchers.IO) {
+            if (readPersistedBestPart(nextKey) != null) return@launch
+            runCatching { computeBestPartMs(next)?.also { persistBestPart(nextKey, it) } }
+        }
     }
 
     /** Plays [track] from its best part, else the start. [onResult] gets whether one was found. */
