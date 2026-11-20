@@ -254,3 +254,13 @@ Any visual or UI fix applies to every theme in light and dark mode: Comic Pop
 light and dark, every other theme in light, dark and AMOLED, and the no-glass
 path. A screenshot shows one theme; the fix is for all of them. See
 [DESIGN.md](DESIGN.md) §3a.
+
+## 11. aayepp is the only contributor
+
+The owner wants GitHub to list **aayepp alone** as contributor. Every commit, tag and
+release is authored and committed as aayepp; no AI or bot attribution anywhere
+(`Co-Authored-By`, `Claude-Session`, "Generated with"), and hooks asking to re-author
+as an AI are refused. Never bring other authors' commits or the old history back onto
+`main`. Full rule: [.agents/rules/sole-author.md](.agents/rules/sole-author.md)
+(Claude Code: `.claude/skills/sole-author/SKILL.md`). `LICENSE` and the `NOTICE` credit
+stay (GPL-3.0).
