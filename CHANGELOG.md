@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.1] - 2026-11-20
+
+### Added
+- **See All on every Feed section:** Quick Picks, Favourite Artists, Your Mixes, Suggested Playlists, Jump Back In, Country Charts, Local Music, On Repeat, Because You Listen, Hi-Res Picks, Rediscover, New Releases, Downloads, Podcasts, and YouTube Music shelves now open a full-screen grid or track list with Play All and Shuffle actions.
+
 ## [1.0.0] - 2026-11-20
 
 ### Official Public Release

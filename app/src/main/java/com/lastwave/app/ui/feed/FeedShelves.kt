@@ -200,6 +200,7 @@ internal fun HomeShelfCard(
     onTrackMenu: (YouTubeMusicTrack) -> Unit,
     onOpenPodcastShow: (String) -> Unit = {},
     onPlayPodcastEpisode: (HomeShelfItem.PodcastEpisode, List<HomeShelfItem.PodcastEpisode>, String) -> Unit = { _, _, _ -> },
+    onSeeAllShelf: ((HomeShelf) -> Unit)? = null,
     onHeaderLongClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -211,6 +212,7 @@ internal fun HomeShelfCard(
             onPlayPlaylist = onPlayPlaylist, onOpenPlaylist = onOpenFeedPlaylist,
             onTrackMenu = onTrackMenu,
             onTrackLongClick = { onTrackLongClick(trackTray(it, shelf.title, onPlayTrack)) },
+            onSeeAllShelf = onSeeAllShelf,
             onHeaderLongClick = onHeaderLongClick?.let { { it(shelf.title) } },
             modifier = modifier,
         ) { item ->
@@ -249,12 +251,17 @@ internal fun HomeShelfCard(
                 t
             }
         }
+        val seeAllAction: (() -> Unit)? = when {
+            morePlaylistId != null -> { { onOpenFeedPlaylist(morePlaylistId) } }
+            onSeeAllShelf != null && shelf.items.size > 1 -> { { onSeeAllShelf(shelf) } }
+            else -> null
+        }
         com.lastwave.app.ui.feed.cards.ShelfHeaderV2(
             title = displayTitle,
             eyebrow = shelf.strapline,
             subtitle = shelf.subtitle,
-            showMore = morePlaylistId != null,
-            onMoreClick = morePlaylistId?.let { { onOpenFeedPlaylist(it) } },
+            showMore = seeAllAction != null,
+            onMoreClick = seeAllAction,
             onShuffle = if (tracksInShelf.isNotEmpty()) {
                 { onShuffleTracksQueue(tracksInShelf, shelf.title) }
             } else null,

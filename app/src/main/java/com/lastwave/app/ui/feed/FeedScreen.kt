@@ -209,6 +209,7 @@ fun FeedScreen(
     onOpenDiscover: () -> Unit,
     onOpenGenres: () -> Unit = onOpenDiscover,
     onOpenFeedPlaylist: (String) -> Unit,
+    onOpenFeedSection: (String) -> Unit = {},
     onOpenPlaylist: (Long) -> Unit = {},
     onOpenGenerator: () -> Unit = {},
     onOpenFriends: () -> Unit = {},
@@ -893,12 +894,11 @@ fun FeedScreen(
                     ObserveLosslessProbeTargets(
                         remember(hiResPool) { hiResPool.map { LosslessProbeTarget(it.title, it.artist, it.album, it.durationSeconds) } },
                     )
-                    val hiResCards = remember(hiResPool, losslessBadges) {
-                        trackCards(
-                            "hr",
-                            hiResPool.filter { losslessBadges[losslessTrackKey(it.title, it.artist)] == LosslessListTier.HI_RES }.take(15),
-                            "Hi-Res Picks",
-                        )
+                    val hiResTracks = remember(hiResPool, losslessBadges) {
+                        hiResPool.filter { losslessBadges[losslessTrackKey(it.title, it.artist)] == LosslessListTier.HI_RES }
+                    }
+                    val hiResCards = remember(hiResTracks) {
+                        trackCards("hr", hiResTracks.take(15), "Hi-Res Picks")
                     }
                     val rediscoverCards = remember(rediscoverTracks) { trackCards("rd", rediscoverTracks, "Rediscover") }
                     val podcastCards = remember(state.feedData.podcastShows) {
@@ -934,34 +934,150 @@ fun FeedScreen(
                         )
                     }
 
+                    fun openSection(payload: FeedSectionPayload) {
+                        onOpenFeedSection(FeedSectionDetailStore.put(payload))
+                    }
+
                     /** One optional section; empty data shows nothing at all. */
                     val renderOptionalBlock: androidx.compose.foundation.lazy.LazyListScope.(HomeBlock) -> Unit = { block ->
-                        fun cardShelf(key: String, title: String, subtitle: String?, cards: List<HomePlaylistItem>) {
+                        fun cardShelf(
+                            key: String,
+                            title: String,
+                            subtitle: String?,
+                            cards: List<HomePlaylistItem>,
+                            onSeeAll: (() -> Unit)? = null,
+                            onShuffle: (() -> Unit)? = null,
+                        ) {
                             if (cards.isEmpty()) return
                             blockItem(block, key, "optional_card_shelf") {
                                 Spacer(modifier = Modifier.height(24.dp))
-                                SectionHeader(title = title, subtitle = subtitle)
+                                SectionHeader(
+                                    title = title,
+                                    subtitle = subtitle,
+                                    onSeeAll = onSeeAll ?: {
+                                        openSection(FeedSectionPayload.Cards(title = title, subtitle = subtitle, items = cards))
+                                    },
+                                    onShuffle = onShuffle,
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 MadeForYouRow(items = cards)
                             }
                         }
                         when (block) {
-                            HomeBlock.NEW_RELEASES -> cardShelf("opt_new_releases", "New Releases", "Fresh albums and singles", newReleaseCards)
+                            HomeBlock.NEW_RELEASES -> cardShelf(
+                                "opt_new_releases", "New Releases", "Fresh albums and singles", newReleaseCards,
+                                onSeeAll = onOpenNewReleases,
+                            )
                             HomeBlock.YOUR_MIXES -> cardShelf("opt_your_mixes", "Your Mixes", "Mixed for you on YouTube Music", yourMixCards)
                             HomeBlock.SUGGESTED_PLAYLISTS -> cardShelf("opt_suggested", "Suggested Playlists", "From your YouTube Music account", suggestedPlaylistCards)
                             HomeBlock.JUMP_BACK_IN -> cardShelf("opt_jump_back_in", "Jump Back In", "Albums you played recently", jumpBackInCards)
                             HomeBlock.COUNTRY_CHARTS -> cardShelf("opt_country_charts", "Country Charts", "What's topping the charts", countryChartCards)
-                            HomeBlock.DOWNLOADS -> cardShelf("opt_downloads", "Downloads", "Ready to play offline", downloadCards)
-                            HomeBlock.LOCAL_MUSIC -> cardShelf("opt_local_music", "Local Music", "Songs on this device", localSongCards)
-                            HomeBlock.ON_REPEAT -> cardShelf("opt_on_repeat", "On Repeat", "Your most played lately", onRepeatCards)
-                            HomeBlock.BECAUSE_YOU_LISTEN -> cardShelf("opt_because", becauseSection?.title.orEmpty(), becauseSection?.subtitle, becauseCards)
-                            HomeBlock.HI_RES_PICKS -> cardShelf("opt_hi_res", "Hi-Res Picks", "Up to 24-bit / 192 kHz", hiResCards)
-                            HomeBlock.REDISCOVER -> cardShelf("opt_rediscover", "Rediscover", "Favourites you haven't played in a while", rediscoverCards)
-                            HomeBlock.PODCASTS -> cardShelf("opt_podcasts", state.feedData.podcastShelfTitle ?: "Podcasts", null, podcastCards)
+                            HomeBlock.DOWNLOADS -> cardShelf(
+                                "opt_downloads", "Downloads", "Ready to play offline", downloadCards,
+                                onSeeAll = onOpenDownloads,
+                            )
+                            HomeBlock.LOCAL_MUSIC -> cardShelf(
+                                "opt_local_music", "Local Music", "Songs on this device", localSongCards,
+                                onSeeAll = {
+                                    openSection(
+                                        FeedSectionPayload.Cards(
+                                            title = "Local Music",
+                                            subtitle = "Songs on this device",
+                                            items = localSongCards,
+                                            onPlayAll = { viewModel.playHomeLocalSongs(homeLocalSongs, 0) },
+                                            onShuffle = { viewModel.playHomeLocalSongs(homeLocalSongs.shuffled(), 0) },
+                                        ),
+                                    )
+                                },
+                                onShuffle = { viewModel.playHomeLocalSongs(homeLocalSongs.shuffled(), 0) },
+                            )
+                            HomeBlock.ON_REPEAT -> cardShelf(
+                                "opt_on_repeat", "On Repeat", "Your most played lately", onRepeatCards,
+                                onSeeAll = {
+                                    openSection(
+                                        FeedSectionPayload.Cards(
+                                            title = "On Repeat",
+                                            subtitle = "Your most played lately",
+                                            items = onRepeatCards,
+                                            onPlayAll = { viewModel.playGeneratedQueue(state.feedData.heavyRotation, 0, "On Repeat") },
+                                            onShuffle = { viewModel.playGeneratedQueue(state.feedData.heavyRotation.shuffled(), 0, "On Repeat") },
+                                        ),
+                                    )
+                                },
+                                onShuffle = { viewModel.playGeneratedQueue(state.feedData.heavyRotation.shuffled(), 0, "On Repeat") },
+                            )
+                            HomeBlock.BECAUSE_YOU_LISTEN -> {
+                                val title = becauseSection?.title.orEmpty()
+                                val items = becauseSection?.items.orEmpty()
+                                cardShelf(
+                                    "opt_because", title, becauseSection?.subtitle, becauseCards,
+                                    onSeeAll = {
+                                        openSection(
+                                            FeedSectionPayload.Tracks(
+                                                title = title,
+                                                subtitle = becauseSection?.subtitle,
+                                                tracks = items,
+                                                onPlayTrack = { idx -> viewModel.playTracksQueue(items, idx, title) },
+                                                onShuffle = { viewModel.shuffleTracksQueue(items, title) },
+                                            ),
+                                        )
+                                    },
+                                    onShuffle = { viewModel.shuffleTracksQueue(items, title) },
+                                )
+                            }
+                            HomeBlock.HI_RES_PICKS -> cardShelf(
+                                "opt_hi_res", "Hi-Res Picks", "Up to 24-bit / 192 kHz", hiResCards,
+                                onSeeAll = {
+                                    openSection(
+                                        FeedSectionPayload.Tracks(
+                                            title = "Hi-Res Picks",
+                                            subtitle = "Up to 24-bit / 192 kHz",
+                                            tracks = hiResTracks,
+                                            onPlayTrack = { idx -> viewModel.playTracksQueue(hiResTracks, idx, "Hi-Res Picks") },
+                                            onShuffle = { viewModel.shuffleTracksQueue(hiResTracks, "Hi-Res Picks") },
+                                        ),
+                                    )
+                                },
+                                onShuffle = { viewModel.shuffleTracksQueue(hiResTracks, "Hi-Res Picks") },
+                            )
+                            HomeBlock.REDISCOVER -> cardShelf(
+                                "opt_rediscover", "Rediscover", "Favourites you haven't played in a while", rediscoverCards,
+                                onSeeAll = {
+                                    openSection(
+                                        FeedSectionPayload.Tracks(
+                                            title = "Rediscover",
+                                            subtitle = "Favourites you haven't played in a while",
+                                            tracks = rediscoverTracks,
+                                            onPlayTrack = { idx -> viewModel.playTracksQueue(rediscoverTracks, idx, "Rediscover") },
+                                            onShuffle = { viewModel.shuffleTracksQueue(rediscoverTracks, "Rediscover") },
+                                        ),
+                                    )
+                                },
+                                onShuffle = { viewModel.shuffleTracksQueue(rediscoverTracks, "Rediscover") },
+                            )
+                            HomeBlock.PODCASTS -> cardShelf(
+                                "opt_podcasts", state.feedData.podcastShelfTitle ?: "Podcasts", null, podcastCards,
+                                onSeeAll = onOpenPodcasts,
+                            )
                             HomeBlock.QUICK_PICKS -> if (quickPickTracks.isNotEmpty()) {
                                 blockItem(block, "opt_quick_picks", "optional_quick_picks") {
                                     Spacer(modifier = Modifier.height(24.dp))
-                                    SectionHeader(title = "Quick Picks", subtitle = "Tap and play")
+                                    SectionHeader(
+                                        title = "Quick Picks",
+                                        subtitle = "Tap and play",
+                                        onSeeAll = {
+                                            openSection(
+                                                FeedSectionPayload.Tracks(
+                                                    title = "Quick Picks",
+                                                    subtitle = "Tap and play",
+                                                    tracks = combinedQuickPicks,
+                                                    onPlayTrack = { idx -> viewModel.playTracksQueue(combinedQuickPicks, idx, "Quick Picks") },
+                                                    onShuffle = { viewModel.shuffleTracksQueue(combinedQuickPicks, "Quick Picks") },
+                                                ),
+                                            )
+                                        },
+                                        onShuffle = { viewModel.shuffleTracksQueue(combinedQuickPicks, "Quick Picks") },
+                                    )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     QuickPicksRows(
                                         tracks = quickPickTracks,
@@ -975,7 +1091,20 @@ fun FeedScreen(
                             HomeBlock.FAVOURITE_ARTISTS -> if (favouriteArtists.isNotEmpty()) {
                                 blockItem(block, "opt_favourite_artists", "optional_artists") {
                                     Spacer(modifier = Modifier.height(24.dp))
-                                    SectionHeader(title = "Favourite Artists", subtitle = "The artists you play most")
+                                    SectionHeader(
+                                        title = "Favourite Artists",
+                                        subtitle = "The artists you play most",
+                                        onSeeAll = {
+                                            openSection(
+                                                FeedSectionPayload.Artists(
+                                                    title = "Favourite Artists",
+                                                    subtitle = "The artists you play most",
+                                                    artists = state.feedData.topArtists,
+                                                    onOpenArtist = { name, browseId -> artistAlbumNavigator.openArtist(name, browseId) },
+                                                ),
+                                            )
+                                        },
+                                    )
                                     Spacer(modifier = Modifier.height(12.dp))
                                     androidx.compose.foundation.lazy.LazyRow(
                                         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -1251,6 +1380,22 @@ fun FeedScreen(
                                             onTrackMenu = { menuTrack = it },
                                             onOpenPodcastShow = onOpenPodcastShow,
                                             onPlayPodcastEpisode = { ep, q, title -> viewModel.playPodcastEpisode(ep, q, title) },
+                                            onSeeAllShelf = { targetShelf ->
+                                                openSection(
+                                                    FeedSectionPayload.Shelf(
+                                                        title = targetShelf.title,
+                                                        subtitle = targetShelf.subtitle,
+                                                        items = targetShelf.items,
+                                                        onPlayTrack = { track, title -> viewModel.playTrack(track, title) },
+                                                        onPlayTracksQueue = { tracks, idx, title -> viewModel.playTracksQueue(tracks, idx, title) },
+                                                        onShuffleTracksQueue = { tracks, title -> viewModel.shuffleTracksQueue(tracks, title) },
+                                                        onOpenFeedPlaylist = onOpenFeedPlaylist,
+                                                        onOpenAlbum = { title, artist, id -> artistAlbumNavigator.openAlbum(title, artist, id) },
+                                                        onOpenPodcastShow = onOpenPodcastShow,
+                                                        onPlayPodcastEpisode = { ep, q, title -> viewModel.playPodcastEpisode(ep, q, title) },
+                                                    ),
+                                                )
+                                            },
                                         )
                                     }
                                 }

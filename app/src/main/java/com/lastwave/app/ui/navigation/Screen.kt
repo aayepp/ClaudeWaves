@@ -48,6 +48,9 @@ sealed class Screen(val route: String) {
     data object FeedPlaylistDetail : Screen("feed_playlist/{playlistId}") {
         fun createRoute(playlistId: String) = "feed_playlist/${encodeArg(playlistId)}"
     }
+    data object FeedSectionDetail : Screen("feed_section/{sectionId}") {
+        fun createRoute(sectionId: String) = "feed_section/${encodeArg(sectionId)}"
+    }
     data object PlaylistDetail : Screen("playlist_detail/{playlistId}") {
         fun createRoute(playlistId: Long) = "playlist_detail/$playlistId"
     }

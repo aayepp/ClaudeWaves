@@ -1141,7 +1141,7 @@ internal fun PlaylistCard(
 }
 
 @Composable
-private fun PlaylistArtCard(item: HomePlaylistItem) {
+internal fun PlaylistArtCard(item: HomePlaylistItem) {
     val comic = LocalComicTheme.current
     val haptics = LocalHapticFeedback.current
     val cardShape = RoundedCornerShape(18.dp)

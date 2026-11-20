@@ -28,6 +28,7 @@ internal fun CommunityDiscoverShelf(
     onOpenPlaylist: (String) -> Unit,
     onTrackMenu: (YouTubeMusicTrack) -> Unit,
     onTrackLongClick: (YouTubeMusicTrack) -> Unit,
+    onSeeAllShelf: ((HomeShelf) -> Unit)? = null,
     onHeaderLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     fallback: @Composable (HomeShelfItem) -> Unit,
@@ -36,10 +37,15 @@ internal fun CommunityDiscoverShelf(
     val tracks = remember(shelf.items) { shelf.items.filterIsInstance<HomeShelfItem.Track>().map { it.track } }
     val moreId = shelf.moreBrowseId?.removePrefix("VL")
         ?.takeIf { it.startsWith("PL") || it.startsWith("MPRE") || it.startsWith("RD") || it.startsWith("OLAK") }
+    val seeAllAction: (() -> Unit)? = when {
+        moreId != null -> { { onOpenPlaylist(moreId) } }
+        onSeeAllShelf != null && shelf.items.size > 1 -> { { onSeeAllShelf(shelf) } }
+        else -> null
+    }
     Column(modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         ShelfHeaderV2(
             title = shelf.title, eyebrow = shelf.strapline, subtitle = shelf.subtitle,
-            showMore = moreId != null, onMoreClick = moreId?.let { { onOpenPlaylist(it) } },
+            showMore = seeAllAction != null, onMoreClick = seeAllAction,
             onShuffle = if (tracks.isNotEmpty()) { { onPlayTracksQueue(tracks.shuffled(), 0, shelf.title) } } else null,
             onLongClick = onHeaderLongClick,
         )

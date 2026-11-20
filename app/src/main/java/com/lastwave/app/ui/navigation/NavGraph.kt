@@ -364,6 +364,9 @@ fun LastWaveNavHost(
                 onOpenFeedPlaylist = { playlistId ->
                     navController.navigate(Screen.FeedPlaylistDetail.createRoute(playlistId))
                 },
+                onOpenFeedSection = { sectionId ->
+                    navController.navigate(Screen.FeedSectionDetail.createRoute(sectionId))
+                },
                 onOpenGenerator = {
                     navController.navigate(Screen.Create.route) { launchSingleTop = true }
                 },
@@ -736,6 +739,23 @@ fun LastWaveNavHost(
             PredictiveBackScreen(onBack = { navController.safePopBackStack(backStackEntry) }) {
                 com.lastwave.app.ui.feed.FeedPlaylistDetailScreen(
                     playlistId = playlistId,
+                    onBack = { navController.safePopBackStack(backStackEntry) },
+                )
+            }
+        }
+
+        composable(
+            route = Screen.FeedSectionDetail.route,
+            arguments = listOf(
+                androidx.navigation.navArgument("sectionId") {
+                    type = androidx.navigation.NavType.StringType
+                },
+            ),
+        ) { backStackEntry ->
+            val sectionId = backStackEntry.arguments?.getString("sectionId").orEmpty()
+            PredictiveBackScreen(onBack = { navController.safePopBackStack(backStackEntry) }) {
+                com.lastwave.app.ui.feed.FeedSectionDetailScreen(
+                    sectionId = sectionId,
                     onBack = { navController.safePopBackStack(backStackEntry) },
                 )
             }
