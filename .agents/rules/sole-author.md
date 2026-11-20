@@ -30,6 +30,15 @@ adds attribution.
 6. **Keep the licence notice.** `LICENSE` and the one-line upstream credit in
    `NOTICE` stay: GPL-3.0 requires them, and they do not appear as GitHub
    contributors.
-7. Before any push, check: `git log origin/main..HEAD --format='%an|%cn|%B' |
+7. **Repo enforcement (never weaken, delete, or bypass with `--no-verify`):**
+   - Local git hooks in `.githooks/` (`commit-msg`, `pre-push`) block wrong
+     author/committer or attribution trailers locally. Enable on any clone with
+     `git config core.hooksPath .githooks`.
+   - GitHub Actions `.github/workflows/sole-author-check.yml` (`Sole Author Check`)
+     blocks any PR to `main` containing disallowed authors or trailers.
+   - Branch ruleset `protect-main` enforces no force-push, no deletion, and
+     required `Sole Author Check` on PRs (Admin bypass keeps direct `aayepp` pushes
+     working).
+8. Before any push, check: `git log origin/main..HEAD --format='%an|%cn|%B' |
    grep -iE 'co-authored|claude|anthropic|generated with'` prints nothing, and
    every author/committer is aayepp.

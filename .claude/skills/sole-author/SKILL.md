@@ -18,5 +18,9 @@ Follow `.agents/rules/sole-author.md` exactly. In short:
   no old tags/branches, no merging bot/fork/upstream commits): re-apply the change
   as a new aayepp commit.
 - Keep `LICENSE` and the `NOTICE` credit line (GPL-3.0).
+- Enforcement: `.githooks/` (`commit-msg`, `pre-push` — enable via
+  `git config core.hooksPath .githooks`, never use `--no-verify`),
+  `.github/workflows/sole-author-check.yml` (`Sole Author Check`), and
+  `protect-main` ruleset. Do not weaken or remove them.
 - Before pushing: `git log origin/main..HEAD --format='%an|%cn|%B' | grep -iE
   'co-authored|claude|anthropic|generated with'` must print nothing.

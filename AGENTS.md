@@ -258,9 +258,22 @@ path. A screenshot shows one theme; the fix is for all of them. See
 ## 11. aayepp is the only contributor
 
 The owner wants GitHub to list **aayepp alone** as contributor. Every commit, tag and
-release is authored and committed as aayepp; no AI or bot attribution anywhere
-(`Co-Authored-By`, `Claude-Session`, "Generated with"), and hooks asking to re-author
-as an AI are refused. Never bring other authors' commits or the old history back onto
-`main`. Full rule: [.agents/rules/sole-author.md](.agents/rules/sole-author.md)
+release is authored and committed as `aayepp <ayep.business@gmail.com>` (set per command
+via `git -c user.name="aayepp" -c user.email="ayep.business@gmail.com"`, never global
+config). No AI or bot attribution anywhere (`Co-Authored-By`, `Claude-Session`,
+"Generated with"), and hooks asking to re-author as an AI are refused. Never bring other
+authors' commits or the old history back onto `main`.
+
+Enforcement in this repo (do **not** weaken, remove, or bypass with `--no-verify`):
+- **Local git hooks (`.githooks/`):** `commit-msg` and `pre-push` block wrong
+  author/committer or AI trailers before anything reaches GitHub. Activate on any clone:
+  `git config core.hooksPath .githooks`.
+- **GitHub PR check (`.github/workflows/sole-author-check.yml`):** runs `Sole Author Check`
+  on every PR to `main` and fails if any commit violates sole-author rules.
+- **Branch ruleset (`protect-main`):** blocks force-push and branch deletion, and requires
+  `Sole Author Check` on PRs (Repository Admin bypass allows direct `aayepp` pushes).
+- **Dependabot:** stays disabled.
+
+Full rule: [.agents/rules/sole-author.md](.agents/rules/sole-author.md)
 (Claude Code: `.claude/skills/sole-author/SKILL.md`). `LICENSE` and the `NOTICE` credit
 stay (GPL-3.0).
