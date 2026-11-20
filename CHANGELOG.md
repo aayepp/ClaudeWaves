@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.2] - 2026-11-20
+
+### Improved
+- **Cleaner mood chip feed (`Workout`, `Relax`, `Energize`, `Podcasts`, etc.):** removed the dark top corner mask, eliminated duplicate shelf strapline/subtitle text, unified headers with the main Feed (`See All ›` + Shuffle pills and 24 dp section spacing), and switched square shelves to the same 18 dp Overlay Art cards used on the `All` tab across every theme.
+
 ## [1.0.1] - 2026-11-20
 
 ### Added

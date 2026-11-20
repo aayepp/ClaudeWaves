@@ -272,23 +272,73 @@ internal fun HomeShelfCard(
         val hasWideOrLargeCards = remember(shelf.items) {
             shelf.items.any { com.lastwave.app.ui.feed.cards.selectCardVariant(it, shelf) != com.lastwave.app.ui.feed.cards.HomeCardVariant.SQUARE }
         }
-        val columns = if (hasWideOrLargeCards) 1 else rememberSymmetricShelfColumns()
-        FeedMediaShelfRow(
-            items = shelf.items,
-            columns = columns,
-            topPadding = 0.dp,
-        ) { _, shelfItem ->
-            NativeShelfItemCard(
-                shelfItem = shelfItem,
-                shelfTitle = shelf.title,
-                onPlayTrack = onPlayTrack,
-                onOpenFeedPlaylist = onOpenFeedPlaylist,
-                onOpenAlbum = onOpenAlbum,
-                onTrackLongClick = onTrackLongClick,
-                onOpenPodcastShow = onOpenPodcastShow,
-                onTrackMenu = onTrackMenu,
-                onPlayPodcastEpisode = { ep -> onPlayPodcastEpisode(ep, episodesInShelf, shelf.title) },
-            )
+        if (!hasWideOrLargeCards) {
+            val shelfCards = remember(shelf.items, shelf.title) {
+                shelf.items.mapIndexed { idx, shelfItem ->
+                    when (shelfItem) {
+                        is HomeShelfItem.Track -> HomePlaylistItem(
+                            id = "cs_t_${shelfItem.track.videoId}_$idx",
+                            title = shelfItem.track.title,
+                            caption = ArtistHelper.primaryArtist(shelfItem.track.artist),
+                            artworkUrl = shelfItem.cardData?.largeArtworkUrl ?: shelfItem.track.artworkUrl,
+                            showProgress = false,
+                            onClick = { onPlayTrack(shelfItem.track, shelf.title) },
+                        )
+                        is HomeShelfItem.Playlist -> HomePlaylistItem(
+                            id = "cs_p_${shelfItem.playlist.id}_$idx",
+                            title = shelfItem.playlist.title,
+                            caption = shelfItem.playlist.author,
+                            artworkUrl = shelfItem.playlist.artworkUrl,
+                            showProgress = false,
+                            onClick = {
+                                val isAlbum = shelfItem.itemType.equals("album", ignoreCase = true) ||
+                                    shelfItem.playlist.id.startsWith("MPRE") ||
+                                    shelfItem.playlist.id.startsWith("OLAK")
+                                if (isAlbum) {
+                                    onOpenAlbum(shelfItem.playlist.title, shelfItem.playlist.author.orEmpty(), shelfItem.playlist.id)
+                                } else {
+                                    onOpenFeedPlaylist(shelfItem.playlist.id)
+                                }
+                            },
+                        )
+                        is HomeShelfItem.PodcastShow -> HomePlaylistItem(
+                            id = "cs_ps_${shelfItem.browseId}_$idx",
+                            title = shelfItem.title,
+                            caption = shelfItem.author,
+                            artworkUrl = shelfItem.artworkUrl,
+                            showProgress = false,
+                            onClick = { onOpenPodcastShow(shelfItem.browseId) },
+                        )
+                        is HomeShelfItem.PodcastEpisode -> HomePlaylistItem(
+                            id = "cs_pe_${shelfItem.videoId}_$idx",
+                            title = shelfItem.title,
+                            caption = shelfItem.showName ?: shelfItem.subtitle,
+                            artworkUrl = shelfItem.artworkUrl,
+                            showProgress = false,
+                            onClick = { onPlayPodcastEpisode(shelfItem, episodesInShelf, shelf.title) },
+                        )
+                    }
+                }
+            }
+            MadeForYouRow(items = shelfCards)
+        } else {
+            FeedMediaShelfRow(
+                items = shelf.items,
+                columns = 1,
+                topPadding = 0.dp,
+            ) { _, shelfItem ->
+                NativeShelfItemCard(
+                    shelfItem = shelfItem,
+                    shelfTitle = shelf.title,
+                    onPlayTrack = onPlayTrack,
+                    onOpenFeedPlaylist = onOpenFeedPlaylist,
+                    onOpenAlbum = onOpenAlbum,
+                    onTrackLongClick = onTrackLongClick,
+                    onOpenPodcastShow = onOpenPodcastShow,
+                    onTrackMenu = onTrackMenu,
+                    onPlayPodcastEpisode = { ep -> onPlayPodcastEpisode(ep, episodesInShelf, shelf.title) },
+                )
+            }
         }
         }
 }
