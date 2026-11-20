@@ -33,24 +33,44 @@
 
 ## Screenshots
 
-> **Gallery slot ready** — add screenshots to `docs/screenshots/` (`home.png`, `player.png`, `lyrics.png`, `comic_pop.png`, `audio_eq.png`, `library.png`) and uncomment the table below.
-
-<!--
 <div align="center">
   <table>
     <tr>
-      <td align="center"><img src="docs/screenshots/home.png" width="240" alt="Home Feed"/><br/><sub><strong>Home Feed &amp; Mood Chips</strong></sub></td>
-      <td align="center"><img src="docs/screenshots/player.png" width="240" alt="Now Playing"/><br/><sub><strong>Now Playing &amp; Best Part</strong></sub></td>
-      <td align="center"><img src="docs/screenshots/lyrics.png" width="240" alt="Synced Lyrics"/><br/><sub><strong>Word-by-Word &amp; Duet Lyrics</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/home_dark.jpg" width="240" alt="Home Feed AMOLED Dark"/><br/><sub><strong>Home Feed (AMOLED + Liquid Glass)</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/now_playing_dark.jpg" width="240" alt="Now Playing with Best Part and Hi-Res"/><br/><sub><strong>Now Playing · Best Part &amp; Hi-Res</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/signal_path_dark.jpg" width="240" alt="Signal Path and Hi-Res Streaming Quality"/><br/><sub><strong>Audio Signal Path &amp; Quality</strong></sub></td>
     </tr>
     <tr>
-      <td align="center"><img src="docs/screenshots/comic_pop.png" width="240" alt="Comic Pop Theme"/><br/><sub><strong>Comic Pop Skin &amp; Accents</strong></sub></td>
-      <td align="center"><img src="docs/screenshots/audio_eq.png" width="240" alt="Parametric EQ & AutoEQ"/><br/><sub><strong>Parametric EQ, AutoEQ &amp; USB DAC</strong></sub></td>
-      <td align="center"><img src="docs/screenshots/library.png" width="240" alt="Library & Local Music"/><br/><sub><strong>Library, Downloads &amp; Local Music</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/home_light.jpg" width="240" alt="Home Feed Light Liquid Glass"/><br/><sub><strong>Home Feed (Light Liquid Glass)</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/artist_light.jpg" width="240" alt="Artist Detail Page with Lossless and Atmos badges"/><br/><sub><strong>Artist Page · Lossless &amp; Atmos</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/library_light.jpg" width="240" alt="Library, Downloads and Local Music"/><br/><sub><strong>Library, Downloads &amp; Local Music</strong></sub></td>
+    </tr>
+    <tr>
+      <td align="center"><img src="docs/screenshots/comic_home.jpg" width="240" alt="Comic Pop Home Feed"/><br/><sub><strong>Comic Pop Skin (Home Feed)</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/comic_lyrics_duet.jpg" width="240" alt="Word-by-Word and Duet Lyrics"/><br/><sub><strong>Word-by-Word &amp; Duet Lyrics</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/comic_settings.jpg" width="240" alt="Settings Hub in Comic Pop"/><br/><sub><strong>Settings Hub (Comic Pop)</strong></sub></td>
     </tr>
   </table>
 </div>
--->
+
+<details>
+<summary><strong>More Screenshots (Word-Sync Lyrics, Light Player, Stats &amp; Comic Pop)</strong></summary>
+<br/>
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><img src="docs/screenshots/lyrics_dark.jpg" width="240" alt="Word-Sync Karaoke Lyrics Dark"/><br/><sub><strong>Word-Sync Lyrics (Dark)</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/now_playing_light.jpg" width="240" alt="Now Playing Light Theme"/><br/><sub><strong>Now Playing (Light Glass)</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/stats_light.jpg" width="240" alt="Listening Statistics"/><br/><sub><strong>Listening Statistics</strong></sub></td>
+    </tr>
+    <tr>
+      <td align="center"><img src="docs/screenshots/comic_now_playing.jpg" width="240" alt="Now Playing Comic Pop"/><br/><sub><strong>Now Playing (Comic Pop)</strong></sub></td>
+      <td align="center"><img src="docs/screenshots/comic_library.jpg" width="240" alt="Library Comic Pop"/><br/><sub><strong>Library (Comic Pop)</strong></sub></td>
+      <td></td>
+    </tr>
+  </table>
+</div>
+</details>
 
 ---
 
