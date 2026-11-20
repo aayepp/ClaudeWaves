@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.4.58] - 2026-11-20
+
+### Fixed
+- **Tab bar text reads on any background:** each tab (Feed, Stats, Library) now picks white or dark text from what's behind it, instead of one colour for the whole bar, so a tab over dark artwork no longer gets lost. Icons and labels also get a soft halo, and the colour keeps up while you scroll. Works in light, dark and AMOLED.
+
 ## [5.4.57] - 2026-11-20
 
 ### Fixed
