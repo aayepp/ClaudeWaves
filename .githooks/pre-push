@@ -1,0 +1,43 @@
+#!/bin/sh
+# Reject pushing commits not authored/committed by aayepp or containing attribution trailers.
+ALLOWED_NAME="aayepp"
+ALLOWED_EMAIL="ayep.business@gmail.com"
+ZERO="0000000000000000000000000000000000000000"
+
+FAIL=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$local_sha" = "$ZERO" ]; then
+    continue
+  fi
+
+  if [ "$remote_sha" = "$ZERO" ]; then
+    RANGE="$local_sha"
+  else
+    RANGE="${remote_sha}..${local_sha}"
+  fi
+
+  for sha in $(git rev-list "$RANGE"); do
+    an=$(git log -1 --format=%an "$sha")
+    ae=$(git log -1 --format=%ae "$sha")
+    cn=$(git log -1 --format=%cn "$sha")
+    ce=$(git log -1 --format=%ce "$sha")
+
+    if [ "$an" != "$ALLOWED_NAME" ] || [ "$ae" != "$ALLOWED_EMAIL" ]; then
+      echo "ERROR: Commit $sha author is '$an <$ae>' (must be '$ALLOWED_NAME <$ALLOWED_EMAIL>')." >&2
+      FAIL=1
+    fi
+    if [ "$cn" != "$ALLOWED_NAME" ] || [ "$ce" != "$ALLOWED_EMAIL" ]; then
+      echo "ERROR: Commit $sha committer is '$cn <$ce>' (must be '$ALLOWED_NAME <$ALLOWED_EMAIL>')." >&2
+      FAIL=1
+    fi
+    if git log -1 --format=%B "$sha" | grep -qiE 'co-authored-by:|noreply@anthropic\.com|claude-session|generated with'; then
+      echo "ERROR: Commit $sha message contains forbidden attribution trailer." >&2
+      FAIL=1
+    fi
+  done
+done
+
+if [ "$FAIL" -ne 0 ]; then
+  echo "Push blocked by .githooks/pre-push. Re-author commits as $ALLOWED_NAME <$ALLOWED_EMAIL> and retry." >&2
+  exit 1
+fi
