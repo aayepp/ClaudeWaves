@@ -695,6 +695,24 @@ Java_com_decent_usbaudio_UsbAudioStream_nativeUsbReset(
     return 0;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_decent_usbaudio_UsbAudioStream_nativeReattachKernelDriver(
+        JNIEnv *, jclass, jint fd, jint interfaceNumber) {
+    // claimInterface(force = true) detached snd-usb-audio; releasing the claim does
+    // not rebind it, so Android has no audio device until the DAC is replugged.
+    struct usbdevfs_ioctl cmd = {};
+    cmd.ifno = interfaceNumber;
+    cmd.ioctl_code = USBDEVFS_CONNECT;
+    cmd.data = nullptr;
+    int ret = ioctl(fd, USBDEVFS_IOCTL, &cmd);
+    if (ret < 0 && errno != ENODATA) {
+        LOGE("USBDEVFS_CONNECT iface=%d failed errno=%d", interfaceNumber, errno);
+        return JNI_FALSE;
+    }
+    LOGI("Kernel driver reattached to iface=%d", interfaceNumber);
+    return JNI_TRUE;
+}
+
 } // extern "C" — pause for non-JNI functions used by native-audio-engine
 
 // ── Integer padding (lossless, zero float) ──────────────────────────

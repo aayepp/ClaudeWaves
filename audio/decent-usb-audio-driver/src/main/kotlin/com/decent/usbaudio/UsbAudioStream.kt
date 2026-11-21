@@ -236,6 +236,10 @@ class UsbAudioStream(
         @JvmStatic
         external fun nativeUsbSpeed(fd: Int): Int
 
+        /** Hands [interfaceNumber] back to the kernel's USB audio driver. */
+        @JvmStatic
+        external fun nativeReattachKernelDriver(fd: Int, interfaceNumber: Int): Boolean
+
         /** "full" (USB 1.1, 1 ms frames), "high" (USB 2.0, 125 µs microframes)… */
         fun usbSpeedName(fd: Int): String = when (runCatching { nativeUsbSpeed(fd) }.getOrDefault(-1)) {
             1 -> "low"

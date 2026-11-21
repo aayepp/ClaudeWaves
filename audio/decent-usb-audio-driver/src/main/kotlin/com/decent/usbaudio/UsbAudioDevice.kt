@@ -821,9 +821,24 @@ class UsbAudioDevice private constructor(private val context: Context) {
         parsedClockSelectorId = -1
         parsedClockSelectorPins = emptyList()
         activeClockSourceId = -1
+        val conn = connection
+        val streamingId = claimedInterface?.id
         claimedInterface?.let { iface ->
-            runCatching { connection?.releaseInterface(iface) }
+            runCatching { conn?.releaseInterface(iface) }
             claimedInterface = null
+        }
+        // Both interfaces were claimed with force; give them back to snd-usb-audio or
+        // every other app stays silent until the DAC is unplugged.
+        if (conn != null) {
+            val device = currentDevice
+            if (device != null) {
+                (0 until device.interfaceCount).map { device.getInterface(it) }
+                    .firstOrNull { it.id == audioControlInterfaceId && it.interfaceClass == UsbConstants.USB_CLASS_AUDIO }
+                    ?.let { runCatching { conn.releaseInterface(it) } }
+            }
+            listOfNotNull(audioControlInterfaceId, streamingId).distinct().forEach { id ->
+                runCatching { UsbAudioStream.nativeReattachKernelDriver(conn.fileDescriptor, id) }
+            }
         }
         runCatching { connection?.close() }
         connection = null
