@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.8] - 2026-11-21
+
+### Added
+- **Expired addon popup:** when the launch health check finds an enabled addon whose link has expired, a dialog names it once per session with a shortcut to **Provider Modules** to add a new link.
+
+### Changed
+- **Home headline:** `Good morning` is replaced by a listening line for the time of day (`Start the day`, `Keep the afternoon going`, `Wind down tonight`, `Late night listening`) with your last played track underneath.
+
 ## [1.0.7] - 2026-11-20
 
 ### Improved
