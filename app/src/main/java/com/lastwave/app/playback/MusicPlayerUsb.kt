@@ -190,7 +190,7 @@ internal fun MusicPlayer.applyDacRoutingFor(resolved: ResolvedStream) {
 internal fun MusicPlayer.exclusiveUsbWanted(streamCodec: String? = null): Boolean {
         if (isCasting) return false
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return false
-        if (!bitPerfectEnabled || !usbExclusivePrefEnabled) return false
+        if (!bitPerfectEnabled || !usbExclusivePrefEnabled || usbDacReleasedOnTaskRemoval) return false
         // E-AC-3 JOC / 360 RA is multichannel. Exclusive USB is stereo PCM
         // only — keep Android's decoder+mixer so Atmos actually plays.
         if (isSpatialAudioCodec(streamCodec) || isSpatialAudioCodec(_state.value.audioCodec)) return false
@@ -623,8 +623,11 @@ internal fun MusicPlayer.updateSignalPath() {
  */
 internal fun MusicPlayer.releaseUsbDacOnTaskRemoved() = onMain {
     val wasPlaying = state.value.isPlaying || state.value.isBuffering
+    usbDacReleasedOnTaskRemoval = true
     stopAndClear(clearSession = false)
-    exclusiveUsbOutput.reset()
+    // Same path as switching USB Exclusive off: the sinks drop it too, so nothing
+    // that prepares the player afterwards can claim the DAC again.
+    applyDacRoutingFor(currentSourceRateHz())
     runCatching { volumeSessionPrefs().edit().putBoolean(KEY_RESUME_AFTER_DAC_RELEASE, wasPlaying).apply() }
     // OEM task killers can end the process next; get the evidence onto disk first.
     com.lastwave.app.diagnostics.AppLog.i("UsbDac", "Released DAC on task removal (wasPlaying=$wasPlaying)")
@@ -633,6 +636,10 @@ internal fun MusicPlayer.releaseUsbDacOnTaskRemoved() = onMain {
 
 /** Resumes what [releaseUsbDacOnTaskRemoved] stopped once the user is back in the app. */
 internal fun MusicPlayer.resumeAfterUsbDacRelease() {
+    if (usbDacReleasedOnTaskRemoval) onMain {
+        usbDacReleasedOnTaskRemoval = false
+        applyDacRoutingFor(currentSourceRateHz())
+    }
     val prefs = runCatching { volumeSessionPrefs() }.getOrNull() ?: return
     if (!prefs.getBoolean(KEY_RESUME_AFTER_DAC_RELEASE, false)) return
     prefs.edit().remove(KEY_RESUME_AFTER_DAC_RELEASE).apply()

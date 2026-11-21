@@ -619,6 +619,8 @@ class MusicPlayer @Inject constructor(
     internal val playerToSink = java.util.Collections.synchronizedMap(java.util.WeakHashMap<Player, NativeProcessingAudioSink>())
     /** True while the usbdevfs exclusive session owns output. */
     @Volatile internal var usbExclusiveSinkActive = false
+    /** Set while the user has swiped the app away: nothing may re-claim the DAC until they return. */
+    @Volatile internal var usbDacReleasedOnTaskRemoval = false
     val isUsbExclusiveActive: Boolean get() = usbExclusiveSinkActive || exclusiveUsbOutput.isActive()
 
     fun updateMusicHapticsConfig(newConfig: com.lastwave.app.playback.haptics.MusicHapticsConfig) {

@@ -546,6 +546,7 @@ class ExclusiveUsbOutput @Inject constructor(
         connection = null
         val info = usbAudio.openDevice(usbDevice)
             ?: return failLocked("openDevice failed" + (usbAudio.lastOpenError?.let { ": $it" } ?: ""))
+        com.lastwave.app.diagnostics.AppLog.i("UsbDac", "Claimed ${usbDevice.productName} for USB Exclusive")
         val hwRates = usbAudio.querySupportedSampleRates()
 
         var effectiveRate = sampleRate
@@ -1017,6 +1018,7 @@ class ExclusiveUsbOutput @Inject constructor(
     private fun teardownLocked(closeDevice: Boolean) {
         stopStreamLocked()
         if (closeDevice) {
+            if (connection != null) com.lastwave.app.diagnostics.AppLog.i("UsbDac", "Released DAC back to Android")
             runCatching { usbAudio.closeDevice() }
             connection = null
         }
