@@ -615,3 +615,29 @@ internal fun MusicPlayer.updateSignalPath() {
             ),
         )
     }
+
+/**
+ * Swiping the app from recents left USB Exclusive holding the DAC: the foreground
+ * service keeps the process alive, stop never closed the device, and every other
+ * app stayed silent until the IEM was unplugged. Close it and remember to resume.
+ */
+internal fun MusicPlayer.releaseUsbDacOnTaskRemoved() = onMain {
+    val wasPlaying = state.value.isPlaying || state.value.isBuffering
+    stopAndClear(clearSession = false)
+    exclusiveUsbOutput.reset()
+    runCatching { volumeSessionPrefs().edit().putBoolean(KEY_RESUME_AFTER_DAC_RELEASE, wasPlaying).apply() }
+}
+
+/** Resumes what [releaseUsbDacOnTaskRemoved] stopped once the user is back in the app. */
+internal fun MusicPlayer.resumeAfterUsbDacRelease() {
+    val prefs = runCatching { volumeSessionPrefs() }.getOrNull() ?: return
+    if (!prefs.getBoolean(KEY_RESUME_AFTER_DAC_RELEASE, false)) return
+    prefs.edit().remove(KEY_RESUME_AFTER_DAC_RELEASE).apply()
+    applicationScope.launch {
+        // After a process death the saved session restores asynchronously.
+        kotlinx.coroutines.withTimeoutOrNull(5_000L) { state.first { it.current != null } } ?: return@launch
+        this@resumeAfterUsbDacRelease.resume()
+    }
+}
+
+private const val KEY_RESUME_AFTER_DAC_RELEASE = "resume_after_dac_release"

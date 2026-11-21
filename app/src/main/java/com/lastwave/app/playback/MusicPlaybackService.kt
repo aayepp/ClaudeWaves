@@ -687,6 +687,12 @@ class MusicPlaybackService : MediaBrowserServiceCompat() {
         // foreground service whenever a track is loaded (even paused), and a
         // foreground service survives task removal. So the swipe behavior is
         // handled explicitly here.
+        if (musicPlayer.isUsbExclusiveActive) {
+            // Playback cannot continue without the DAC, and holding it silences every other app.
+            musicPlayer.releaseUsbDacOnTaskRemoved()
+            super.onTaskRemoved(rootIntent)
+            return
+        }
         val shouldStop = musicPlayer.stopPlaybackOnTaskRemoved ||
             musicPlayer.state.value.current == null
         if (shouldStop) {

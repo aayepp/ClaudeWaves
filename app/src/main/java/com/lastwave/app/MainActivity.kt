@@ -1,5 +1,6 @@
 package com.lastwave.app
 
+import com.lastwave.app.playback.resumeAfterUsbDacRelease
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -312,6 +313,7 @@ open class MainShellActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        runCatching { musicPlayer.get().resumeAfterUsbDacRelease() }
         val coordinator = if (::idleColdStartCoordinator.isInitialized) idleColdStartCoordinator.get() else null
         if (freshlyCreated) {
             freshlyCreated = false
