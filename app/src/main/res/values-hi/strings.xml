@@ -566,10 +566,6 @@
     <string name="pd_syncing_yt">YouTube Music से सिंक हो रहा है</string>
     <string name="pd_delete_item">प्लेलिस्ट हटाएँ</string>
     <string name="feed_home">घर</string>
-    <string name="feed_greeting_morning">सुप्रभात</string>
-    <string name="feed_greeting_afternoon">शुभ दोपहर</string>
-    <string name="feed_greeting_evening">शुभ संध्या</string>
-    <string name="feed_greeting_night">शुभ रात्रि</string>
     <string name="feed_retry">पुनः प्रयास करें</string>
     <string name="feed_update_error">आपका फ़ीड अपडेट नहीं किया जा सका. कृपया पुन: प्रयास करें।</string>
     <string name="feed_quick_access">त्वरित पहुंच</string>

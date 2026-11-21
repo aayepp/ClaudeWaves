@@ -597,10 +597,6 @@
 
     <!-- Akış -->
     <string name="feed_home">Ana Sayfa</string>
-    <string name="feed_greeting_morning">Günaydın</string>
-    <string name="feed_greeting_afternoon">Tünaydın</string>
-    <string name="feed_greeting_evening">İyi akşamlar</string>
-    <string name="feed_greeting_night">İyi geceler</string>
     <string name="feed_retry">Tekrar dene</string>
     <string name="feed_update_error">Akışınız güncellenemedi. Lütfen tekrar deneyin.</string>
     <string name="feed_quick_access">Hızlı erişim</string>

@@ -565,10 +565,6 @@
     <string name="pd_syncing_yt">正在同步到 YouTube Music</string>
     <string name="pd_delete_item">删除播放列表</string>
     <string name="feed_home">首页</string>
-    <string name="feed_greeting_morning">早上好</string>
-    <string name="feed_greeting_afternoon">下午好</string>
-    <string name="feed_greeting_evening">晚上好</string>
-    <string name="feed_greeting_night">晚安</string>
     <string name="feed_retry">重试</string>
     <string name="feed_update_error">无法更新您的 Feed。请再试一次。</string>
     <string name="feed_quick_access">快速访问</string>

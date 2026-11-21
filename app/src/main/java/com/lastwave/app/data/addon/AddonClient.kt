@@ -267,7 +267,7 @@ class AddonClient(
                 ).joinToString(" ").ifBlank { null }
                 val expiresAtMs = m.resolveExpiresAtMs()
                 if (expiresAtMs != null && expiresAtMs <= System.currentTimeMillis()) {
-                    AddonHealth.Rejected("Addon link expired")
+                    AddonHealth.Expired
                 } else {
                     AddonHealth.Ok(info, expiresAtMs = expiresAtMs)
                 }

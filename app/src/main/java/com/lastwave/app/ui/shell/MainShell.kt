@@ -71,6 +71,9 @@ import com.lastwave.app.ui.comic.Surface
 import androidx.compose.material3.Text
 import com.lastwave.app.ui.comic.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.lastwave.app.R
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -185,10 +188,20 @@ class MainShellViewModel @Inject constructor(
     val appUpdateManager: com.lastwave.app.data.update.AppUpdateManager,
     val ytAuthManager: com.lastwave.app.data.ytmusic.YtMusicAuthManager,
     val settingsPreferences: com.lastwave.app.data.local.SettingsPreferences,
+    addonHealthMonitor: com.lastwave.app.data.addon.AddonHealthMonitor,
 ) : ViewModel() {
     val updateInfo = appUpdateManager.updateInfo
     val ytConnection = ytAuthManager.connection
     val settings = settingsPreferences.settings
+
+    /** Names of enabled addons whose launch health check found the link expired. */
+    val expiredAddonNames = kotlinx.coroutines.flow.combine(
+        addonHealthMonitor.healthMap,
+        settingsPreferences.httpAddons,
+    ) { health, addons ->
+        addons.filter { it.enabled && health[it.id] == com.lastwave.app.data.addon.AddonHealth.Expired }
+            .map { it.name.ifBlank { it.url } }
+    }
 
     fun dismissUpdate(version: String) {
         appUpdateManager.dismissUpdate(version)
@@ -261,6 +274,7 @@ fun MainShell(
     onOpenPodcasts: () -> Unit = {},
     onOpenPodcastShow: (String) -> Unit = {},
     onOpenYouTubeLogin: () -> Unit = {},
+    onOpenModules: () -> Unit = {},
     onReturnToHome: () -> Boolean = { false },
     mainShellViewModel: MainShellViewModel = hiltViewModel(),
 ) {
@@ -362,6 +376,51 @@ fun MainShell(
                     },
                 ) {
                     Text("OK, thanks")
+                }
+            },
+        )
+    }
+
+    val expiredAddonNames by mainShellViewModel.expiredAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
+    var expiredPromptDismissed by rememberSaveable { mutableStateOf(false) }
+    // Waits for the login prompt so two dialogs never stack on launch.
+    if (expiredAddonNames.isNotEmpty() && !expiredPromptDismissed && !shouldShowLoginPrompt) {
+        AlertDialog(
+            onDismissRequest = { expiredPromptDismissed = true },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = if (LocalLiquidGlass.current) {
+                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+            title = {
+                Text(
+                    text = pluralStringResource(R.plurals.addon_expired_title, expiredAddonNames.size),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.addon_expired_body, expiredAddonNames.joinToString(", ")),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        expiredPromptDismissed = true
+                        onOpenModules()
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                ) {
+                    Text(stringResource(R.string.addon_expired_renew))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { expiredPromptDismissed = true }) {
+                    Text(stringResource(R.string.addon_expired_later))
                 }
             },
         )

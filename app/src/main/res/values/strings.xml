@@ -792,10 +792,6 @@
 
     <!-- Feed -->
     <string name="feed_home">Home</string>
-    <string name="feed_greeting_morning">Good morning</string>
-    <string name="feed_greeting_afternoon">Good afternoon</string>
-    <string name="feed_greeting_evening">Good evening</string>
-    <string name="feed_greeting_night">Good night</string>
     <string name="feed_retry">Retry</string>
     <string name="feed_update_error">Couldn\'t update your feed. Please try again.</string>
     <string name="feed_quick_access">Quick access</string>
@@ -1482,4 +1478,17 @@
     <string name="lossless_badge_cd">LOSSLESS</string>
     <string name="lossless_badge_atmos">ATMOS</string>
     <string name="track_downloaded_cd">Downloaded</string>
+    <string name="home_mood_morning">Start the day</string>
+    <string name="home_mood_afternoon">Keep the afternoon going</string>
+    <string name="home_mood_evening">Wind down tonight</string>
+    <string name="home_mood_night">Late night listening</string>
+    <string name="home_mood_last_played">Last played: %1$s</string>
+    <string name="home_mood_empty">Pick a mood below or search for a song</string>
+    <string name="addon_expired_body">%1$s stopped working. Add a new link in Provider Modules to stream from it again.</string>
+    <string name="addon_expired_renew">Open Provider Modules</string>
+    <string name="addon_expired_later">Later</string>
+    <plurals name="addon_expired_title">
+        <item quantity="one">Addon link expired</item>
+        <item quantity="other">%d addon links expired</item>
+    </plurals>
 </resources>

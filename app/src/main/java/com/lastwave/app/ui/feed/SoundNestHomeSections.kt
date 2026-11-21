@@ -92,6 +92,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.google.android.gms.cast.framework.CastButtonFactory
 import com.lastwave.app.R
+import androidx.compose.ui.res.stringResource
+import com.lastwave.app.data.local.db.SongPlayStatsEntity
 import com.lastwave.app.data.music.YouTubeMusicTrack
 import com.lastwave.app.ui.common.TrackSubtitleWithBadge
 import com.lastwave.app.playback.MusicPlayer
@@ -320,20 +322,24 @@ private fun HeaderRoundIconButton(
     }
 }
 
-/** Section B: Time-aware greeting headline and concise discovery subtitle. */
+/** Section B: listening-mood headline for the time of day, last played track underneath. */
 @Composable
 internal fun GreetingSection(
+    lastPlayed: SongPlayStatsEntity?,
     horizontalPadding: Dp = 16.dp,
     modifier: Modifier = Modifier,
 ) {
-    val greeting = remember {
+    val headlineRes = remember {
         when (LocalTime.now().hour) {
-            in 5..11 -> "Good morning \uD83D\uDC4B"
-            in 12..16 -> "Good afternoon \uD83D\uDC4B"
-            in 17..21 -> "Good evening \uD83D\uDC4B"
-            else -> "Good night \uD83D\uDC4B"
+            in 5..11 -> R.string.home_mood_morning
+            in 12..16 -> R.string.home_mood_afternoon
+            in 17..21 -> R.string.home_mood_evening
+            else -> R.string.home_mood_night
         }
     }
+    val subtitle = lastPlayed?.takeIf { it.title.isNotBlank() }?.let { track ->
+        stringResource(R.string.home_mood_last_played, listOf(track.title, track.artist).filter { it.isNotBlank() }.joinToString(" · "))
+    } ?: stringResource(R.string.home_mood_empty)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -341,7 +347,7 @@ internal fun GreetingSection(
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            text = greeting,
+            text = stringResource(headlineRes),
             style = MaterialTheme.typography.headlineSmall.copy(
                 fontSize = 26.sp,
                 letterSpacing = (-0.5).sp,
@@ -353,10 +359,10 @@ internal fun GreetingSection(
             modifier = Modifier.semantics { heading() },
         )
         Text(
-            text = "Discover, stream and enjoy millions of songs",
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }

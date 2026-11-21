@@ -562,10 +562,6 @@
     <string name="pd_syncing_yt">Synchronisierung mit YouTube Music</string>
     <string name="pd_delete_item">Playlist löschen</string>
     <string name="feed_home">Zuhause</string>
-    <string name="feed_greeting_morning">Guten Morgen</string>
-    <string name="feed_greeting_afternoon">Guten Tag</string>
-    <string name="feed_greeting_evening">Guten Abend</string>
-    <string name="feed_greeting_night">Gute Nacht</string>
     <string name="feed_retry">Versuchen Sie es noch einmal</string>
     <string name="feed_update_error">Ihr Feed konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.</string>
     <string name="feed_quick_access">Schneller Zugriff</string>

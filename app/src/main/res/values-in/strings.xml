@@ -562,10 +562,6 @@
     <string name="pd_syncing_yt">Menyinkronkan ke YouTube Music</string>
     <string name="pd_delete_item">Hapus daftar putar</string>
     <string name="feed_home">Rumah</string>
-    <string name="feed_greeting_morning">Selamat pagi</string>
-    <string name="feed_greeting_afternoon">Selamat siang</string>
-    <string name="feed_greeting_evening">Selamat malam</string>
-    <string name="feed_greeting_night">Selamat malam</string>
     <string name="feed_retry">Coba lagi</string>
     <string name="feed_update_error">Tidak dapat memperbarui feed Anda. Silakan coba lagi.</string>
     <string name="feed_quick_access">Akses cepat</string>

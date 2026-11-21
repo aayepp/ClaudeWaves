@@ -385,6 +385,7 @@ fun LastWaveNavHost(
                 onOpenYouTubeLogin = {
                     navController.navigate(Screen.YouTubeLogin.route)
                 },
+                onOpenModules = { navController.navigate(Screen.ProviderModules.route) },
                 onReturnToHome = {
                     if (navController.currentDestination?.route != Screen.MainShell.route) {
                         navController.popBackStack(Screen.MainShell.route, inclusive = false)

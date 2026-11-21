@@ -562,10 +562,6 @@
     <string name="pd_syncing_yt">YouTube Music に同期しています</string>
     <string name="pd_delete_item">プレイリストを削除する</string>
     <string name="feed_home">ホーム</string>
-    <string name="feed_greeting_morning">おはようございます</string>
-    <string name="feed_greeting_afternoon">こんにちは</string>
-    <string name="feed_greeting_evening">こんばんは。</string>
-    <string name="feed_greeting_night">おやすみ</string>
     <string name="feed_retry">再試行</string>
     <string name="feed_update_error">フィードを更新できませんでした。もう一度試してください。</string>
     <string name="feed_quick_access">クイックアクセス</string>

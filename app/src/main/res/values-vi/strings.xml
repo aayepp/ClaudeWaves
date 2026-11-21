@@ -720,10 +720,6 @@
 
     <!-- Feed -->
     <string name="feed_home">Trang chủ</string>
-    <string name="feed_greeting_morning">Chào buổi sáng</string>
-    <string name="feed_greeting_afternoon">Chào buổi chiều</string>
-    <string name="feed_greeting_evening">Chào buổi tối</string>
-    <string name="feed_greeting_night">Chúc ngủ ngon</string>
     <string name="feed_retry">Thử lại</string>
     <string name="feed_update_error">Không thể cập nhật bảng tin của bạn. Vui lòng thử lại.</string>
     <string name="feed_quick_access">Truy cập nhanh</string>

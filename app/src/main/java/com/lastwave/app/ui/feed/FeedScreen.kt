@@ -344,20 +344,6 @@ fun FeedScreen(
     }
     val customProfile = com.lastwave.app.ui.theme.LocalUserProfile.current
     val effectiveAvatarUrl = customProfile.avatarUri ?: state.avatarUrl
-    val baseGreeting = remember {
-        when (java.time.LocalTime.now().hour) {
-            in 5..11 -> context.getString(R.string.feed_greeting_morning)
-            in 12..16 -> context.getString(R.string.feed_greeting_afternoon)
-            in 17..21 -> context.getString(R.string.feed_greeting_evening)
-            else -> context.getString(R.string.feed_greeting_night)
-        }
-    }
-    val greeting = if (customProfile.name.isNotBlank()) "$baseGreeting, ${customProfile.name}" else baseGreeting
-    val formattedDate = remember {
-        try {
-            java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM d"))
-        } catch (_: Exception) { "" }
-    }
     LaunchedEffect(state.error, hasFeedContent) {
         val error = state.error ?: return@LaunchedEffect
         if (hasFeedContent) {
@@ -1346,7 +1332,7 @@ fun FeedScreen(
                                     verticalAlignment = Alignment.Top,
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        GreetingSection(horizontalPadding = 0.dp)
+                                        GreetingSection(lastPlayed = recentPlayedStats.firstOrNull(), horizontalPadding = 0.dp)
                                         Spacer(modifier = Modifier.height(14.dp))
                                         QuickAccessRow(
                                             items = quickAccessEntries,
@@ -1500,7 +1486,7 @@ fun FeedScreen(
                         } else {
                             item(key = "home_greeting", contentType = "home_greeting") {
                                 Spacer(modifier = Modifier.height(10.dp))
-                                GreetingSection()
+                                GreetingSection(lastPlayed = recentPlayedStats.firstOrNull())
                             }
 
                             item(key = "home_search_bar", contentType = "home_search_bar") {

@@ -562,10 +562,6 @@
     <string name="pd_syncing_yt">YouTube Music에 동기화 중</string>
     <string name="pd_delete_item">재생목록 삭제</string>
     <string name="feed_home">홈</string>
-    <string name="feed_greeting_morning">좋은 아침</string>
-    <string name="feed_greeting_afternoon">안녕하세요</string>
-    <string name="feed_greeting_evening">안녕하세요</string>
-    <string name="feed_greeting_night">잘자요</string>
     <string name="feed_retry">재시도</string>
     <string name="feed_update_error">피드를 업데이트할 수 없습니다. 다시 시도해 주세요.</string>
     <string name="feed_quick_access">빠른 액세스</string>

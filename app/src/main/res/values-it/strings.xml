@@ -599,10 +599,6 @@
 
     <!-- Feed -->
     <string name="feed_home">Home</string>
-    <string name="feed_greeting_morning">Buongiorno</string>
-    <string name="feed_greeting_afternoon">Buon pomeriggio</string>
-    <string name="feed_greeting_evening">Buonasera</string>
-    <string name="feed_greeting_night">Buonanotte</string>
     <string name="feed_retry">Riprova</string>
     <string name="feed_update_error">Impossibile aggiornare la Home. Riprova.</string>
     <string name="feed_quick_access">Accesso rapido</string>

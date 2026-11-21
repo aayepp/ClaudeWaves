@@ -562,10 +562,6 @@
     <string name="pd_syncing_yt">المزامنة مع YouTube Music</string>
     <string name="pd_delete_item">حذف قائمة التشغيل</string>
     <string name="feed_home">الصفحة الرئيسية</string>
-    <string name="feed_greeting_morning">صباح الخير</string>
-    <string name="feed_greeting_afternoon">مساء الخير</string>
-    <string name="feed_greeting_evening">مساء الخير</string>
-    <string name="feed_greeting_night">ليلة سعيدة</string>
     <string name="feed_retry">أعد المحاولة</string>
     <string name="feed_update_error">تعذر تحديث خلاصتك. يرجى المحاولة مرة أخرى.</string>
     <string name="feed_quick_access">الوصول السريع</string>

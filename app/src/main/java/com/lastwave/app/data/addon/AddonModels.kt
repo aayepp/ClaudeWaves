@@ -530,4 +530,9 @@ sealed interface AddonHealth {
     data class Ok(val info: String?, val expiresAtMs: Long? = null) : AddonHealth
     data class Unreachable(val reason: String) : AddonHealth
     data class Rejected(val reason: String) : AddonHealth
+
+    companion object {
+        /** Equality-compared by the launch popup, so the reason text lives in one place. */
+        val Expired = Rejected("Addon link expired")
+    }
 }
