@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.10] - 2026-11-21
+
+### Fixed
+- **USB DAC freed when you swipe the app away:** with USB Exclusive on, swiping ClaudeWaves from recent apps now lets go of your DAC, so other apps play through your IEM right away. Open ClaudeWaves again and it takes the DAC back and continues the same song where it stopped, still in USB Exclusive (Hi-Res / bit-perfect).
+
 ## [1.0.9] - 2026-11-21
 
 ### Changed
