@@ -119,7 +119,6 @@ import com.lastwave.app.ui.theme.comicHalftone
 import com.lastwave.app.ui.theme.comicIndicationOrNull
 import com.lastwave.app.ui.theme.comicPanel
 import com.lastwave.app.ui.theme.comicPress
-import java.time.LocalTime
 
 @Immutable
 internal data class HomeQuickAccessEntry(
@@ -322,21 +321,15 @@ private fun HeaderRoundIconButton(
     }
 }
 
-/** Section B: listening-mood headline for the time of day, last played track underneath. */
+/** Section B: hello to the profile name, last played track underneath. */
 @Composable
 internal fun GreetingSection(
     lastPlayed: SongPlayStatsEntity?,
     horizontalPadding: Dp = 16.dp,
     modifier: Modifier = Modifier,
 ) {
-    val headlineRes = remember {
-        when (LocalTime.now().hour) {
-            in 5..11 -> R.string.home_mood_morning
-            in 12..16 -> R.string.home_mood_afternoon
-            in 17..21 -> R.string.home_mood_evening
-            else -> R.string.home_mood_night
-        }
-    }
+    val name = com.lastwave.app.ui.theme.LocalUserProfile.current.name.trim()
+    val headline = if (name.isEmpty()) stringResource(R.string.home_hello) else stringResource(R.string.home_hello_name, name)
     val subtitle = lastPlayed?.takeIf { it.title.isNotBlank() }?.let { track ->
         stringResource(R.string.home_mood_last_played, listOf(track.title, track.artist).filter { it.isNotBlank() }.joinToString(" · "))
     } ?: stringResource(R.string.home_mood_empty)
@@ -347,7 +340,7 @@ internal fun GreetingSection(
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            text = stringResource(headlineRes),
+            text = headline,
             style = MaterialTheme.typography.headlineSmall.copy(
                 fontSize = 26.sp,
                 letterSpacing = (-0.5).sp,

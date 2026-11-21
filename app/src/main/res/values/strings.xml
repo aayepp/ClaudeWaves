@@ -1478,10 +1478,8 @@
     <string name="lossless_badge_cd">LOSSLESS</string>
     <string name="lossless_badge_atmos">ATMOS</string>
     <string name="track_downloaded_cd">Downloaded</string>
-    <string name="home_mood_morning">Start the day</string>
-    <string name="home_mood_afternoon">Keep the afternoon going</string>
-    <string name="home_mood_evening">Wind down tonight</string>
-    <string name="home_mood_night">Late night listening</string>
+    <string name="home_hello">Hello</string>
+    <string name="home_hello_name">Hello, %1$s</string>
     <string name="home_mood_last_played">Last played: %1$s</string>
     <string name="home_mood_empty">Pick a mood below or search for a song</string>
     <string name="addon_expired_body">%1$s stopped working. Add a new link in Provider Modules to stream from it again.</string>
