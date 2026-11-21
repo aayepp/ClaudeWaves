@@ -1,8 +1,14 @@
 mod audio;
 mod library;
+mod lyrics;
 mod media;
+mod stream;
+mod yt;
+mod ytdlp;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -14,6 +20,14 @@ use media::{Media, MediaMsg, NowPlaying};
 
 /// Whether the close button hides to the tray instead of quitting.
 struct CloseToTray(AtomicBool);
+
+/// Streaming state: the audio cache folder, the download in flight, and a
+/// counter so a slow lookup cannot start playing after a newer click.
+struct Streaming {
+    cache_dir: PathBuf,
+    current: Mutex<Option<Arc<stream::Progress>>>,
+    generation: AtomicU64,
+}
 
 // ---------------------------------------------------------------------------
 // Playback commands
@@ -139,6 +153,183 @@ async fn read_tracks(paths: Vec<String>) -> Vec<Track> {
     .unwrap_or_default()
 }
 
+
+// ---------------------------------------------------------------------------
+// YouTube Music
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn yt_home(yt: State<'_, yt::YtClient>, params: Option<String>) -> Result<yt::Page, String> {
+    yt.home(params.as_deref()).await
+}
+
+#[tauri::command]
+async fn yt_search(yt: State<'_, yt::YtClient>, query: String, filter: Option<String>) -> Result<yt::Page, String> {
+    yt.search(&query, filter.as_deref()).await
+}
+
+#[tauri::command]
+async fn yt_suggest(yt: State<'_, yt::YtClient>, query: String) -> Result<Vec<String>, String> {
+    yt.suggestions(&query).await
+}
+
+#[tauri::command]
+async fn yt_browse(yt: State<'_, yt::YtClient>, browse_id: String, params: Option<String>) -> Result<yt::Page, String> {
+    yt.browse(&browse_id, params.as_deref()).await
+}
+
+#[tauri::command]
+async fn yt_next(yt: State<'_, yt::YtClient>, video_id: String, playlist_id: Option<String>) -> Result<Vec<yt::Item>, String> {
+    yt.next(&video_id, playlist_id.as_deref()).await
+}
+
+#[tauri::command]
+fn yt_region(yt: State<yt::YtClient>, hl: String, gl: String) {
+    if let Ok(mut g) = yt.hl.lock() {
+        *g = hl;
+    }
+    if let Ok(mut g) = yt.gl.lock() {
+        *g = gl;
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Buffering {
+    key: String,
+    stage: &'static str,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamInfo {
+    key: String,
+    codec: String,
+    bitrate: Option<u32>,
+    sample_rate: Option<u32>,
+}
+
+/// Plays a YouTube Music track: from the cache when it was played before,
+/// otherwise resolves the stream with yt-dlp and starts as soon as the first
+/// bytes are on disk.
+#[tauri::command]
+async fn yt_play(app: AppHandle, video_id: String, duration: Option<f64>, autoplay: bool) -> Result<(), String> {
+    let key = format!("yt:{video_id}");
+    let streaming = app.state::<Streaming>();
+    let gen = streaming.generation.fetch_add(1, Ordering::SeqCst) + 1;
+    if let Ok(mut cur) = streaming.current.lock() {
+        if let Some(p) = cur.take() {
+            if !p.done.load(Ordering::SeqCst) {
+                p.cancelled.store(true, Ordering::SeqCst);
+            }
+        }
+    }
+    app.state::<Player>().send(Cmd::Pause);
+    let _ = app.emit("player://buffering", Buffering { key: key.clone(), stage: "resolving" });
+
+    let app2 = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let streaming = app2.state::<Streaming>();
+        let latest = || streaming.generation.load(Ordering::SeqCst) == gen;
+
+        if let Some(path) = stream::cached(&streaming.cache_dir, &video_id) {
+            let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("m4a").to_string();
+            if latest() {
+                app2.state::<Player>().send(Cmd::LoadStream { key: key.clone(), reader: Box::new(file), ext, duration, autoplay });
+            }
+            return Ok(());
+        }
+
+        let ytdlp = app2.state::<ytdlp::YtDlp>();
+        let resolved = ytdlp.resolve(&video_id)?;
+        if !latest() {
+            return Ok(());
+        }
+        let _ = app2.emit("player://buffering", Buffering { key: key.clone(), stage: "buffering" });
+        let _ = app2.emit(
+            "player://stream",
+            StreamInfo {
+                key: key.clone(),
+                codec: resolved.codec.split('.').next().unwrap_or("").to_uppercase().replace("MP4A", "AAC"),
+                bitrate: resolved.bitrate.map(|b| b.round() as u32),
+                sample_rate: resolved.sample_rate,
+            },
+        );
+        let dl = stream::start(&streaming.cache_dir, &video_id, &resolved).map_err(|e| {
+            ytdlp.forget(&video_id);
+            e
+        })?;
+        if let Ok(mut cur) = streaming.current.lock() {
+            *cur = Some(dl.progress.clone());
+        }
+        // Wait for enough data to read the container header.
+        let started = std::time::Instant::now();
+        loop {
+            let got = dl.progress.downloaded.load(Ordering::Acquire);
+            if got >= 256 * 1024 || dl.progress.done.load(Ordering::Acquire) {
+                break;
+            }
+            if !latest() {
+                dl.progress.cancelled.store(true, Ordering::SeqCst);
+                return Ok(());
+            }
+            if started.elapsed() > std::time::Duration::from_secs(30) {
+                dl.progress.cancelled.store(true, Ordering::SeqCst);
+                ytdlp.forget(&video_id);
+                return Err("The stream did not start. Check your connection and try again.".into());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        if let Some(e) = dl.progress.error.lock().ok().and_then(|g| g.clone()) {
+            ytdlp.forget(&video_id);
+            return Err(e);
+        }
+        if !latest() {
+            return Ok(());
+        }
+        let reader = stream::GrowingReader::new(&dl.path, dl.progress.clone()).map_err(|e| e.to_string())?;
+        let dur = duration.or(resolved.duration);
+        app2.state::<Player>().send(Cmd::LoadStream { key: key.clone(), reader: Box::new(reader), ext: resolved.ext.clone(), duration: dur, autoplay });
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let _ = app.emit("player://buffering", Buffering { key: String::new(), stage: "idle" });
+    if let Err(e) = &result {
+        let _ = app.emit("player://error", e.clone());
+    }
+    result
+}
+
+#[tauri::command]
+async fn ytdlp_status(app: AppHandle) -> ytdlp::Status {
+    tauri::async_runtime::spawn_blocking(move || app.state::<ytdlp::YtDlp>().status()).await.unwrap_or(ytdlp::Status {
+        installed: false,
+        version: None,
+        path: String::new(),
+        js_runtime: false,
+    })
+}
+
+#[tauri::command]
+async fn ytdlp_install(app: AppHandle) -> Result<ytdlp::Status, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let y = app.state::<ytdlp::YtDlp>();
+        y.ensure_installed()?;
+        y.ensure_js_runtime()?;
+        Ok(y.status())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn lyrics_get(title: String, artist: String, album: String, duration: f64) -> Result<lyrics::Lyrics, String> {
+    lyrics::fetch(&title, &artist, &album, duration).await
+}
+
 // ---------------------------------------------------------------------------
 // System integration
 // ---------------------------------------------------------------------------
@@ -219,6 +410,22 @@ pub fn run() {
             app.manage(Player::spawn(handle.clone()));
             app.manage(LibraryState::load(&handle));
             app.manage(CloseToTray(AtomicBool::new(true)));
+            app.manage(yt::YtClient::new());
+            let data_dir = handle.path().app_data_dir().unwrap_or_else(|_| std::env::temp_dir().join("claudewaves"));
+            let cache_dir = handle.path().app_cache_dir().unwrap_or_else(|_| data_dir.clone()).join("audio");
+            app.manage(ytdlp::YtDlp::new(data_dir));
+            app.manage(Streaming { cache_dir, current: Mutex::new(None), generation: AtomicU64::new(0) });
+            // Fetch or refresh yt-dlp in the background so the first song starts quickly.
+            let h2 = handle.clone();
+            std::thread::spawn(move || {
+                let y = h2.state::<ytdlp::YtDlp>();
+                if y.ensure_installed().is_ok() {
+                    y.maybe_update();
+                }
+                if let Err(e) = y.ensure_js_runtime() {
+                    log::warn!("{e}");
+                }
+            });
 
             #[cfg(windows)]
             let hwnd = app
@@ -266,6 +473,16 @@ pub fn run() {
             media_stopped,
             set_close_to_tray,
             quit_app,
+            yt_home,
+            yt_search,
+            yt_suggest,
+            yt_browse,
+            yt_next,
+            yt_region,
+            yt_play,
+            ytdlp_status,
+            ytdlp_install,
+            lyrics_get,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClaudeWaves");

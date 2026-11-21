@@ -1,12 +1,29 @@
 # ClaudeWaves Desktop (Windows)
 
-ClaudeWaves for Windows: a local music player built with Tauri 2, React and the
-[`@zakisheriff/liquid-glass`](https://github.com/zakisheriff/Liquid-Glass) components.
+ClaudeWaves for Windows: a YouTube Music and local music player built with Tauri 2,
+React and the [`@zakisheriff/liquid-glass`](https://github.com/zakisheriff/Liquid-Glass)
+components.
 
-Version 0.1 plays your own files. YouTube Music and WASAPI Exclusive (bit-perfect)
-output are planned for later versions.
+## YouTube Music (0.2)
 
-## What works in 0.1
+- Home feed with mood chips, Explore and Charts, from the same InnerTube API the
+  music.youtube.com web client uses (`src-tauri/src/yt.rs`). Content region is set in
+  Settings.
+- Search with suggestions and filters (songs, videos, albums, artists, playlists).
+- Artist, album and playlist pages; Play, Shuffle and Radio.
+- Playing a single song fills the queue with its radio, and the queue keeps extending
+  with radio when it runs out.
+- Synced lyrics from [LRCLIB](https://lrclib.net), with tap-to-seek.
+- Audio streams are found by [yt-dlp](https://github.com/yt-dlp/yt-dlp). On first
+  start the app downloads the official yt-dlp release and Deno (the JavaScript runtime
+  yt-dlp uses for YouTube) into its data folder and lets yt-dlp update itself every few
+  days. Streams are saved to the cache folder while they play (2 GB limit, oldest first),
+  so a song played again starts from disk.
+
+ClaudeWaves is not affiliated with YouTube or Google. Using it may be against the
+YouTube Terms of Service; that is your call.
+
+## Local files
 
 - Library from one or more folders: FLAC, MP3, WAV, OGG Vorbis, M4A (AAC, ALAC), AIFF.
   Tags and embedded covers are read with lofty; a `cover.jpg` or `folder.jpg` next to
@@ -51,6 +68,12 @@ installers are attached to the workflow run as the `ClaudeWaves-Windows` artifac
 | `src-tauri/src/audio.rs` | Playback engine: decode, resample, ring buffer, output stream |
 | `src-tauri/src/library.rs` | Folder scan, tag and cover reading, library cache |
 | `src-tauri/src/media.rs` | Windows media controls (SMTC) |
+| `src-tauri/src/yt.rs` | YouTube Music pages, search, radio |
+| `src-tauri/src/ytdlp.rs` | yt-dlp and Deno download, stream lookup |
+| `src-tauri/src/stream.rs` | Progressive download into the cache, growing-file reader |
+| `src-tauri/src/lyrics.rs` | LRCLIB lyrics |
+| `src/yt.tsx` | YouTube Music screens |
+| `src/lyrics.tsx` | Synced lyrics panel |
 | `src-tauri/src/lib.rs` | Tauri commands, tray, window handling |
 | `src/App.tsx` | Views and layout |
 | `src/player.ts` | Queue, shuffle, repeat, media key handling |
@@ -64,4 +87,6 @@ cargo test
 ```
 
 The tests decode generated WAV files to check sample counts, 44.1 kHz to 48 kHz
-resampling, seeking, and tag fallback for untagged files.
+resampling, seeking, and tag fallback for untagged files; they also cover the YouTube
+Music item parser, the growing-file reader and title cleanup for lyrics lookups.
+`cargo test -- --ignored live` calls music.youtube.com and prints what it parses.

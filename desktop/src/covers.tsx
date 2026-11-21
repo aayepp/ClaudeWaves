@@ -6,6 +6,7 @@ import { placeholderArt } from './data';
 const cache = new Map<string, Promise<string | null>>();
 
 export function coverFor(t: Track | null | undefined): Promise<string | null> {
+  if (t?.thumbnail) return Promise.resolve(t.thumbnail);
   if (!t || !t.hasCover) return Promise.resolve(null);
   let p = cache.get(t.path);
   if (!p) {
@@ -24,7 +25,7 @@ export function useCover(t: Track | null | undefined, enabled = true): string | 
     return () => {
       alive = false;
     };
-  }, [t?.path, t?.hasCover, enabled]);
+  }, [t?.path, t?.hasCover, t?.thumbnail, enabled]);
   return url;
 }
 

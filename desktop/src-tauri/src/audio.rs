@@ -22,7 +22,7 @@ use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error as SymError;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSource, MediaSourceStream};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
@@ -32,6 +32,10 @@ const RESAMPLE_CHUNK: usize = 1024;
 
 pub enum Cmd {
     Load { path: String, autoplay: bool },
+    /// A stream that is still downloading. `key` identifies it to the UI
+    /// (for example `yt:VIDEO_ID`); `duration` fills in when the container
+    /// does not state its length.
+    LoadStream { key: String, reader: Box<dyn MediaSource>, ext: String, duration: Option<f64>, autoplay: bool },
     Play,
     Pause,
     Seek(f64),
@@ -227,9 +231,21 @@ struct Source {
 impl Source {
     fn open(path: &str, dst_rate: u32) -> Result<Self, String> {
         let file = File::open(path).map_err(|e| format!("Cannot open file: {e}"))?;
-        let mss = MediaSourceStream::new(Box::new(file), Default::default());
+        let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+        Self::open_source(path, Box::new(file), &ext, None, dst_rate)
+    }
+
+    fn open_source(
+        key: &str,
+        source: Box<dyn MediaSource>,
+        ext: &str,
+        duration_hint: Option<f64>,
+        dst_rate: u32,
+    ) -> Result<Self, String> {
+        let path = key;
+        let mss = MediaSourceStream::new(source, Default::default());
         let mut hint = Hint::new();
-        if let Some(ext) = Path::new(path).extension().and_then(|e| e.to_str()) {
+        if !ext.is_empty() {
             hint.with_extension(ext);
         }
         let probed = symphonia::default::get_probe()
@@ -250,7 +266,7 @@ impl Source {
                 t.seconds as f64 + t.frac
             }
             (Some(n), None) => n as f64 / src_rate as f64,
-            _ => 0.0,
+            _ => duration_hint.unwrap_or(0.0),
         };
         let decoder = symphonia::default::get_codecs()
             .make(&params, &DecoderOptions::default())
@@ -502,6 +518,23 @@ impl Engine {
                     Err(e) => {
                         self.source = None;
                         let _ = self.app.emit("player://error", format!("{e} ({path})"));
+                    }
+                }
+                self.emit_state();
+            }
+            Cmd::LoadStream { key, reader, ext, duration, autoplay } => {
+                self.shared.playing.store(false, Ordering::SeqCst);
+                let rate = self.output.as_ref().map(|o| o.rate).unwrap_or(48_000);
+                match Source::open_source(&key, reader, &ext, duration, rate) {
+                    Ok(src) => {
+                        self.source = Some(src);
+                        self.flush_ring();
+                        self.update_output_info();
+                        self.shared.playing.store(autoplay, Ordering::SeqCst);
+                    }
+                    Err(e) => {
+                        self.source = None;
+                        let _ = self.app.emit("player://error", e);
                     }
                 }
                 self.emit_state();

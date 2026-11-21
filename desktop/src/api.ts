@@ -6,7 +6,13 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { demoTracks } from './data';
 
 export interface Track {
+  /** File path for local files, `yt:VIDEO_ID` for YouTube Music. */
   path: string;
+  source?: 'local' | 'yt';
+  videoId?: string;
+  thumbnail?: string | null;
+  artistId?: string | null;
+  albumId?: string | null;
   title: string;
   artist: string;
   album: string;
@@ -42,6 +48,96 @@ export interface OutputInfo {
   sourceRate: number;
   resampling: boolean;
   mode: string;
+}
+
+export interface YtRef {
+  name: string;
+  id: string | null;
+}
+
+export interface YtItem {
+  kind: 'song' | 'video' | 'album' | 'artist' | 'playlist' | 'podcast' | 'episode' | string;
+  videoId: string | null;
+  browseId: string | null;
+  playlistId: string | null;
+  title: string;
+  subtitle: string;
+  artists: YtRef[];
+  album: YtRef | null;
+  duration: number | null;
+  thumbnail: string | null;
+  explicit: boolean;
+}
+
+export interface YtShelf {
+  title: string;
+  more: string | null;
+  items: YtItem[];
+}
+
+export interface YtHeader {
+  title: string;
+  subtitle: string;
+  secondSubtitle: string;
+  description: string;
+  thumbnail: string | null;
+  artists: YtRef[];
+  playPlaylistId: string | null;
+}
+
+export interface YtPage {
+  header: YtHeader | null;
+  shelves: YtShelf[];
+  chips: Array<{ title: string; browseId: string | null; params: string | null }>;
+}
+
+export interface Lyrics {
+  synced: string | null;
+  plain: string | null;
+  instrumental: boolean;
+}
+
+export interface StreamInfo {
+  key: string;
+  codec: string;
+  bitrate: number | null;
+  sampleRate: number | null;
+}
+
+export interface YtDlpStatus {
+  installed: boolean;
+  version: string | null;
+  path: string;
+  jsRuntime: boolean;
+}
+
+export const isPlayable = (i: YtItem) => !!i.videoId && (i.kind === 'song' || i.kind === 'video' || i.kind === 'episode');
+
+/** A YouTube Music item as a queue entry. */
+export function ytTrack(i: YtItem, fallback?: { album?: string; albumId?: string | null; artist?: string; thumbnail?: string | null }): Track {
+  const artist = i.artists.map((a) => a.name).join(', ') || fallback?.artist || i.subtitle || 'YouTube Music';
+  return {
+    path: `yt:${i.videoId}`,
+    source: 'yt',
+    videoId: i.videoId ?? undefined,
+    thumbnail: i.thumbnail ?? fallback?.thumbnail ?? null,
+    artistId: i.artists[0]?.id ?? null,
+    albumId: i.album?.id ?? fallback?.albumId ?? null,
+    title: i.title,
+    artist,
+    album: i.album?.name ?? fallback?.album ?? '',
+    albumArtist: '',
+    duration: i.duration ?? 0,
+    trackNo: null,
+    discNo: null,
+    year: null,
+    format: i.kind === 'video' ? 'Video' : 'YouTube Music',
+    sampleRate: null,
+    bitDepth: null,
+    bitrate: null,
+    hasCover: false,
+    added: 0,
+  };
 }
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -116,9 +212,71 @@ async function demoInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
       return ['Speakers (Demo)', 'USB DAC (Demo)'] as T;
     case 'track_cover':
       return null as T;
+    case 'yt_home':
+    case 'yt_search':
+      return demoPage() as T;
+    case 'yt_browse':
+      return demoPage(true) as T;
+    case 'yt_next':
+      return demoItems().slice(1) as T;
+    case 'yt_suggest':
+      return ['lumen coast', 'lumen coast midnight tide', 'lumen coast live'] as T;
+    case 'yt_play': {
+      const t = demoTracks[0];
+      demo.state = { path: `yt:${args.videoId}`, playing: true, position: 0, duration: Number(args.duration) || t.duration };
+      demo.emit('player://state', { ...demo.state });
+      demo.emit('player://stream', { key: demo.state.path, codec: 'AAC', bitrate: 256, sampleRate: 44100 });
+      demo.tick();
+      return undefined as T;
+    }
+    case 'lyrics_get':
+      return { synced: null, plain: 'Lyrics show here in the desktop app.', instrumental: false } as T;
+    case 'ytdlp_status':
+      return { installed: false, version: null, path: '', jsRuntime: false } as T;
     default:
       return undefined as T;
   }
+}
+
+function demoItems(): YtItem[] {
+  return demoTracks.map((t, i) => ({
+    kind: 'song',
+    videoId: `demo${i}`,
+    browseId: null,
+    playlistId: null,
+    title: t.title,
+    subtitle: `${t.artist} • ${t.album}`,
+    artists: [{ name: t.artist, id: 'demo-artist' }],
+    album: { name: t.album, id: 'demo-album' },
+    duration: t.duration,
+    thumbnail: null,
+    explicit: false,
+  }));
+}
+
+function demoPage(withHeader = false): YtPage {
+  const songs = demoItems();
+  const albums: YtItem[] = [...new Set(demoTracks.map((t) => t.album))].map((a) => ({
+    ...songs.find((s) => s.album?.name === a)!,
+    kind: 'album',
+    videoId: null,
+    browseId: 'demo-album',
+    title: a,
+    subtitle: `Album • ${demoTracks.find((t) => t.album === a)!.artist}`,
+  }));
+  return {
+    header: withHeader
+      ? { title: 'Harbor Lights', subtitle: 'Album • 2024', secondSubtitle: '10 songs • 40 minutes', description: '', thumbnail: null, artists: [{ name: 'Lumen Coast', id: null }], playPlaylistId: null }
+      : null,
+    shelves: withHeader
+      ? [{ title: '', more: null, items: songs }]
+      : [
+          { title: 'Quick picks', more: null, items: songs },
+          { title: 'Albums for you', more: null, items: albums },
+          { title: 'Trending', more: null, items: [...songs].reverse().map((s) => ({ ...s, kind: 'video' })) },
+        ],
+    chips: ['Energize', 'Relax', 'Workout', 'Feel good', 'Focus', 'Sleep'].map((title) => ({ title, browseId: 'FEmusic_home', params: title })),
+  };
 }
 
 function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -166,6 +324,17 @@ export const api = {
   outputDevices: () => call<string[]>('output_devices'),
   setOutputDevice: (name: string | null) => call<void>('set_output_device', { name }),
 
+  ytHome: (params?: string | null) => call<YtPage>('yt_home', { params: params ?? null }),
+  ytSearch: (query: string, filter?: string | null) => call<YtPage>('yt_search', { query, filter: filter ?? null }),
+  ytSuggest: (query: string) => call<string[]>('yt_suggest', { query }),
+  ytBrowse: (browseId: string, params?: string | null) => call<YtPage>('yt_browse', { browseId, params: params ?? null }),
+  ytNext: (videoId: string, playlistId?: string | null) => call<YtItem[]>('yt_next', { videoId, playlistId: playlistId ?? null }),
+  ytPlay: (videoId: string, duration: number | null, autoplay = true) => call<void>('yt_play', { videoId, duration, autoplay }),
+  ytRegion: (hl: string, gl: string) => call<void>('yt_region', { hl, gl }),
+  ytdlpStatus: () => call<YtDlpStatus>('ytdlp_status'),
+  ytdlpInstall: () => call<YtDlpStatus>('ytdlp_install'),
+  lyrics: (t: Track) => call<Lyrics>('lyrics_get', { title: t.title, artist: t.artist, album: t.album, duration: t.duration }),
+
   nowPlaying: (t: Track) =>
     call<void>('media_now_playing', { track: { title: t.title, artist: t.artist, album: t.album, duration: t.duration } }),
   mediaPlayback: (playing: boolean, position: number) => call<void>('media_playback', { playing, position }),
@@ -203,6 +372,7 @@ export const fmt = (t: number) => {
 export const kHz = (hz: number) => `${+(hz / 1000).toFixed(1)}`;
 
 export function qualityLabel(t: Track): string {
+  if (t.source === 'yt') return t.format;
   if (t.bitDepth && t.sampleRate) return `${t.format} ${t.bitDepth}/${kHz(t.sampleRate)}`;
   if (t.bitrate) return `${t.format} ${t.bitrate} kbps`;
   return t.format;

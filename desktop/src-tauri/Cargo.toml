@@ -1,6 +1,6 @@
 [package]
 name = "claudewaves-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "ClaudeWaves for Windows"
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -28,6 +28,11 @@ walkdir = "2"
 base64 = "0.22"
 souvlaki = { version = "0.8", default-features = false, features = ["use_zbus"] }
 log = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "blocking"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [profile.release]
 codegen-units = 1

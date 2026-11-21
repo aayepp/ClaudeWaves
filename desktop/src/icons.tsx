@@ -53,3 +53,8 @@ export const TrashIcon = () => <S size={16}><path d="M4 7h16M10 11v6M14 11v6M6 7
 export const RefreshIcon = () => <S size={16}><path d="M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5" /></S>;
 export const RepeatOneIcon = () => <S size={17}><path d="M17 2l4 4-4 4M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 01-3 3H3" /><path d="M11 10h1.5v5" /></S>;
 export const AlertIcon = () => <S size={16}><circle cx="12" cy="12" r="9" /><path d="M12 7v6M12 16.5v.5" /></S>;
+export const ChartIcon = () => <S><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></S>;
+export const QueueNextIcon = () => <S size={16}><path d="M3 6h12M3 12h12M3 18h7M17 14l4 4-4 4" /></S>;
+export const ArtistIcon = () => <S size={16}><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" /></S>;
+export const RadioIcon = () => <S size={16}><circle cx="12" cy="12" r="2" /><path d="M16.2 7.8a6 6 0 010 8.4M7.8 16.2a6 6 0 010-8.4M19.1 4.9a10 10 0 010 14.2M4.9 19.1a10 10 0 010-14.2" /></S>;
+export const SpinnerIcon = () => <svg className="spin" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true"><path d="M21 12a9 9 0 11-6.2-8.6" /></svg>;

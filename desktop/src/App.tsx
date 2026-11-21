@@ -10,29 +10,15 @@ import {
   GlassSwitch,
 } from '@zakisheriff/liquid-glass';
 import * as I from './icons';
-import { albumKey, api, fmt, isHiRes, isTauri, kHz, on, pickFolder, qualityLabel, windowAction, type Library, type Track } from './api';
+import { albumKey, api, fmt, isTauri, kHz, on, pickFolder, qualityLabel, windowAction, type Library, type YtDlpStatus } from './api';
 import { Art, artBackground, useCover } from './covers';
 import { usePlayer, type Player } from './player';
+import { AlbumView, AlbumsView, EmptyLibrary, FoldersView, LocalSearch, SongsView, type Album } from './local';
+import { YtBrowse, YtHome, YtSearch, type Route } from './yt';
+import { LyricsView } from './lyrics';
 
 type Theme = 'system' | 'light' | 'dark';
-type View = 'home' | 'songs' | 'albums' | 'album' | 'folders' | 'youtube';
 const ACCENT = '#7C4DFF';
-
-interface Album {
-  key: string;
-  title: string;
-  artist: string;
-  year: number | null;
-  tracks: Track[];
-}
-
-const NAV: Array<{ key: View; label: string; icon: JSX.Element }> = [
-  { key: 'home', label: 'Home', icon: <I.HomeIcon /> },
-  { key: 'songs', label: 'Songs', icon: <I.SongsIcon /> },
-  { key: 'albums', label: 'Albums', icon: <I.AlbumIcon /> },
-  { key: 'folders', label: 'Folders', icon: <I.FolderIcon /> },
-  { key: 'youtube', label: 'YouTube Music', icon: <I.YouTubeIcon /> },
-];
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -66,10 +52,37 @@ function useResolvedTheme(theme: Theme): 'light' | 'dark' {
   return theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
 }
 
-function greeting() {
-  const h = new Date().getHours();
-  return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+/** Back / forward history of screens, like a browser. */
+function useHistory() {
+  const [stack, setStack] = useState<Route[]>([{ name: 'home' }]);
+  const [at, setAt] = useState(0);
+  const go = useCallback(
+    (r: Route) => {
+      setStack((s) => [...s.slice(0, at + 1), r]);
+      setAt((a) => a + 1);
+    },
+    [at],
+  );
+  return {
+    route: stack[at],
+    go,
+    back: () => setAt((a) => Math.max(0, a - 1)),
+    forward: () => setAt((a) => Math.min(stack.length - 1, a + 1)),
+    canBack: at > 0,
+    canForward: at < stack.length - 1,
+  };
 }
+
+const NAV: Array<{ route: Route; label: string; icon: JSX.Element; match: Route['name'][] }> = [
+  { route: { name: 'home' }, label: 'Home', icon: <I.HomeIcon />, match: ['home'] },
+  { route: { name: 'browse', id: 'FEmusic_explore' }, label: 'Explore', icon: <I.ExploreIcon />, match: [] },
+  { route: { name: 'browse', id: 'FEmusic_charts' }, label: 'Charts', icon: <I.ChartIcon />, match: [] },
+];
+const LIB_NAV: Array<{ route: Route; label: string; icon: JSX.Element; match: Route['name'][] }> = [
+  { route: { name: 'songs' }, label: 'Songs', icon: <I.SongsIcon />, match: ['songs'] },
+  { route: { name: 'albums' }, label: 'Albums', icon: <I.AlbumIcon />, match: ['albums', 'album'] },
+  { route: { name: 'folders' }, label: 'Folders', icon: <I.FolderIcon />, match: ['folders'] },
+];
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -78,14 +91,11 @@ export default function App() {
   });
   const resolved = useResolvedTheme(theme);
   const [library, setLibrary] = useState<Library>({ folders: [], tracks: [] });
-  const [loaded, setLoaded] = useState(false);
   const [scanning, setScanning] = useState<number | null>(null);
-  const [view, setView] = useState<View>('home');
-  const [openAlbum, setOpenAlbum] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [closeToTray, setCloseToTray] = useState(() => load('cw.tray', true));
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [aside, setAside] = useState(() => load('cw.aside', 0));
+  const nav = useHistory();
   const mainRef = useRef<HTMLElement>(null);
 
   const byPath = useMemo(() => new Map(library.tracks.map((t) => [t.path, t])), [library.tracks]);
@@ -106,18 +116,16 @@ export default function App() {
   }, [library.tracks]);
 
   useEffect(() => {
-    api.library().then((lib) => {
-      setLibrary(lib);
-      setLoaded(true);
-    });
+    api.library().then(setLibrary);
     return on<number>('library://progress', (n) => setScanning(n));
   }, []);
-
   useEffect(() => store('cw.theme', theme), [theme]);
+  useEffect(() => store('cw.aside', aside), [aside]);
   useEffect(() => {
     store('cw.tray', closeToTray);
     api.setCloseToTray(closeToTray);
   }, [closeToTray]);
+  useEffect(() => mainRef.current?.scrollTo({ top: 0 }), [nav.route]);
 
   const runScan = useCallback(async (job: () => Promise<Library>) => {
     setScanning(0);
@@ -130,53 +138,63 @@ export default function App() {
 
   const addFolder = useCallback(async () => {
     const folder = await pickFolder();
-    if (folder) {
-      setView('folders');
-      await runScan(() => api.addFolder(folder));
-    }
+    if (folder) await runScan(() => api.addFolder(folder));
   }, [runScan]);
 
-  // Keyboard: Space play/pause, Ctrl+K search, Ctrl+Left/Right previous/next.
+  // Keyboard: Space play/pause, Ctrl+K search, Ctrl+Left/Right previous/next, Alt+Left back.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = (e.target as HTMLElement)?.closest('input, textarea, [contenteditable="true"]');
+      const target = e.target as HTMLElement | null;
+      const typing = target?.closest('input, textarea, [contenteditable="true"]');
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        searchRef.current?.focus();
+        document.querySelector<HTMLInputElement>('.search input')?.focus();
       } else if (typing) {
         return;
-      } else if (e.code === 'Space' && !(e.target as HTMLElement)?.closest('button, [role="slider"]')) {
+      } else if (e.code === 'Space' && !target?.closest('button, [role="slider"]')) {
         e.preventDefault();
         player.toggle();
       } else if (e.ctrlKey && e.key === 'ArrowRight') {
         player.next();
       } else if (e.ctrlKey && e.key === 'ArrowLeft') {
         player.previous();
+      } else if (e.altKey && e.key === 'ArrowLeft') {
+        nav.back();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [player]);
-
-  const go = (v: View) => {
-    setView(v);
-    setQuery('');
-    mainRef.current?.scrollTo({ top: 0 });
-  };
-  const showAlbum = (key: string) => {
-    setOpenAlbum(key);
-    go('album');
-  };
-
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return null;
-    return library.tracks.filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q));
-  }, [query, library.tracks]);
+  }, [player, nav]);
 
   const nowCover = useCover(player.current);
-  const album = albums.find((a) => a.key === openAlbum) ?? null;
-  const empty = loaded && library.tracks.length === 0;
+  const r = nav.route;
+  const isActive = (n: (typeof NAV)[number]) =>
+    n.match.includes(r.name) || (n.route.name === 'browse' && r.name === 'browse' && (n.route as { id: string }).id === r.id);
+
+  let content: JSX.Element;
+  if (r.name === 'home') content = <YtHome player={player} go={nav.go} />;
+  else if (r.name === 'search') content = <SearchScreen q={r.q} library={library} player={player} go={nav.go} />;
+  else if (r.name === 'browse') content = <YtBrowse key={r.id} id={r.id} params={r.params} player={player} go={nav.go} />;
+  else if (r.name === 'folders' || library.tracks.length === 0)
+    content =
+      r.name === 'folders' ? (
+        <FoldersView
+          folders={library.folders}
+          count={library.tracks.length}
+          scanning={scanning}
+          onAdd={addFolder}
+          onRemove={(f) => runScan(() => api.removeFolder(f))}
+          onRescan={() => runScan(api.rescan)}
+        />
+      ) : (
+        <EmptyLibrary onAdd={addFolder} scanning={scanning} />
+      );
+  else if (r.name === 'songs') content = <SongsView tracks={library.tracks} player={player} />;
+  else if (r.name === 'albums') content = <AlbumsView albums={albums} onAlbum={(key) => nav.go({ name: 'album', key })} />;
+  else {
+    const album = albums.find((a) => a.key === r.key);
+    content = album ? <AlbumView album={album} player={player} onBack={() => nav.go({ name: 'albums' })} /> : <p className="row-sub">Album not found.</p>;
+  }
 
   return (
     <div className="app" data-resolved={resolved}>
@@ -188,18 +206,11 @@ export default function App() {
           <img className="brand-mark" src="/logo.png" alt="" width={22} height={22} />
           <span data-tauri-drag-region>ClaudeWaves</span>
         </div>
-        <div className="search">
-          <GlassInput
-            ref={searchRef}
-            type="search"
-            placeholder="Search your library   Ctrl+K"
-            aria-label="Search your library"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onClear={() => setQuery('')}
-            tint={ACCENT}
-          />
+        <div className="history">
+          <GlassButton variant="clear" size="sm" icon={<I.BackIcon />} aria-label="Back" onClick={nav.back} disabled={!nav.canBack} />
+          <GlassButton variant="clear" size="sm" icon={<I.ForwardIcon />} aria-label="Forward" onClick={nav.forward} disabled={!nav.canForward} />
         </div>
+        <SearchBox onSearch={(q) => nav.go({ name: 'search', q })} />
         <div className="title-actions">
           <GlassButton
             size="sm"
@@ -219,67 +230,32 @@ export default function App() {
       <div className="body">
         <GlassCard className="sidebar" padding="12px 10px" radius="24px">
           <nav aria-label="Main" className="nav">
-            {NAV.map((n) => {
-              const active = view === n.key || (n.key === 'albums' && view === 'album');
-              return active && !results ? (
-                <GlassButton key={n.key} icon={n.icon} className="nav-item" aria-current="page" onClick={() => go(n.key)}>
-                  {n.label}
-                </GlassButton>
-              ) : (
-                <button key={n.key} className="row nav-plain" onClick={() => go(n.key)}>
-                  {n.icon}
-                  <span>{n.label}</span>
-                </button>
-              );
-            })}
+            {NAV.map((n) => (
+              <NavItem key={n.label} active={isActive(n)} icon={n.icon} label={n.label} onClick={() => nav.go(n.route)} />
+            ))}
+            <div className="divider" />
+            <span className="eyebrow nav-eyebrow">Your library</span>
+            {LIB_NAV.map((n) => (
+              <NavItem key={n.label} active={isActive(n)} icon={n.icon} label={n.label} onClick={() => nav.go(n.route)} />
+            ))}
           </nav>
-          <div className="divider" />
-          <div className="lib-stats">
-            <span className="eyebrow">Library</span>
-            <span className="row-sub">
-              {library.tracks.length} songs · {albums.length} albums
-            </span>
-          </div>
           <div className="spacer" />
           <OutputCard player={player} />
         </GlassCard>
 
         <main className="content" ref={mainRef}>
-          {results ? (
-            <SearchView query={query} results={results} player={player} />
-          ) : empty && view !== 'youtube' ? (
-            <EmptyLibrary onAdd={addFolder} scanning={scanning} />
-          ) : view === 'home' ? (
-            <HomeView library={library} albums={albums} player={player} onAlbum={showAlbum} />
-          ) : view === 'songs' ? (
-            <SongsView tracks={library.tracks} player={player} />
-          ) : view === 'albums' ? (
-            <AlbumsView albums={albums} onAlbum={showAlbum} />
-          ) : view === 'album' && album ? (
-            <AlbumView album={album} player={player} onBack={() => go('albums')} />
-          ) : view === 'folders' ? (
-            <FoldersView
-              folders={library.folders}
-              count={library.tracks.length}
-              scanning={scanning}
-              onAdd={addFolder}
-              onRemove={(f) => runScan(() => api.removeFolder(f))}
-              onRescan={() => runScan(api.rescan)}
-            />
-          ) : (
-            <YouTubeView />
-          )}
+          {content}
           <div className="player-clearance" />
         </main>
 
-        <NowPlayingPanel player={player} cover={nowCover} />
+        <NowPlayingPanel player={player} cover={nowCover} tab={aside} setTab={setAside} go={nav.go} />
         <PlayerBar player={player} resolved={resolved} />
       </div>
 
       {player.error && (
-        <div className="toast glass-toast" role="alert">
+        <div className="toast" role="alert">
           <I.AlertIcon />
-          <span>{player.error}</span>
+          <span title={player.error}>{player.error}</span>
           <GlassButton variant="clear" size="sm" onClick={player.clearError}>Dismiss</GlassButton>
         </div>
       )}
@@ -296,256 +272,108 @@ export default function App() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Views
-// ---------------------------------------------------------------------------
-
-function TrackRow({ t, n, onPlay, active, showAlbum = true }: { t: Track; n?: number; onPlay: () => void; active: boolean; showAlbum?: boolean }) {
-  return (
-    <button className={`track${active ? ' is-playing' : ''}`} onClick={onPlay} aria-current={active ? 'true' : undefined}>
-      {n !== undefined && <span className="track-n">{n}</span>}
-      <Art track={t} size={40} radius={8} />
-      <span className="row-text">
-        <span className="row-title">{t.title}</span>
-        <span className="row-sub">{t.artist}</span>
-      </span>
-      {showAlbum && <span className="row-sub track-album">{t.album}</span>}
-      <span className="track-q">{qualityLabel(t)}</span>
-      <span className="row-sub track-dur">{fmt(t.duration)}</span>
+function NavItem({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
+  return active ? (
+    <GlassButton icon={icon} className="nav-item" aria-current="page" onClick={onClick}>
+      {label}
+    </GlassButton>
+  ) : (
+    <button className="row nav-plain" onClick={onClick}>
+      {icon}
+      <span>{label}</span>
     </button>
   );
 }
 
-function HomeView({ library, albums, player, onAlbum }: { library: Library; albums: Album[]; player: Player; onAlbum: (k: string) => void }) {
-  const recent = useMemo(() => [...library.tracks].sort((a, b) => b.added - a.added).slice(0, 6), [library.tracks]);
-  const hires = useMemo(() => library.tracks.filter(isHiRes), [library.tracks]);
-  const recentAlbums = useMemo(
-    () => [...albums].sort((a, b) => Math.max(...b.tracks.map((t) => t.added)) - Math.max(...a.tracks.map((t) => t.added))).slice(0, 10),
-    [albums],
-  );
-  const now = new Date();
-  return (
-    <>
-      <div className="content-head">
-        <div>
-          <div className="date">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-          <h1>{greeting()}</h1>
-        </div>
-        <GlassButton variant="tinted" tint={ACCENT} icon={<I.ShuffleIcon />} onClick={() => player.playList(library.tracks, Math.floor(Math.random() * library.tracks.length))}>
-          Shuffle all
-        </GlassButton>
-      </div>
+/** Search field with YouTube Music suggestions. */
+function SearchBox({ onSearch }: { onSearch: (q: string) => void }) {
+  const [q, setQ] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState(-1);
 
-      <section aria-labelledby="recent">
-        <h2 id="recent">Recently added</h2>
-        <div className="quick-grid">
-          {recent.map((t, i) => (
-            <button key={t.path} className="quick" onClick={() => player.playList(recent, i)}>
-              <Art track={t} size={52} radius={11} />
-              <span className="row-text">
-                <span className="row-title">{t.title}</span>
-                <span className="row-sub">{t.artist}</span>
-              </span>
-              <span className="row-sub">{fmt(t.duration)}</span>
-            </button>
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) return setSuggestions([]);
+    const id = setTimeout(() => api.ytSuggest(term).then(setSuggestions).catch(() => setSuggestions([])), 180);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  const submit = (term: string) => {
+    const t = term.trim();
+    if (!t) return;
+    setQ(t);
+    setOpen(false);
+    setSel(-1);
+    onSearch(t);
+  };
+
+  return (
+    <div
+      className="search"
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setOpen(true);
+          setSel((s) => Math.min(suggestions.length - 1, s + 1));
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSel((s) => Math.max(-1, s - 1));
+        } else if (e.key === 'Enter') {
+          submit(sel >= 0 ? suggestions[sel] : q);
+        } else if (e.key === 'Escape') {
+          setOpen(false);
+        }
+      }}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <GlassInput
+        type="search"
+        placeholder="Search songs, artists, albums   Ctrl+K"
+        aria-label="Search YouTube Music"
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+          setSel(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onClear={() => setQ('')}
+        tint={ACCENT}
+      />
+      {open && suggestions.length > 0 && (
+        <ul className="suggest glass-pop" role="listbox" aria-label="Suggestions">
+          {suggestions.map((s, i) => (
+            <li key={s} role="option" aria-selected={i === sel}>
+              <button className={`suggest-item${i === sel ? ' is-on' : ''}`} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => submit(s)}>
+                <I.ExploreIcon />
+                <span>{s}</span>
+              </button>
+            </li>
           ))}
-        </div>
-      </section>
-
-      <section aria-labelledby="albums-h">
-        <h2 id="albums-h">Albums</h2>
-        <AlbumGrid albums={recentAlbums} onAlbum={onAlbum} />
-      </section>
-
-      {hires.length > 0 && (
-        <section aria-labelledby="hires">
-          <div className="section-row">
-            <h2 id="hires">Hi-Res in your library</h2>
-            <GlassButton variant="clear" size="sm" onClick={() => player.playList(hires)}>Play all</GlassButton>
-          </div>
-          <div className="list">
-            {hires.slice(0, 8).map((t, i) => (
-              <TrackRow key={t.path} t={t} active={player.state.path === t.path} onPlay={() => player.playList(hires, i)} />
-            ))}
-          </div>
-        </section>
+        </ul>
       )}
-    </>
-  );
-}
-
-function SongsView({ tracks, player }: { tracks: Track[]; player: Player }) {
-  const [sort, setSort] = useState(0);
-  const sorted = useMemo(() => {
-    const a = [...tracks];
-    if (sort === 0) a.sort((x, y) => x.title.localeCompare(y.title));
-    else if (sort === 1) a.sort((x, y) => x.artist.localeCompare(y.artist) || x.album.localeCompare(y.album) || (x.trackNo ?? 0) - (y.trackNo ?? 0));
-    else a.sort((x, y) => y.added - x.added);
-    return a;
-  }, [tracks, sort]);
-  return (
-    <>
-      <div className="content-head">
-        <div>
-          <div className="date">{tracks.length} songs</div>
-          <h1>Songs</h1>
-        </div>
-        <GlassSegmented aria-label="Sort" options={['Title', 'Artist', 'Recent']} value={sort} onChange={setSort} />
-      </div>
-      <div className="list">
-        {sorted.map((t, i) => (
-          <TrackRow key={t.path} t={t} active={player.state.path === t.path} onPlay={() => player.playList(sorted, i)} />
-        ))}
-      </div>
-    </>
-  );
-}
-
-function AlbumGrid({ albums, onAlbum }: { albums: Album[]; onAlbum: (k: string) => void }) {
-  return (
-    <div className="mix-grid">
-      {albums.map((a) => (
-        <button key={a.key} className="mix" onClick={() => onAlbum(a.key)}>
-          <Art track={a.tracks.find((t) => t.hasCover) ?? a.tracks[0]} className="mix-art" radius={18} />
-          <span className="row-title">{a.title}</span>
-          <span className="row-sub">{a.artist}</span>
-        </button>
-      ))}
     </div>
   );
 }
 
-function AlbumsView({ albums, onAlbum }: { albums: Album[]; onAlbum: (k: string) => void }) {
+/** YouTube Music results, plus matching songs from the local library on top. */
+function SearchScreen({ q, library, player, go }: { q: string; library: Library; player: Player; go: (r: Route) => void }) {
+  const local = useMemo(() => {
+    const term = q.toLowerCase();
+    return library.tracks.filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(term));
+  }, [q, library.tracks]);
   return (
     <>
-      <div className="content-head">
-        <div>
-          <div className="date">{albums.length} albums</div>
-          <h1>Albums</h1>
-        </div>
-      </div>
-      <AlbumGrid albums={albums} onAlbum={onAlbum} />
-    </>
-  );
-}
-
-function AlbumView({ album, player, onBack }: { album: Album; player: Player; onBack: () => void }) {
-  const tracks = useMemo(
-    () => [...album.tracks].sort((a, b) => (a.discNo ?? 1) - (b.discNo ?? 1) || (a.trackNo ?? 0) - (b.trackNo ?? 0)),
-    [album],
-  );
-  const total = tracks.reduce((s, t) => s + t.duration, 0);
-  return (
-    <>
-      <GlassButton variant="clear" size="sm" icon={<I.BackIcon />} onClick={onBack} className="back">Albums</GlassButton>
-      <div className="album-head">
-        <Art track={tracks.find((t) => t.hasCover) ?? tracks[0]} className="album-art" radius={20} />
-        <div className="album-meta">
-          <div className="date">Album{album.year ? ` · ${album.year}` : ''}</div>
-          <h1>{album.title}</h1>
-          <div className="row-sub big">{album.artist} · {tracks.length} songs · {fmt(total)}</div>
-          <div className="album-actions">
-            <GlassButton variant="filled" tint={ACCENT} icon={<I.PlayIcon />} onClick={() => player.playList(tracks)}>Play</GlassButton>
-            <GlassButton icon={<I.ShuffleIcon />} onClick={() => player.playList(tracks, Math.floor(Math.random() * tracks.length))}>Shuffle</GlassButton>
-          </div>
-        </div>
-      </div>
-      <div className="list">
-        {tracks.map((t, i) => (
-          <TrackRow key={t.path} t={t} n={t.trackNo ?? i + 1} showAlbum={false} active={player.state.path === t.path} onPlay={() => player.playList(tracks, i)} />
-        ))}
-      </div>
-    </>
-  );
-}
-
-function SearchView({ query, results, player }: { query: string; results: Track[]; player: Player }) {
-  return (
-    <>
-      <div className="content-head">
-        <div>
-          <div className="date">{results.length} results</div>
-          <h1>“{query}”</h1>
-        </div>
-      </div>
-      {results.length === 0 ? (
-        <p className="row-sub">Nothing in your library matches that. Search covers titles, artists and albums.</p>
-      ) : (
-        <div className="list">
-          {results.slice(0, 300).map((t, i) => (
-            <TrackRow key={t.path} t={t} active={player.state.path === t.path} onPlay={() => player.playList(results, i)} />
-          ))}
+      <YtSearch q={q} player={player} go={go} />
+      {local.length > 0 && (
+        <div className="local-results">
+          <LocalSearch query={q} results={local} player={player} />
         </div>
       )}
     </>
-  );
-}
-
-function FoldersView(props: {
-  folders: string[];
-  count: number;
-  scanning: number | null;
-  onAdd: () => void;
-  onRemove: (f: string) => void;
-  onRescan: () => void;
-}) {
-  return (
-    <>
-      <div className="content-head">
-        <div>
-          <div className="date">{props.scanning !== null ? `Scanning… ${props.scanning} files` : `${props.count} songs`}</div>
-          <h1>Folders</h1>
-        </div>
-        <div className="album-actions">
-          <GlassButton icon={<I.RefreshIcon />} onClick={props.onRescan} disabled={props.scanning !== null || !props.folders.length}>Rescan</GlassButton>
-          <GlassButton variant="filled" tint={ACCENT} icon={<I.PlusIcon />} onClick={props.onAdd} disabled={props.scanning !== null || !isTauri}>Add folder</GlassButton>
-        </div>
-      </div>
-      <GlassCard padding="8px" radius="20px" className="folder-card">
-        {props.folders.length === 0 ? (
-          <p className="row-sub pad">No folders yet. Add the folder where you keep your music.</p>
-        ) : (
-          <ul className="folders">
-            {props.folders.map((f) => (
-              <li key={f}>
-                <I.FolderIcon />
-                <span className="row-title folder-path" title={f}>{f}</span>
-                <GlassButton variant="clear" size="sm" destructive icon={<I.TrashIcon />} aria-label={`Remove ${f}`} onClick={() => props.onRemove(f)} disabled={props.scanning !== null} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </GlassCard>
-      <p className="row-sub note">Reads FLAC, MP3, WAV, OGG Vorbis, M4A (AAC and ALAC) and AIFF. Covers come from the file’s tags or a cover.jpg / folder.jpg next to it.</p>
-    </>
-  );
-}
-
-function EmptyLibrary({ onAdd, scanning }: { onAdd: () => void; scanning: number | null }) {
-  return (
-    <div className="empty">
-      <GlassCard padding="32px" radius="28px" className="empty-card">
-        <span className="empty-icon"><I.FolderIcon /></span>
-        <h1>Add your music</h1>
-        <p className="row-sub big">Pick the folder where your songs live. ClaudeWaves reads the tags and covers and keeps the library up to date when you rescan.</p>
-        <GlassButton variant="filled" tint={ACCENT} size="lg" icon={<I.PlusIcon />} onClick={onAdd} disabled={scanning !== null || !isTauri}>
-          {scanning !== null ? `Scanning… ${scanning}` : 'Choose folder'}
-        </GlassButton>
-        {!isTauri && <p className="row-sub">Folder access needs the desktop app.</p>}
-      </GlassCard>
-    </div>
-  );
-}
-
-function YouTubeView() {
-  return (
-    <div className="empty">
-      <GlassCard padding="32px" radius="28px" className="empty-card">
-        <span className="empty-icon"><I.YouTubeIcon /></span>
-        <h1>YouTube Music</h1>
-        <p className="row-sub big">Streaming from YouTube Music, with Best Part jumps, comes in a later update. This version plays your local files.</p>
-      </GlassCard>
-    </div>
   );
 }
 
@@ -567,54 +395,97 @@ function OutputCard({ player }: { player: Player }) {
   );
 }
 
-function NowPlayingPanel({ player, cover }: { player: Player; cover: string | null }) {
+function streamLabel(player: Player): string | null {
+  const t = player.current;
+  if (!t) return null;
+  if (t.source !== 'yt') return qualityLabel(t);
+  const s = player.stream;
+  if (!s) return null;
+  return [s.codec || 'AAC', s.bitrate ? `${s.bitrate} kbps` : null].filter(Boolean).join(' ');
+}
+
+function NowPlayingPanel({
+  player,
+  cover,
+  tab,
+  setTab,
+  go,
+}: {
+  player: Player;
+  cover: string | null;
+  tab: number;
+  setTab: (n: number) => void;
+  go: (r: Route) => void;
+}) {
   const t = player.current;
   const o = player.output;
+  const label = streamLabel(player);
+  const sourceRate = t?.source === 'yt' ? player.stream?.sampleRate : t?.sampleRate;
   return (
     <GlassCard className="aside" padding="14px" radius="24px">
       <div className="now-art" style={{ background: artBackground(t, cover) }}>
-        {t && (
+        {label && (
           <div className="badges">
-            <span className="badge">{qualityLabel(t)}</span>
-            {isHiRes(t) && <span className="badge">Hi-Res</span>}
+            <span className="badge">{label}</span>
           </div>
         )}
       </div>
       <div className="now-meta">
         <div className="now-title">{t?.title ?? 'Nothing playing'}</div>
-        <div className="row-sub">{t ? `${t.artist} · ${t.album}` : 'Pick a song to start'}</div>
-        {t && o?.sampleRate ? (
+        <div className="row-sub">
+          {t ? (
+            <>
+              {t.artistId ? (
+                <button className="link" onClick={() => go({ name: 'browse', id: t.artistId! })}>{t.artist}</button>
+              ) : (
+                t.artist
+              )}
+              {t.album && (
+                <>
+                  {' · '}
+                  {t.albumId ? <button className="link" onClick={() => go({ name: 'browse', id: t.albumId! })}>{t.album}</button> : t.album}
+                </>
+              )}
+            </>
+          ) : (
+            'Search or pick something from Home'
+          )}
+        </div>
+        {t && o?.sampleRate && sourceRate ? (
           <div className="signal">
-            {t.sampleRate ? `${kHz(t.sampleRate)} kHz` : t.format} → {o.resampling ? `resampled to ${kHz(o.sampleRate)} kHz` : `${kHz(o.sampleRate)} kHz, no resampling`}
+            {kHz(sourceRate)} kHz → {sourceRate !== o.sampleRate ? `resampled to ${kHz(o.sampleRate)} kHz` : `${kHz(o.sampleRate)} kHz, no resampling`}
           </div>
         ) : null}
       </div>
-      <div className="section-head">
-        <span className="eyebrow">Up next</span>
-        <span className="row-sub">{player.upNext.length} songs</span>
-      </div>
-      <ol className="queue">
-        {player.upNext.slice(0, 50).map((u, i) => (
-          <li key={`${u.path}-${i}`}>
-            <button className="row" onClick={() => player.playFromQueue(player.queueStart + i)}>
-              <Art track={u} size={40} radius={9} />
-              <span className="row-text">
-                <span className="row-title">{u.title}</span>
-                <span className="row-sub">{u.artist}</span>
-              </span>
-              <span className="row-sub">{fmt(u.duration)}</span>
-            </button>
-          </li>
-        ))}
-        {player.upNext.length === 0 && <li className="row-sub pad">The queue is empty.</li>}
-      </ol>
+      <GlassSegmented aria-label="Panel" size="sm" options={['Up next', 'Lyrics']} value={tab} onChange={setTab} />
+      {tab === 0 ? (
+        <ol className="queue">
+          {player.upNext.slice(0, 80).map((u, i) => (
+            <li key={`${u.path}-${i}`} className="queue-item">
+              <button className="row" onClick={() => player.playFromQueue(player.queueStart + i)}>
+                <Art track={u} size={40} radius={9} />
+                <span className="row-text">
+                  <span className="row-title">{u.title}</span>
+                  <span className="row-sub">{u.artist}</span>
+                </span>
+                {u.duration ? <span className="row-sub">{fmt(u.duration)}</span> : null}
+              </button>
+              <button className="queue-remove" aria-label={`Remove ${u.title} from queue`} onClick={() => player.removeFromQueue(player.queueStart + i)}>
+                <I.WinClose />
+              </button>
+            </li>
+          ))}
+          {player.upNext.length === 0 && <li className="row-sub pad">The queue is empty. YouTube songs keep playing with radio when it runs out.</li>}
+        </ol>
+      ) : (
+        <LyricsView player={player} />
+      )}
     </GlassCard>
   );
 }
 
 function PlayerBar({ player, resolved }: { player: Player; resolved: 'light' | 'dark' }) {
   const { state, current: t } = player;
-  // While dragging, show the thumb where the finger is; seek after it settles.
   const [drag, setDrag] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const pos = drag ?? state.position;
@@ -627,6 +498,7 @@ function PlayerBar({ player, resolved }: { player: Player; resolved: 'light' | '
     }, 120);
   };
   const duration = state.duration || t?.duration || 0;
+  const label = streamLabel(player);
 
   return (
     <GlassCard className="player" padding="10px 16px 10px 10px" radius="28px">
@@ -634,7 +506,7 @@ function PlayerBar({ player, resolved }: { player: Player; resolved: 'light' | '
         <Art track={t} size={54} radius={12} />
         <span className="row-text">
           <span className="row-title">{t?.title ?? 'Not playing'}</span>
-          <span className="row-sub">{t?.artist ?? '—'}</span>
+          <span className="row-sub">{player.buffering ? 'Loading…' : t?.artist ?? '—'}</span>
         </span>
       </div>
 
@@ -650,7 +522,12 @@ function PlayerBar({ player, resolved }: { player: Player; resolved: 'light' | '
             onClick={player.toggleShuffle}
           />
           <GlassButton variant="clear" icon={<I.PrevIcon />} aria-label="Previous" onClick={player.previous} />
-          <GlassButton size="lg" icon={state.playing ? <I.PauseIcon /> : <I.PlayIcon />} aria-label={state.playing ? 'Pause' : 'Play'} onClick={player.toggle} />
+          <GlassButton
+            size="lg"
+            icon={player.buffering ? <I.SpinnerIcon /> : state.playing ? <I.PauseIcon /> : <I.PlayIcon />}
+            aria-label={player.buffering ? 'Loading' : state.playing ? 'Pause' : 'Play'}
+            onClick={player.toggle}
+          />
           <GlassButton variant="clear" icon={<I.NextIcon />} aria-label="Next" onClick={player.next} />
           <GlassButton
             variant="clear"
@@ -680,7 +557,7 @@ function PlayerBar({ player, resolved }: { player: Player; resolved: 'light' | '
       </div>
 
       <div className="player-right">
-        {t && <span className="chip" style={{ color: "var(--cw-accent-text)", borderColor: "currentColor" }}>{qualityLabel(t)}</span>}
+        {label && <span className="chip" style={{ color: 'var(--cw-accent-text)', borderColor: 'currentColor' }}>{label}</span>}
         <GlassMenu
           aria-label="More"
           size="sm"
@@ -689,6 +566,7 @@ function PlayerBar({ player, resolved }: { player: Player; resolved: 'light' | '
           items={[
             { label: 'Shuffle', icon: <I.ShuffleIcon />, checked: player.shuffle, onSelect: player.toggleShuffle },
             { label: `Repeat: ${player.repeat}`, icon: <I.RepeatIcon />, onSelect: player.cycleRepeat },
+            ...(t?.videoId ? [{ label: 'Start radio', icon: <I.RadioIcon />, onSelect: () => player.playRadio(t) }] : []),
           ]}
         />
         <span className="vol-icon"><I.VolumeIcon /></span>
@@ -699,6 +577,17 @@ function PlayerBar({ player, resolved }: { player: Player; resolved: 'light' | '
     </GlassCard>
   );
 }
+
+const REGIONS: Array<[string, string]> = [
+  ['MY', 'Malaysia'],
+  ['ID', 'Indonesia'],
+  ['SG', 'Singapore'],
+  ['US', 'United States'],
+  ['GB', 'United Kingdom'],
+  ['JP', 'Japan'],
+  ['KR', 'South Korea'],
+  ['IN', 'India'],
+];
 
 function SettingsSheet(props: {
   open: boolean;
@@ -711,13 +600,20 @@ function SettingsSheet(props: {
   const themes: Theme[] = ['system', 'light', 'dark'];
   const [devices, setDevices] = useState<string[]>([]);
   const [device, setDevice] = useState<string | null>(() => load<string | null>('cw.device', null));
+  const [region, setRegion] = useState(() => load('cw.region', 'MY'));
+  const [ytdlp, setYtdlp] = useState<YtDlpStatus | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (props.open) api.outputDevices().then(setDevices);
+    if (!props.open) return;
+    api.outputDevices().then(setDevices);
+    api.ytdlpStatus().then(setYtdlp);
   }, [props.open]);
   useEffect(() => {
     if (device) api.setOutputDevice(device);
-    // Only restore the saved device once at start-up.
+    api.ytRegion('en', region);
+    // Restore saved choices once at start-up.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -725,6 +621,22 @@ function SettingsSheet(props: {
     setDevice(name);
     store('cw.device', name);
     api.setOutputDevice(name);
+  };
+  const pickRegion = (gl: string) => {
+    setRegion(gl);
+    store('cw.region', gl);
+    api.ytRegion('en', gl);
+  };
+  const install = async () => {
+    setInstalling(true);
+    setInstallError(null);
+    try {
+      setYtdlp(await api.ytdlpInstall());
+    } catch (e) {
+      setInstallError(String(e));
+    } finally {
+      setInstalling(false);
+    }
   };
 
   return (
@@ -741,10 +653,41 @@ function SettingsSheet(props: {
           </span>
           <GlassSegmented aria-label="Appearance" size="sm" options={['System', 'Light', 'Dark']} value={themes.indexOf(props.theme)} onChange={(i) => props.setTheme(themes[i])} />
         </div>
+        <div className="setting">
+          <span className="row-text">
+            <span className="row-title">Content region</span>
+            <span className="row-sub">Which country’s YouTube Music home, charts and catalogue to show</span>
+          </span>
+          <select className="select" value={region} onChange={(e) => pickRegion(e.target.value)} aria-label="Content region">
+            {REGIONS.map(([code, name]) => (
+              <option key={code} value={code}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="setting">
+          <span className="row-text">
+            <span className="row-title">Stream helper (yt-dlp)</span>
+            <span className="row-sub">
+              {ytdlp === null
+                ? 'Checking…'
+                : ytdlp.installed && ytdlp.jsRuntime
+                  ? `Installed, version ${ytdlp.version}, with Deno. Updates itself every few days.`
+                  : ytdlp.installed
+                    ? `Version ${ytdlp.version} is installed, but Deno (the JavaScript runtime yt-dlp uses for YouTube) is missing.`
+                    : 'Needed to play YouTube Music. Downloads yt-dlp and Deno from their official GitHub releases (about 60 MB).'}
+              {installError && <span className="error-text"> {installError}</span>}
+            </span>
+          </span>
+          {ytdlp && !(ytdlp.installed && ytdlp.jsRuntime) && (
+            <GlassButton size="sm" variant="filled" tint={ACCENT} onClick={install} disabled={installing || !isTauri}>
+              {installing ? 'Installing…' : 'Install'}
+            </GlassButton>
+          )}
+        </div>
         <div className="setting column">
           <span className="row-text">
             <span className="row-title">Output device</span>
-            <span className="row-sub">Where ClaudeWaves plays. “System default” follows the Windows sound settings.</span>
+            <span className="row-sub">“System default” follows the Windows sound settings.</span>
           </span>
           <div className="device-list" role="radiogroup" aria-label="Output device">
             {[null, ...devices].map((d) => (
@@ -765,7 +708,7 @@ function SettingsSheet(props: {
         <div className="setting">
           <span className="row-text">
             <span className="row-title">Exclusive mode (bit-perfect)</span>
-            <span className="row-sub">WASAPI Exclusive output for USB DACs. Coming in the next update.</span>
+            <span className="row-sub">WASAPI Exclusive output for USB DACs. Coming in a later update.</span>
           </span>
           <GlassSwitch checked={false} disabled tint={ACCENT} aria-label="Exclusive mode" />
         </div>
