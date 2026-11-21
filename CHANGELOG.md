@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.11] - 2026-11-21
+
+### Fixed
+- **Other apps get sound after ClaudeWaves lets go of your USB DAC:** when ClaudeWaves releases the DAC (swiping it away, or turning USB Exclusive off), it now hands the DAC back to Android properly, so TikTok, YouTube and other apps play through your IEM without replugging.
+
 ## [1.0.10] - 2026-11-21
 
 ### Fixed
