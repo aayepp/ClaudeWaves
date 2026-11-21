@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.9] - 2026-11-21
+
+### Changed
+- **Home headline:** now says `Hello, <your name>` from your profile (just `Hello` when no name is set), with your last played track underneath.
+
 ## [1.0.8] - 2026-11-21
 
 ### Added
