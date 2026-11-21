@@ -626,6 +626,9 @@ internal fun MusicPlayer.releaseUsbDacOnTaskRemoved() = onMain {
     stopAndClear(clearSession = false)
     exclusiveUsbOutput.reset()
     runCatching { volumeSessionPrefs().edit().putBoolean(KEY_RESUME_AFTER_DAC_RELEASE, wasPlaying).apply() }
+    // OEM task killers can end the process next; get the evidence onto disk first.
+    com.lastwave.app.diagnostics.AppLog.i("UsbDac", "Released DAC on task removal (wasPlaying=$wasPlaying)")
+    com.lastwave.app.diagnostics.AppLog.flush()
 }
 
 /** Resumes what [releaseUsbDacOnTaskRemoved] stopped once the user is back in the app. */
