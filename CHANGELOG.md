@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.16] - 2026-11-22
+
+### Fixed
+- **Full artwork no longer cropped:** with Full Artwork on, the cover now shows full width at its real square shape and fades into the blurred cover below, instead of being zoomed to fill the screen and cutting off its sides.
+- **No sound from a paused song after allowing your USB DAC:** granting ClaudeWaves access to a USB DAC while a song was paused could make it play while the player still showed pause. A paused song now stays silent until you press play.
+
 ## [1.0.15] - 2026-11-22
 
 ### Changed
