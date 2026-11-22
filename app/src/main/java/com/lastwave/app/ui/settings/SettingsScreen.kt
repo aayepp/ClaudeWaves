@@ -1486,7 +1486,7 @@ fun SettingsScreen(
                         item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionLabel(stringResource(R.string.settings_section_experimental))
-                    SettingsGroup(rowCount = 14) { index, position ->
+                    SettingsGroup(rowCount = 15) { index, position ->
                         when (index) {
                             0 -> SettingsToggleCard(
                                 icon = Icons.Filled.Lyrics,
@@ -1692,6 +1692,21 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setNowPlayingLyricsPreview,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.now_playing_lyrics_preview"),
+                            )
+                            14 -> SettingsToggleCard(
+                                icon = Icons.Filled.TouchApp,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = stringResource(R.string.settings_player_action_dock),
+                                subtitle = if (misc.playerActionDockEnabled) {
+                                    stringResource(R.string.settings_player_action_dock_on)
+                                } else {
+                                    stringResource(R.string.settings_player_action_dock_off)
+                                },
+                                checked = misc.playerActionDockEnabled,
+                                onCheckedChange = viewModel::setPlayerActionDockEnabled,
+                                position = position,
+                                isHighlighted = (highlightedSettingId == "appearance.player_action_dock"),
                             )
                         }
                     }

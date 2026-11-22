@@ -990,6 +990,7 @@ internal fun ExpandedPlayer(
         lyricsProviderStatuses = lyricsProviderStatuses,
         onProbeLyricsProviders = viewModel::probeLyricsProviders,
         wavySeekbarEnabled = settings.wavySeekbarEnabled,
+        playerActionDockEnabled = settings.playerActionDockEnabled,
         rotatingBackgroundEnabled = settings.rotatingBackgroundEnabled,
         lyricsRotatingBackgroundEnabled = settings.lyricsRotatingBackgroundEnabled,
         lyricsOffsetMs = lyricsOffsetMs,

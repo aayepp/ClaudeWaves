@@ -1,10 +1,13 @@
 package com.lastwave.app.ui.update
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +51,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lastwave.app.R
 import com.lastwave.app.data.update.AppUpdateManager
 import com.lastwave.app.data.update.UpdateInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -173,6 +179,22 @@ private fun AppUpdateDialog(
                     )
                 }
 
+                // Hero update banner (16:9 showcase)
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.claudewaves_update_banner),
+                        contentDescription = "ClaudeWaves update preview",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
                 // Release notes card
                 val notesStyle = releaseNotesStyle()
                 val notes = remember(info.releaseNotes, notesStyle) {
@@ -189,7 +211,7 @@ private fun AppUpdateDialog(
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 310.dp)
+                            .heightIn(max = 220.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),

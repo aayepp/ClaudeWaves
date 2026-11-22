@@ -201,6 +201,8 @@ data class MiscSettings(
     val crossfadeSeconds: Int = 5,
     /** Animated wavy seekbar in the player; on by default (off = classic slider). */
     val wavySeekbarEnabled: Boolean = true,
+    /** Unified draggable Liquid Glass action dock on Now Playing; off = classic separate buttons. */
+    val playerActionDockEnabled: Boolean = true,
     val rotatingBackgroundEnabled: Boolean = true,
     /** When true, animates fluid rotating artwork in the lyrics background.
      *  When false (default), uses static blurred artwork background in the lyrics view. */
@@ -482,6 +484,7 @@ class SettingsPreferences @Inject constructor(
         val AUTOPLAY_SIMILAR_ENABLED = booleanPreferencesKey("lw_autoplay_similar_enabled")
         val CROSSFADE_SECONDS = intPreferencesKey("lw_crossfade_seconds")
         val WAVY_SEEKBAR_ENABLED = booleanPreferencesKey("lw_wavy_seekbar_enabled")
+        val PLAYER_ACTION_DOCK_ENABLED = booleanPreferencesKey("lw_player_action_dock_enabled")
         val ROTATING_BACKGROUND_ENABLED = booleanPreferencesKey("lw_rotating_background_enabled")
         val LYRICS_ROTATING_BACKGROUND_ENABLED = booleanPreferencesKey("lw_lyrics_rotating_background_enabled")
         val KEEP_LYRICS_SCREEN_AWAKE = booleanPreferencesKey("lw_keep_lyrics_screen_awake")
@@ -613,6 +616,7 @@ class SettingsPreferences @Inject constructor(
                 autoplaySimilarEnabled = p.readSafely(Keys.AUTOPLAY_SIMILAR_ENABLED) ?: true,
                 crossfadeSeconds = (p.readSafely(Keys.CROSSFADE_SECONDS) ?: 5).coerceIn(1, 12),
                 wavySeekbarEnabled = p.readSafely(Keys.WAVY_SEEKBAR_ENABLED) ?: true,
+                playerActionDockEnabled = p.readSafely(Keys.PLAYER_ACTION_DOCK_ENABLED) ?: true,
                 rotatingBackgroundEnabled = p.readSafely(Keys.ROTATING_BACKGROUND_ENABLED) ?: true,
                 lyricsRotatingBackgroundEnabled = p.readSafely(Keys.LYRICS_ROTATING_BACKGROUND_ENABLED) ?: false,
                 keepLyricsScreenAwake = p.readSafely(Keys.KEEP_LYRICS_SCREEN_AWAKE) ?: false,
@@ -1162,6 +1166,10 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setWavySeekbarEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.WAVY_SEEKBAR_ENABLED] = enabled }
+    }
+
+    suspend fun setPlayerActionDockEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.PLAYER_ACTION_DOCK_ENABLED] = enabled }
     }
 
     suspend fun setRotatingBackgroundEnabled(enabled: Boolean) {

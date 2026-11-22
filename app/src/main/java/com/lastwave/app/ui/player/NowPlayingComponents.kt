@@ -204,7 +204,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.AbsoluteAlignment
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -1501,6 +1500,7 @@ private data class DockActionItem(
     val label: String,
     val showBadgeDot: Boolean,
     val comicAccent: Color,
+    val isHighlighted: Boolean = false,
     val isLoading: Boolean = false,
     val progressPercent: Int = 0,
     val succeeded: Boolean = false,
@@ -1511,6 +1511,7 @@ private data class DockActionItem(
 internal fun SecondaryActionRow(
     hasLyrics: Boolean,
     compact: Boolean = false,
+    useDraggableDock: Boolean = true,
     onShowLyrics: () -> Unit,
     onShowQueue: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1543,6 +1544,7 @@ internal fun SecondaryActionRow(
                     label = if (isVideoActive) "Cover" else "Video",
                     showBadgeDot = isVideoActive,
                     comicAccent = ComicPink,
+                    isHighlighted = isVideoActive,
                     onClick = onToggleVideo,
                 ),
             )
@@ -1554,6 +1556,7 @@ internal fun SecondaryActionRow(
                 label = queueLabel,
                 showBadgeDot = false,
                 comicAccent = ComicCyan,
+                isHighlighted = true,
                 onClick = onShowQueue,
             ),
         )
@@ -1564,6 +1567,7 @@ internal fun SecondaryActionRow(
                 label = lyricsLabel,
                 showBadgeDot = hasLyrics,
                 comicAccent = ComicMint,
+                isHighlighted = hasLyrics,
                 onClick = onShowLyrics,
             ),
         )
@@ -1575,6 +1579,7 @@ internal fun SecondaryActionRow(
                     label = downloadLabel,
                     showBadgeDot = isDownloaded,
                     comicAccent = ComicAccent,
+                    isHighlighted = isDownloading || isDownloaded,
                     isLoading = isDownloading,
                     progressPercent = downloadState.progressPercent,
                     succeeded = isDownloaded,
@@ -1584,6 +1589,24 @@ internal fun SecondaryActionRow(
         }
     }
     if (actions.isEmpty()) return
+
+    if (!useDraggableDock) {
+        val itemHeight = if (compact) 48.dp else 54.dp
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            actions.forEach { item ->
+                ClassicSecondaryActionTile(
+                    item = item,
+                    height = itemHeight,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        return
+    }
 
     val count = actions.size
     val isComic = LocalComicTheme.current
@@ -1595,47 +1618,22 @@ internal fun SecondaryActionRow(
     val useRefractionLens = !isComic && LocalLiquidGlass.current && isLiquidGlassBackdropSupported()
     val dockHeight = if (compact) 50.dp else 56.dp
 
-    // Anchor resting lens by semantic key so adding/removing Download or Video keeps the pill stable.
-    var restKey by remember { mutableStateOf("lyrics") }
-    LaunchedEffect(isVideoActive) {
-        if (isVideoActive) restKey = "video"
-    }
-    val selectedIndex = actions.indexOfFirst { it.key == restKey }
-        .takeIf { it >= 0 }
-        ?: actions.indexOfFirst { it.key == "lyrics" }.coerceAtLeast(0)
-
     val latestActions by rememberUpdatedState(actions)
-    val startVisual = liquidNavigationVisualIndex(selectedIndex, count, isRtl)
-    val settledPosition = remember(count, isRtl) { Animatable(startVisual) }
-    val trailingPosition = remember(count, isRtl) { Animatable(startVisual) }
     var pressed by remember { mutableStateOf(false) }
     var cancelled by remember { mutableStateOf(false) }
-    var touchPosition by remember { mutableFloatStateOf(Float.NaN) }
+    var touchPosition by remember(count) { mutableFloatStateOf(0f) }
     var touchY by remember { mutableFloatStateOf(0f) }
-    var releaseGeneration by remember { mutableIntStateOf(0) }
     var innerWidthPx by remember { mutableIntStateOf(0) }
+    val trailingPosition = remember(count, isRtl) { Animatable(0f) }
 
+    // No resting glass pill: the convex lens appears only while pressing or dragging.
     val lift by animateFloatAsState(
-        targetValue = if ((pressed && !cancelled) || settledPosition.isRunning) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.88f, stiffness = 520f),
+        targetValue = if (pressed && !cancelled) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.86f, stiffness = 560f),
         label = "playerDockLift",
     )
-    val currentPosition = {
-        if (touchPosition.isFinite()) touchPosition else settledPosition.value
-    }
+    val currentPosition = { touchPosition }
 
-    LaunchedEffect(selectedIndex, pressed, releaseGeneration) {
-        if (!pressed) {
-            if (touchPosition.isFinite()) {
-                settledPosition.snapTo(touchPosition)
-                touchPosition = Float.NaN
-            }
-            settledPosition.animateTo(
-                liquidNavigationVisualIndex(selectedIndex, count, isRtl),
-                spring(dampingRatio = 0.78f, stiffness = 320f),
-            )
-        }
-    }
     LaunchedEffect(count, isRtl) {
         snapshotFlow { currentPosition() }.collectLatest {
             trailingPosition.animateTo(it, spring(dampingRatio = 0.92f, stiffness = 540f))
@@ -1661,7 +1659,6 @@ internal fun SecondaryActionRow(
     val pressedScale = dockHeight.value / (dockHeight.value - 8f).coerceAtLeast(1f)
     val slotWidthPx = if (innerWidthPx > 0) innerWidthPx.toFloat() / count else 0f
     val slotWidthDp = with(density) { slotWidthPx.toDp() }
-    val accent = MaterialTheme.colorScheme.primary
     val outerBg = when {
         isComic -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
@@ -1675,10 +1672,7 @@ internal fun SecondaryActionRow(
             val height = size.height
             if (width <= 0) return@awaitEachGesture
             val fingerStart = liquidNavigationRawPosition(down.position.x, width.toFloat(), count)
-            val visualStart = currentPosition()
-            val onExistingLens = abs(fingerStart - visualStart) <= 0.5f
-            val grabOffset = if (onExistingLens) visualStart - fingerStart else 0f
-            touchPosition = liquidNavigationRubberBand(fingerStart + grabOffset, count)
+            touchPosition = liquidNavigationRubberBand(fingerStart, count)
             touchY = 0f
             cancelled = false
             pressed = true
@@ -1703,7 +1697,7 @@ internal fun SecondaryActionRow(
                         change.position.y < -cancelMarginPx || change.position.y > height + cancelMarginPx
                     cancelled = outOfVerticalBounds
                     touchPosition = liquidNavigationRubberBand(
-                        liquidNavigationRawPosition(change.position.x, width.toFloat(), count) + grabOffset,
+                        liquidNavigationRawPosition(change.position.x, width.toFloat(), count),
                         count,
                     )
                     touchY = (dy / height.coerceAtLeast(1)).coerceIn(-0.2f, 0.2f)
@@ -1718,7 +1712,6 @@ internal fun SecondaryActionRow(
                             val currentList = latestActions
                             val destination = liquidNavigationIndex(touchPosition, currentList.size, isRtl)
                                 .coerceIn(currentList.indices)
-                            restKey = currentList[destination].key
                             haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                             currentList[destination].onClick()
                         }
@@ -1731,7 +1724,6 @@ internal fun SecondaryActionRow(
                 pressed = false
                 cancelled = false
                 touchY = 0f
-                releaseGeneration++
             }
         }
     }
@@ -1772,16 +1764,12 @@ internal fun SecondaryActionRow(
                 if (useRefractionLens) {
                     DockSlotsRow(
                         actions = actions,
-                        selectedIndex = selectedIndex,
                         isComic = isComic,
                         isDark = isDark,
                         isRtl = isRtl,
                         lifted = pressed && !cancelled,
                         currentPosition = currentPosition,
-                        onActivate = { item ->
-                            restKey = item.key
-                            item.onClick()
-                        },
+                        onActivate = { item -> item.onClick() },
                         modifier = Modifier.fillMaxSize().padding(4.dp),
                     )
                 }
@@ -1794,7 +1782,7 @@ internal fun SecondaryActionRow(
                     .onSizeChanged { innerWidthPx = it.width }
                     .then(gestureModifier),
             ) {
-                if (slotWidthPx > 0f) {
+                if (slotWidthPx > 0f && lift > 0.01f) {
                     val lensBaseModifier = Modifier
                         .align(AbsoluteAlignment.TopLeft)
                         .absoluteOffset {
@@ -1805,14 +1793,15 @@ internal fun SecondaryActionRow(
                         .graphicsLayer {
                             val amount = lift.coerceIn(0f, 1f)
                             val flow = ((currentPosition() - trailingPosition.value) * 2f).coerceIn(-1f, 1f)
-                            scaleX = 1f + amount * (pressedScale - 1f + 0.03f * abs(flow))
-                            scaleY = 1f + amount * (pressedScale - 1f - 0.015f * abs(flow))
+                            val baseScale = 0.88f + amount * (pressedScale - 0.88f)
+                            scaleX = baseScale + amount * 0.03f * abs(flow)
+                            scaleY = baseScale - amount * 0.015f * abs(flow)
                             translationY = (-1.dp.toPx() + touchY * 3.dp.toPx()) * amount
-                            alpha = if (cancelled) 0.35f else 1f
+                            alpha = amount
                             shape = CircleShape
                             clip = false
                             if (!isComic) {
-                                shadowElevation = (1.5.dp.toPx() + 3.5.dp.toPx() * amount)
+                                shadowElevation = 4.5.dp.toPx() * amount
                                 ambientShadowColor = Color.Black.copy(alpha = 0.08f)
                                 spotShadowColor = Color.Black.copy(alpha = 0.16f)
                             }
@@ -1822,24 +1811,20 @@ internal fun SecondaryActionRow(
                         useRefractionLens -> {
                             Box(
                                 lensBaseModifier
-                                    .liquidBubbleHighlight(darkBackdrop) { 0.30f + 0.70f * lift.coerceIn(0f, 1f) }
+                                    .liquidBubbleHighlight(darkBackdrop) { lift.coerceIn(0f, 1f) }
                                     .liquid(railState) {
                                         val amount = lift.coerceIn(0f, 1f)
                                         shape = CircleShape
                                         frost = 0.dp
-                                        refraction = 0.08f + 0.34f * amount
-                                        curve = 0.04f + 0.16f * amount
-                                        edge = 0.012f + 0.023f * amount
+                                        refraction = 0.42f * amount
+                                        curve = 0.20f * amount
+                                        edge = 0.035f * amount
                                         dispersion = 0.12f * amount
                                         saturation = LiquidGlassIntensity.saturation(
                                             GlassRecipe.SATURATION_FROSTED,
                                             GlassRecipe.SATURATION_CLEAR,
                                         )
-                                        tint = lerp(
-                                            accent.copy(alpha = if (darkBackdrop) 0.30f else 0.22f),
-                                            Color.White.copy(alpha = if (darkBackdrop) 0.02f else 0.03f),
-                                            amount,
-                                        )
+                                        tint = Color.White.copy(alpha = (if (darkBackdrop) 0.02f else 0.03f) * amount)
                                     },
                             )
                         }
@@ -1852,13 +1837,11 @@ internal fun SecondaryActionRow(
                             )
                         }
                         else -> {
-                            val restTint = PlayerPalette.ink.copy(alpha = if (darkBackdrop) 0.18f else 0.14f)
-                            val liftTint = PlayerPalette.ink.copy(alpha = if (darkBackdrop) 0.28f else 0.22f)
                             Box(
                                 lensBaseModifier
                                     .clipOnly(CircleShape)
-                                    .background(lerp(restTint, liftTint, lift.coerceIn(0f, 1f)), CircleShape)
-                                    .liquidBubbleHighlight(darkBackdrop) { 0.30f + 0.70f * lift.coerceIn(0f, 1f) },
+                                    .background(PlayerPalette.ink.copy(alpha = if (darkBackdrop) 0.24f else 0.18f), CircleShape)
+                                    .liquidBubbleHighlight(darkBackdrop) { lift.coerceIn(0f, 1f) },
                             )
                         }
                     }
@@ -1866,16 +1849,12 @@ internal fun SecondaryActionRow(
                 if (!useRefractionLens) {
                     DockSlotsRow(
                         actions = actions,
-                        selectedIndex = selectedIndex,
                         isComic = isComic,
                         isDark = isDark,
                         isRtl = isRtl,
                         lifted = pressed && !cancelled,
                         currentPosition = currentPosition,
-                        onActivate = { item ->
-                            restKey = item.key
-                            item.onClick()
-                        },
+                        onActivate = { item -> item.onClick() },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -1887,7 +1866,6 @@ internal fun SecondaryActionRow(
 @Composable
 private fun DockSlotsRow(
     actions: List<DockActionItem>,
-    selectedIndex: Int,
     isComic: Boolean,
     isDark: Boolean,
     isRtl: Boolean,
@@ -1911,19 +1889,11 @@ private fun DockSlotsRow(
                 isDark = isDark,
                 scaleProvider = {
                     val dist = abs(currentPosition() - visualSlot)
-                    when {
-                        lifted -> 1f + (1f - dist).coerceAtLeast(0f) * 0.12f
-                        index == selectedIndex -> 1.03f
-                        else -> 1f
-                    }
+                    if (lifted) 1f + (1f - dist).coerceAtLeast(0f) * 0.12f else 1f
                 },
                 alphaProvider = {
                     val dist = abs(currentPosition() - visualSlot)
-                    when {
-                        lifted -> if (dist < 0.65f) 1f else 0.66f
-                        index == selectedIndex -> 1f
-                        else -> 0.80f
-                    }
+                    if (lifted) (if (dist < 0.65f) 1f else 0.66f) else 0.94f
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -1937,6 +1907,119 @@ private fun DockSlotsRow(
                         }
                     },
             )
+        }
+    }
+}
+
+@Composable
+private fun ClassicSecondaryActionTile(
+    item: DockActionItem,
+    height: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val isComic = LocalComicTheme.current
+    val isDark = LocalIsDarkTheme.current
+    val shownProgress by animateFloatAsState(item.progressPercent / 100f, tween(300), label = "classicSecProgress")
+    val tick = remember { Animatable(0f) }
+    var showTick by remember { mutableStateOf(false) }
+    var wasLoading by remember { mutableStateOf(item.isLoading) }
+    LaunchedEffect(item.isLoading) {
+        val finished = wasLoading && !item.isLoading && item.succeeded
+        wasLoading = item.isLoading
+        if (finished) {
+            showTick = true
+            tick.snapTo(0f)
+            tick.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+            delay(700L)
+            showTick = false
+        }
+    }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.92f else 1f, ExpressiveMotion.spatialSpring(), label = "classicSecScale")
+    val shape = RoundedCornerShape(14.dp)
+    val tileColor by animateColorAsState(
+        targetValue = when {
+            isComic && !isDark ->
+                if (item.isHighlighted) item.comicAccent else item.comicAccent.copy(alpha = 0.44f)
+            isComic ->
+                item.comicAccent.copy(alpha = if (item.isHighlighted) 0.36f else 0.22f)
+            else -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+        },
+        animationSpec = tween(180),
+        label = "classicSecColor",
+    )
+    val tileContentColor = if (isComic && !isDark) ComicInk else PlayerPalette.ink.copy(alpha = 0.94f)
+
+    LiquidGlassSurface(
+        glassModifier = Modifier.liquidGlassChrome(shape, LocalLiquidGlass.current, LiquidGlassPreset.PlayerControls, interactionSource = interaction),
+        onClick = hapticClick(action = item.onClick),
+        interactionSource = interaction,
+        shape = shape,
+        color = tileColor,
+        contentColor = tileContentColor,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = modifier
+            .height(height)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            if (item.showBadgeDot) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 6.dp, end = 6.dp)
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isComic) {
+                                if (isDark) ComicAccent else ComicInk
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                        ),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                if (showTick) {
+                    DrawInTick(progress = { tick.value }, color = tileContentColor, modifier = Modifier.size(19.dp))
+                } else if (item.isLoading) {
+                    if (item.progressPercent in 1..99) {
+                        CircularProgressIndicator(
+                            progress = { shownProgress },
+                            modifier = Modifier.size(18.dp),
+                            color = tileContentColor,
+                            trackColor = tileContentColor.copy(alpha = 0.22f),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = tileContentColor,
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                } else {
+                    Icon(imageVector = item.icon, contentDescription = item.label, modifier = Modifier.size(19.dp))
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = item.label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -2290,6 +2373,7 @@ internal fun NowPlayingScreen(
     isCustomAudio: Boolean,
     isEqEnabled: Boolean,
     wavySeekbarEnabled: Boolean,
+    playerActionDockEnabled: Boolean = true,
     windowActive: Boolean,
     isDistractionFree: Boolean,
     primaryColor: Color,
@@ -2729,6 +2813,7 @@ internal fun NowPlayingScreen(
                     SecondaryActionRow(
                         hasLyrics = hasLyrics,
                         compact = compactHeight,
+                        useDraggableDock = playerActionDockEnabled,
                         onShowLyrics = onOpenLyrics,
                         onShowQueue = onOpenQueue,
                         onToggleVideo = onToggleVideo,

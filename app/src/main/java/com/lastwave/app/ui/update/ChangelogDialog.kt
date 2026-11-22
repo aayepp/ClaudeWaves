@@ -1,7 +1,11 @@
 package com.lastwave.app.ui.update
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +34,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -37,6 +43,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lastwave.app.R
 import com.lastwave.app.data.update.AppChangelogManager
 import com.lastwave.app.data.update.AppUpdateManager
 import com.lastwave.app.data.update.ChangelogEntry
@@ -115,9 +122,23 @@ private fun WhatsNewDialog(
                         }
                     }
                 }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.claudewaves_update_banner),
+                        contentDescription = "ClaudeWaves update preview",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 Column(
                     Modifier
-                        .heightIn(max = 360.dp)
+                        .heightIn(max = 260.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     Text(

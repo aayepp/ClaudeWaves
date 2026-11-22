@@ -351,6 +351,7 @@ internal fun FullPlayerLandscape(
     player: MusicPlayer,
     progressState: StateFlow<PlaybackProgressState>?,
     wavySeekbarEnabled: Boolean,
+    playerActionDockEnabled: Boolean = true,
     showSleeveCanvas: Boolean,
     canvas: com.lastwave.app.data.canvas.CanvasArtwork?,
     ambientColor: Color,
@@ -549,6 +550,7 @@ internal fun FullPlayerLandscape(
                 SecondaryActionRow(
                     hasLyrics = hasLyrics,
                     compact = true,
+                    useDraggableDock = playerActionDockEnabled,
                     onShowLyrics = { onTabChange(FullPlayerTab.LYRICS) },
                     onShowQueue = { onTabChange(FullPlayerTab.QUEUE) },
                     onToggleVideo = onToggleVideo.takeIf { musicVideoEnabled },

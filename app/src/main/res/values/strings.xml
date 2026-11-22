@@ -151,6 +151,9 @@
     <string name="settings_now_playing_download">Now Playing Download Button</string>
     <string name="settings_now_playing_download_on">Show Download button in Now Playing while streaming</string>
     <string name="settings_now_playing_download_off">Hidden in Now Playing (download via track menu)</string>
+    <string name="settings_player_action_dock">Draggable action dock</string>
+    <string name="settings_player_action_dock_on">Unified draggable dock for Video, Queue, Lyrics &amp; Download</string>
+    <string name="settings_player_action_dock_off">Classic separate buttons at the bottom of Now Playing</string>
     <string name="menu_play_best_part">Play best part</string>
     <string name="player_best_part">Best part</string>
     <string name="menu_best_part_not_found">No best part found, playing from the start</string>

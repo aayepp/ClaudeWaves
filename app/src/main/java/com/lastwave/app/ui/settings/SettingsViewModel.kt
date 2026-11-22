@@ -796,6 +796,9 @@ class SettingsViewModel @Inject constructor(
     fun setWavySeekbarEnabled(enabled: Boolean) = launchSettingsAction("update seekbar style") {
         settingsPreferences.setWavySeekbarEnabled(enabled)
     }
+    fun setPlayerActionDockEnabled(enabled: Boolean) = launchSettingsAction("update Now Playing dock style") {
+        settingsPreferences.setPlayerActionDockEnabled(enabled)
+    }
     fun setRotatingBackgroundEnabled(enabled: Boolean) = launchSettingsAction("update rotating background") {
         settingsPreferences.setRotatingBackgroundEnabled(enabled)
     }

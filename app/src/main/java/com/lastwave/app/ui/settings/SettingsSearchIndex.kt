@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.SpeakerPhone
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -762,6 +763,23 @@ object SettingsSearchIndex {
                     icon = Icons.Filled.Waves,
                     iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
                     iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
+                    parentTab = SettingsTab.APPEARANCE,
+                    section = "Experimental & Features",
+                    type = EntryType.TOGGLE,
+                )
+            )
+            add(
+                SettingsEntry(
+                    id = "appearance.player_action_dock",
+                    title = "Draggable action dock",
+                    subtitle = "Switch between the unified draggable dock and classic Now Playing buttons",
+                    keywords = listOf(
+                        "action dock", "draggable dock", "now playing dock", "classic buttons",
+                        "video queue lyrics download", "bottom bar", "player buttons"
+                    ),
+                    icon = Icons.Filled.TouchApp,
+                    iconContainer = { MaterialTheme.colorScheme.primaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onPrimaryContainer },
                     parentTab = SettingsTab.APPEARANCE,
                     section = "Experimental & Features",
                     type = EntryType.TOGGLE,
