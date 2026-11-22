@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.19] - 2026-11-23
+
+### Added
+- **Draggable action dock setting:** switch between the unified draggable Now Playing dock and the classic separate bottom buttons anytime in Settings → Appearance.
+- **Update & What's New banner:** added a widescreen showcase banner inside the Update Arrived and What's New dialogs while keeping the existing layout intact.
+
+### Changed
+- **Cleaner Now Playing action dock:** removed the resting glass pill so the dock stays completely clean at rest, lifting the refracting lens only while you touch or drag across slots.
+
 ## [1.0.18] - 2026-11-23
 
 ### Added
