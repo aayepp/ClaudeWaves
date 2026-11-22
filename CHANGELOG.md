@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.17] - 2026-11-22
+
+### Added
+- **Hold the cover for Full Artwork:** on Now Playing, press and hold the artwork to switch Full Artwork on or off, without going into Settings.
+
 ## [1.0.16] - 2026-11-22
 
 ### Fixed
