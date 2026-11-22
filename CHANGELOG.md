@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.12] - 2026-11-22
+
+### Fixed
+- **Hi-Res from add-ons:** Hi-Res tracks that an add-on delivers as a DASH stream (common for Tidal Hi-Res) now play as Hi-Res instead of dropping to CD quality, and Signal Path shows the real bit depth and sample rate when the add-on only states them in its quality label.
+
 ## [1.0.11] - 2026-11-21
 
 ### Fixed
