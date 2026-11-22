@@ -93,6 +93,28 @@ class AddonClient(
         }
     }
 
+    /**
+     * The addon's own spelling of [quality]. An addon whose manifest offers
+     * `max|high|low` does not know `hi_res` or `lossless`; those land on its
+     * fallback tier. Hi-Res and CD ask for its best option (its first, as
+     * addons list best-first), 320k and Data Saver for the closest word.
+     * Addons that enumerate nothing get our tier names, as before.
+     */
+    private suspend fun addonQuality(quality: String): String {
+        if (quality.equals("atmos", ignoreCase = true)) return quality
+        val options = qualityOptionsByAddon[baseUrl]
+            ?: manifest().getOrNull()?.qualityOptions?.also { qualityOptionsByAddon[baseUrl] = it }
+            ?: return quality
+        if (options.isEmpty()) return quality
+        options.firstOrNull { it.equals(quality, ignoreCase = true) }?.let { return it }
+        val words = when (quality.lowercase()) {
+            "high" -> HIGH_WORDS
+            "low" -> LOW_WORDS
+            else -> return options.first()
+        }
+        return options.firstOrNull { option -> words.any { it in option.lowercase() } } ?: options.first()
+    }
+
     suspend fun probeSearch(): Result<Int> = withContext(Dispatchers.IO) {
         search("test", "lossless", false).map { it.size }
     }
@@ -109,7 +131,7 @@ class AddonClient(
 
         val encodedQ = URLEncoder.encode(q, "UTF-8")
         val atmosParam = if (atmos) "auto" else "none"
-        val url = "$baseUrl/search?q=$encodedQ&quality=$quality&atmos=$atmosParam"
+        val url = "$baseUrl/search?q=$encodedQ&quality=${addonQuality(quality)}&atmos=$atmosParam"
 
         try {
             val reqBuilder = Request.Builder().url(url).get()
@@ -181,7 +203,7 @@ class AddonClient(
     suspend fun prewarm(trackId: String, quality: String, atmos: Boolean): Boolean = withContext(Dispatchers.IO) {
         val cleanId = trackId.trim()
         if (baseUrl.isBlank() || cleanId.isBlank()) return@withContext false
-        val url = "$baseUrl/prewarm/$cleanId?quality=$quality&atmos=${if (atmos) "auto" else "none"}"
+        val url = "$baseUrl/prewarm/$cleanId?quality=${addonQuality(quality)}&atmos=${if (atmos) "auto" else "none"}"
         try {
             val reqBuilder = Request.Builder().url(url).get()
             signRequest(url, "GET", reqBuilder)
@@ -207,7 +229,7 @@ class AddonClient(
         if (cleanId.isBlank()) return@withContext Result.failure(IllegalArgumentException("Empty track id"))
 
         val atmosParam = if (atmos) "auto" else "none"
-        val url = "$baseUrl/stream/$cleanId?quality=$quality&atmos=$atmosParam"
+        val url = "$baseUrl/stream/$cleanId?quality=${addonQuality(quality)}&atmos=$atmosParam"
 
         try {
             val reqBuilder = Request.Builder().url(url).get()
@@ -284,6 +306,10 @@ class AddonClient(
 
     companion object {
         private const val TAG = "AddonClient"
+        // Per process: a new AddonClient is built for every resolve.
+        private val qualityOptionsByAddon = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+        private val HIGH_WORDS = listOf("high", "320", "normal", "standard")
+        private val LOW_WORDS = listOf("low", "96", "128", "min")
 
         fun normalizeBase(raw: String): String {
             if (raw.isBlank()) return ""

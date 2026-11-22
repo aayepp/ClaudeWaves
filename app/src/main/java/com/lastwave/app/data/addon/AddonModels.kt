@@ -21,6 +21,13 @@ import kotlinx.serialization.json.intOrNull
  */
 
 @Serializable
+data class AddonSetting(
+    @SerialName("key") val key: String = "",
+    /** `"max"` or `{"label": "Maximum", "value": "max"}`, as addons write either. */
+    @SerialName("options") val options: List<JsonElement> = emptyList(),
+)
+
+@Serializable
 data class AddonManifest(
     @SerialName("id") val id: String = "",
     @SerialName("name") val name: String = "",
@@ -38,7 +45,18 @@ data class AddonManifest(
     @SerialName("expires_in") val expiresInSnake: JsonElement? = null,
     @SerialName("remainingSeconds") val remainingSeconds: JsonElement? = null,
     @SerialName("remaining_seconds") val remainingSecondsSnake: JsonElement? = null,
+    @SerialName("settings") val settings: List<AddonSetting> = emptyList(),
 ) {
+    /** The addon's own `quality` values, best first as addons list them (e.g. max, high, low). */
+    val qualityOptions: List<String>
+        get() = settings.firstOrNull { it.key == "quality" }?.options.orEmpty().mapNotNull { option ->
+            when (option) {
+                is JsonPrimitive -> option.contentOrNull
+                is JsonObject -> (option["value"] as? JsonPrimitive)?.contentOrNull
+                else -> null
+            }?.takeIf { it.isNotBlank() }
+        }
+
     fun declares(resource: String): Boolean =
         resources.any { it.equals(resource, ignoreCase = true) }
 
