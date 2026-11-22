@@ -93,6 +93,12 @@ internal data class ResolvedTrackTierEvent(
     val allowDowngrade: Boolean,
 )
 
+private val KHZ_LABEL = Regex("""(\d+(?:\.\d+)?)\s*khz""", RegexOption.IGNORE_CASE)
+private val BIT_LABEL = Regex("""(\d{2})\s*-?\s*bit""", RegexOption.IGNORE_CASE)
+private val AUDIO_FILE_EXT = Regex("""\.(flac|mp4|m4a|mp3|aac|ogg|opus|wav)$""")
+private val DASH_WORDS = setOf("dash", "mpd", "application/dash+xml")
+private val HLS_WORDS = setOf("hls", "m3u8", "application/x-mpegurl", "application/vnd.apple.mpegurl")
+
 private fun isHiResTextTag(text: String): Boolean =
     text.contains("HI_RES", ignoreCase = true) ||
         text.contains("HI-RES", ignoreCase = true) ||
@@ -1546,14 +1552,23 @@ class LosslessMusicApi @Inject constructor(
                 }
                 val manifestSampleRate = manifestSampleRateOf(rawUrl)
                 val manifestDepth = manifestBitDepthOf(rawUrl)
+                // Tidal Hi-Res comes back with no numeric fields at all, only
+                // "Hi-Res FLAC 24-bit/96kHz"-style labels; read them like the
+                // fields they stand in for.
+                val labelText = listOfNotNull(stream?.quality, stream?.streamQuality, stream?.audioQuality, stream?.audioQualitySnake)
+                    .joinToString(" ")
+                val labelSampleRate = KHZ_LABEL.find(labelText)?.groupValues?.get(1)?.toDoubleOrNull()
+                    ?.takeIf { it in 8.0..768.0 }?.times(1000.0)
+                val labelDepth = BIT_LABEL.find(labelText)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 16..32 }
                 val streamSampleRate = stream?.sampleRate ?: 0.0
-                val rawSampleRate = if (streamSampleRate > 1000.0) streamSampleRate else if (streamSampleRate > 0.0) streamSampleRate * 1000.0 else 44100.0
+                val rawSampleRate = if (streamSampleRate > 1000.0) streamSampleRate else if (streamSampleRate > 0.0) streamSampleRate * 1000.0 else labelSampleRate ?: 44100.0
                 val effectiveSampleRate = manifestSampleRate?.toDouble() ?: rawSampleRate
                 val streamCodec = stream?.codec.orEmpty().lowercase()
                 val isLossyCodec = streamCodec.contains("mp4a") || streamCodec.contains("aac") || streamCodec.contains("mp3") || streamCodec.contains("opus")
                 val rawUrlPath = rawUrl.substringBefore('?').lowercase()
                 val manifestCodec = manifestCodecOf(rawUrl)?.lowercase().orEmpty()
                 val explicitLosslessStream = !isLossyCodec && (
+                    isHiResTextTag(labelText) || labelText.contains("FLAC", ignoreCase = true) ||
                     streamCodec.contains("flac") || manifestCodec.contains("flac") ||
                         rawUrlPath.endsWith(".flac") || (stream?.bitDepth ?: candidate.bitDepth ?: 0) > 16 ||
                         effectiveSampleRate > 48_000.0
@@ -1567,7 +1582,7 @@ class LosslessMusicApi @Inject constructor(
                         q == "high" || q == "low"
                     )
 
-                val streamDepth = if (isLossyStream) null else (manifestDepth ?: stream?.bitDepth?.takeIf { it > 0 })
+                val streamDepth = if (isLossyStream) null else (manifestDepth ?: stream?.bitDepth?.takeIf { it > 0 } ?: labelDepth)
                 val streamTagText = listOfNotNull(
                     stream?.quality,
                     stream?.streamQuality,
@@ -1635,11 +1650,18 @@ class LosslessMusicApi @Inject constructor(
                 }
 
                 val lowerUrlPath = rawUrl.substringBefore('?').lowercase()
+                // A manifest URL with no .mpd (Tidal's manifest host) is only
+                // marked by the transport the addon states; sent as FLAC it fails
+                // in the progressive extractor and the track drops to a CD source.
+                val declaredTransport = listOf(stream?.manifest, stream?.mediaType, stream?.format)
+                    .firstOrNull { !it.isNullOrBlank() }?.lowercase()
+                    ?.takeIf { !AUDIO_FILE_EXT.containsMatchIn(lowerUrlPath) }
                 val isExplicitDash = rawUrl.startsWith("data:application/dash+xml") ||
-                    lowerUrlPath.endsWith(".mpd") || lowerUrlPath.contains("/mpd")
+                    lowerUrlPath.endsWith(".mpd") || lowerUrlPath.contains("/mpd") ||
+                    declaredTransport in DASH_WORDS
                 val streamMimeType = when {
                     isExplicitDash -> "application/dash+xml"
-                    lowerUrlPath.endsWith(".m3u8") || lowerUrlPath.contains(".m3u8") -> "application/x-mpegURL"
+                    lowerUrlPath.endsWith(".m3u8") || lowerUrlPath.contains(".m3u8") || declaredTransport in HLS_WORDS -> "application/x-mpegURL"
                     // Atmos arrives as a direct progressive E-AC-3 MP4.
                     isStreamAtmos -> "audio/mp4"
                     lowerUrlPath.endsWith(".flac") -> "audio/flac"
