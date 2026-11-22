@@ -23,8 +23,9 @@ class SearchWarmCancellationTest {
     @Test fun cancelledWarmupCanRetryWithoutRecordingBackendFailure() = runBlocking {
         val started = CompletableDeferred<Unit>()
         val requests = AtomicInteger()
-        val server = LoopbackHttpServer { socket ->
-            if (requests.incrementAndGet() == 1) {
+        val server = LoopbackHttpServer { socket, requestLine ->
+            // Only searches count; the addon's manifest is read once for its quality tiers.
+            if ("/search" in requestLine && requests.incrementAndGet() == 1) {
                 started.complete(Unit)
                 Thread.sleep(600)
             }

@@ -9,7 +9,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
 /** Minimal GET-only loopback HTTP fixture that also compiles against the Android SDK. */
-internal class LoopbackHttpServer(private val handle: (Socket) -> Unit) : AutoCloseable {
+internal class LoopbackHttpServer(private val handle: (Socket, String) -> Unit) : AutoCloseable {
+    constructor(handle: (Socket) -> Unit) : this({ socket, _ -> handle(socket) })
+
     private val listener = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
     private val executor = Executors.newCachedThreadPool { task -> Thread(task).apply { isDaemon = true } }
     private val connections = ConcurrentHashMap.newKeySet<Socket>()
@@ -26,11 +28,12 @@ internal class LoopbackHttpServer(private val handle: (Socket) -> Unit) : AutoCl
                         socket.use {
                             socket.soTimeout = 2_000
                             val reader = socket.getInputStream().bufferedReader(Charsets.US_ASCII)
+                            val requestLine = reader.readLine() ?: return@use
                             while (true) {
                                 val line = reader.readLine() ?: return@use
                                 if (line.isEmpty()) break
                             }
-                            handle(socket)
+                            handle(socket, requestLine)
                         }
                     } catch (_: IOException) {
                         // Expected when a canceled client closes its connection.
