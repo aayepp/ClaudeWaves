@@ -1392,6 +1392,17 @@ class NativeProcessingAudioSink(
         exclusiveWanted = true
         exclusiveStartFailed = false
         exclusiveEnded = false
+        holdExclusiveUntilPlay()
+    }
+
+    /**
+     * A freshly opened (or re-armed) exclusive stream starts unpaused, and Media3
+     * pre-fills a sink before play(). An AudioTrack keeps that pre-fill silent;
+     * the DAC plays it at once, so granting USB access with the song paused made
+     * it sound while the player still showed pause. Hold it until [play].
+     */
+    private fun holdExclusiveUntilPlay() {
+        if (!playing) exclusiveUsb?.setPaused(true)
     }
 
     private fun leaveExclusiveUsb(configureAndroid: Boolean) {
@@ -1720,6 +1731,7 @@ class NativeProcessingAudioSink(
         usbOutput?.setFormat(null)
         if (usbExclusive && exclusiveWanted) {
             exclusiveUsb?.prepareForNextItem()
+            holdExclusiveUntilPlay()
             exclusiveEnded = false
         } else {
             exclusiveUsb?.reset()
