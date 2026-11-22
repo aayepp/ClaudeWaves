@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.18] - 2026-11-23
+
+### Added
+- **Draggable Now Playing action dock:** Video, Queue, Lyrics and Download now live inside one unified Liquid Glass capsule with a resting lens that lifts, magnifies and follows your thumb as you drag across slots (pull up to cancel). When Download or Video is hidden, the remaining slots center cleanly.
+- **A-B section loop on the seekbar:** tap the `A–B` pill between the timestamps to mark point A, tap again to mark point B and loop that passage seamlessly (long-press or tap again to clear). Works on portrait, landscape, capsule/wavy seekbars and USB Exclusive output.
+- **Local audio format filters:** filter your Local Songs by `Lossless`, `FLAC`, `DSD`, `WAV / AIFF` or `MP3 / AAC` with live track counts, hiding unused categories automatically.
+- **One-tap remove duplicates:** clean repeated tracks from any local playlist from the playlist menu.
+- **Sleep timer End of Track & 15s fade-out:** stop cleanly right when the current song finishes (pausing without crossfade), and enjoy a gentle 15-second volume fade-out on timed sleep timers.
+
+### Changed
+- **Consistent Liquid Glass controls:** updated remaining sliders and switches across Audio Controls, Lyrics settings, Generate and Jam to match the Liquid Glass style on Light, Dark and AMOLED themes while keeping Comic Pop unchanged.
+
 ## [1.0.17] - 2026-11-22
 
 ### Added
