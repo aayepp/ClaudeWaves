@@ -1,6 +1,6 @@
 package com.lastwave.app.playback.resolve
 
-import android.util.Log
+import com.lastwave.app.diagnostics.AppLog as Log
 
 /**
  * One playback request, from the tap until ExoPlayer reports ready.

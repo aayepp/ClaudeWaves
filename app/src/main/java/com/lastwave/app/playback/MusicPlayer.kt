@@ -1212,7 +1212,7 @@ class MusicPlayer @Inject constructor(
             resolutionRequests.clear()
             val currentTrack = _state.value.current
             val currentPos = player.currentPosition.coerceAtLeast(0)
-            android.util.Log.e("MusicPlayer", "Playback ERROR on track '${currentTrack?.title}': code=${error.errorCodeName} (${error.errorCode}), msg=${error.message}, pos=${currentPos}ms", error)
+            com.lastwave.app.diagnostics.AppLog.e("MusicPlayer", "Playback ERROR on track '${currentTrack?.title}': code=${error.errorCodeName} (${error.errorCode}), msg=${error.message}, pos=${currentPos}ms", error)
             // A track that demonstrably played must never be auto-skipped as
             // "unavailable": mid-stream failures (throttled/rotated URLs,
             // network blips) are transient, while genuinely dead tracks fail

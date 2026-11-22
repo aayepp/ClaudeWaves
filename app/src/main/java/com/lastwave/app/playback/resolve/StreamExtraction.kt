@@ -1,6 +1,6 @@
 package com.lastwave.app.playback.resolve
 
-import android.util.Log
+import com.lastwave.app.diagnostics.AppLog as Log
 import com.lastwave.app.data.music.YouTubeAudioStream
 import com.lastwave.app.data.music.containedAudioResolutionFailure
 import kotlinx.coroutines.CoroutineScope

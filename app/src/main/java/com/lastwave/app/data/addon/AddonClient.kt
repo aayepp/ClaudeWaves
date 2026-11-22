@@ -1,6 +1,6 @@
 package com.lastwave.app.data.addon
 
-import android.util.Log
+import com.lastwave.app.diagnostics.AppLog as Log
 import com.lastwave.app.data.lossless.NativeSecrets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers

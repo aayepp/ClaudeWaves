@@ -1,7 +1,7 @@
 package com.lastwave.app.data.lossless
 
 import android.os.SystemClock
-import android.util.Log
+import com.lastwave.app.diagnostics.AppLog as Log
 import com.lastwave.app.data.artwork.awaitSuccessfulBodyOrNull
 import com.lastwave.app.data.plugin.ModuleManager
 import com.lastwave.app.data.addon.AddonClient
