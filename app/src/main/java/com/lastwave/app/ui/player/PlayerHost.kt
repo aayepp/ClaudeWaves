@@ -715,9 +715,10 @@ fun PlayerHost(
             }
 
             // Sleep Timer Overlay Button (shown whenever timer is active, regardless of mini-player or button mode)
-            if (!expanded && playbackState.sleepTimerRemainingMs != null) {
+            if (!expanded && (playbackState.sleepTimerRemainingMs != null || playbackState.sleepTimerEndOfTrack)) {
                 DraggableSleepTimerOverlay(
                     sleepTimerRemainingMs = playbackState.sleepTimerRemainingMs,
+                    sleepTimerEndOfTrack = playbackState.sleepTimerEndOfTrack,
                     onCycleTimer = { viewModel.player.cycleSleepTimer() },
                     onCloseTimer = { viewModel.player.setSleepTimerMinutes(0) },
                 )

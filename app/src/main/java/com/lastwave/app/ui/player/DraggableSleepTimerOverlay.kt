@@ -57,12 +57,13 @@ import kotlin.math.roundToInt
 @Composable
 fun DraggableSleepTimerOverlay(
     sleepTimerRemainingMs: Long?,
+    sleepTimerEndOfTrack: Boolean = false,
     onCycleTimer: () -> Unit,
     onCloseTimer: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
-        visible = sleepTimerRemainingMs != null,
+        visible = sleepTimerRemainingMs != null || sleepTimerEndOfTrack,
         enter = fadeIn(tween(250)) + scaleIn(tween(250)),
         exit = fadeOut(tween(250)) + scaleOut(tween(250)),
         modifier = modifier.fillMaxSize(),
@@ -72,13 +73,13 @@ fun DraggableSleepTimerOverlay(
             val haptic = LocalHapticFeedback.current
 
             val remainingMs = sleepTimerRemainingMs ?: 0L
-            val hours = (remainingMs / 3600000).toInt()
+            val hours = if (sleepTimerEndOfTrack) 0 else (remainingMs / 3600000).toInt()
             val minutes = ((remainingMs % 3600000) / 60000).toInt()
             val seconds = ((remainingMs % 60000) / 1000).toInt()
-            val timeText = if (hours > 0) {
-                String.format("%d:%02d:%02d", hours, minutes, seconds)
-            } else {
-                String.format("%02d:%02d", minutes, seconds)
+            val timeText = when {
+                sleepTimerEndOfTrack -> "End"
+                hours > 0 -> String.format("%d:%02d:%02d", hours, minutes, seconds)
+                else -> String.format("%02d:%02d", minutes, seconds)
             }
 
             // Circle dynamically scales with content length:
@@ -124,7 +125,11 @@ fun DraggableSleepTimerOverlay(
                     maxDurationMs = remainingMs
                 }
             }
-            val progressFraction = (remainingMs.toFloat() / maxDurationMs.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+            val progressFraction = if (sleepTimerEndOfTrack) {
+                1f
+            } else {
+                (remainingMs.toFloat() / maxDurationMs.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+            }
             val animatedProgress by animateFloatAsState(
                 targetValue = progressFraction,
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),

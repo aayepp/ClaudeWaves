@@ -429,6 +429,11 @@ class MusicPlayer @Inject constructor(
     private var tailPinnedSinceMs = 0L
     private var sleepTimerDeadlineMs: Long? = null
     private var sleepTimerStep = 0
+    private var sleepTimerEndOfTrack = false
+    private var sleepTimerFadeActive = false
+    private var abLoopStartMs: Long? = null
+    private var abLoopEndMs: Long? = null
+    private var lastAbLoopSeekWallMs = 0L
     @Volatile
     internal var crossfadeEnabled = false
     /** Settings -> Autoplay similar songs. Off: the queue ends where the user left it. */
@@ -1021,6 +1026,11 @@ class MusicPlayer @Inject constructor(
             // when ExoPlayer already moved on.
             if (playbackState == Player.STATE_ENDED) {
                 checkpointPodcastProgress(completed = true)
+                if (sleepTimerEndOfTrack) {
+                    sleepTimerEndOfTrack = false
+                    _state.update { it.copy(sleepTimerEndOfTrack = false, isPlaying = false) }
+                    return
+                }
                 if (live.repeatMode == Player.REPEAT_MODE_ONE || _state.value.repeatMode == Player.REPEAT_MODE_ONE) {
                     onMain {
                         runCatching {
@@ -1115,6 +1125,10 @@ class MusicPlayer @Inject constructor(
             playheadPosMs = targetPos
             playheadWallMs = SystemClock.elapsedRealtime()
             if (mediaItem == null) return
+            if (abLoopStartMs != null || abLoopEndMs != null) {
+                abLoopStartMs = null
+                abLoopEndMs = null
+            }
             // Natural advances (track end, repeat-all wrap, crossfade
             // handoff) are the only transitions the explicit next()/queue-tap
             // paths don't record â€” manual seeks arrive as SEEK, not AUTO.
@@ -1160,7 +1174,14 @@ class MusicPlayer @Inject constructor(
                     isLossless = stream?.isLossless == true,
                     bitDepth = stream?.bitDepth,
                     samplingRateKHz = if (isSpatialAudioCodec(stream?.audioCodec)) 48.0 else stream?.samplingRateKHz,
+                    abLoopStartMs = null,
+                    abLoopEndMs = null,
                 )
+            }
+            if (sleepTimerEndOfTrack && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                sleepTimerEndOfTrack = false
+                _state.update { it.copy(sleepTimerEndOfTrack = false) }
+                pause()
             }
                 if (stream != null) syncPlayedQualityBadge()
                 decodedSampleRateHz = 0
@@ -2161,41 +2182,45 @@ class MusicPlayer @Inject constructor(
                             _state.update { it.copy(positionMs = playhead) }
                         }
                     }
+                    val loopA = abLoopStartMs
+                    val loopB = abLoopEndMs
+                    if (loopA != null && loopB != null && _state.value.isPlaying) {
+                        val posNow = _state.value.positionMs
+                        val wallNow = SystemClock.elapsedRealtime()
+                        if (posNow >= loopB && wallNow - lastAbLoopSeekWallMs >= 350L) {
+                            lastAbLoopSeekWallMs = wallNow
+                            seekTo(loopA)
+                        }
+                    }
                     if (!isCasting && exclusiveUsbOutput.isActive()) {
                         // Never touch ExoPlayer here. Its playback thread holds
                         // the player lock inside the blocking USB write, so a
                         // currentPosition read froze the seek bar after the
                         // first buffer and left drift on "measuringâ€¦".
+                        val sleepRemaining = updateSleepTimerTick()
+                        if (_state.value.sleepTimerRemainingMs != sleepRemaining) {
+                            _state.update { it.copy(sleepTimerRemainingMs = sleepRemaining) }
+                        }
                         publishExclusiveDrift()
                         cadenceMs = if (exclusiveUsbOutput.isPaused()) 250L else 60L
                     } else if (isCasting) {
-                        val remaining = sleepTimerDeadlineMs?.minus(SystemClock.elapsedRealtime())
-                        if (remaining != null && remaining <= 0) {
-                            sleepTimerDeadlineMs = null
-                            sleepTimerStep = 0
-                            pause()
-                        }
-                        _state.update { it.copy(sleepTimerRemainingMs = remaining?.coerceAtLeast(0)) }
+                        val remaining = updateSleepTimerTick()
+                        _state.update { it.copy(sleepTimerRemainingMs = remaining) }
                         cadenceMs = 500L
                     } else if (_state.value.current != null && playerDelegate.isInitialized()) {
-                        val remaining = sleepTimerDeadlineMs?.minus(SystemClock.elapsedRealtime())
-                        if (remaining != null && remaining <= 0) {
-                            sleepTimerDeadlineMs = null
-                            sleepTimerStep = 0
-                            player.pause()
-                        }
+                        val remaining = updateSleepTimerTick()
                         if (outgoingPlayer != null) {
                             updateCrossfade(player.currentPosition.coerceAtLeast(0L))
                             cadenceMs = 50L
                         }
                         if (!isCurrentMediaMatch(player, _state.value.current) && !player.isPlaying) {
-                            _state.update { it.copy(sleepTimerRemainingMs = remaining?.coerceAtLeast(0)) }
+                            _state.update { it.copy(sleepTimerRemainingMs = remaining) }
                             cadenceMs = 60L
                         } else {
                             val dur = effectiveDuration(player.duration, player, _state.value.durationMs)
                             val pos = _state.value.positionMs
                             val buf = player.bufferedPosition.coerceAtLeast(0)
-                            val sleepRemaining = remaining?.coerceAtLeast(0)
+                            val sleepRemaining = remaining
                             maybeAdaptQualityForBuffer(player, pos, buf)
 
                             val upcomingIdx = player.nextMediaItemIndex
@@ -2213,7 +2238,7 @@ class MusicPlayer @Inject constructor(
                                 ?: preparedStreams.values.firstOrNull { it.url == nextItem?.localConfiguration?.uri?.toString() }
                             val nextStreamUrl = stream?.url ?: nextItem?.localConfiguration?.uri?.toString()
 
-                            val transitionActive = crossfadeEnabled || autoMixCoordinator.get().isEnabled
+                            val transitionActive = !sleepTimerEndOfTrack && (crossfadeEnabled || autoMixCoordinator.get().isEnabled)
                             if (transitionActive && upcomingIdx != C.INDEX_UNSET && nextItem != null) {
                                 val remainingMs = dur - pos
                                 if (dur > 0L && (pos > dur * 0.25f || remainingMs < 90_000L)) {
@@ -3355,6 +3380,7 @@ class MusicPlayer @Inject constructor(
     fun resume() = onMain {
         // An explicit resume replaces any focus-induced pause we owed.
         focusPauseAwaitingRecovery = false
+        restoreSleepFadeVolume()
         exclusiveUsbOutput.setPaused(false)
         if (isCasting) {
             castPlayback?.play()
@@ -3567,6 +3593,7 @@ class MusicPlayer @Inject constructor(
             return@onMain
         }
         appVolume = clamped
+        sleepTimerFadeActive = false
         _state.update { it.copy(appVolume = clamped) }
         if (playerDelegate.isInitialized() && unduckedVolume == null) {
             runCatching { player.volume = clamped }
@@ -4149,18 +4176,129 @@ class MusicPlayer @Inject constructor(
     fun resetPlaybackParameters() = onMain {
         setPlaybackParameters(1f, 1f)
     }
+    private fun restoreSleepFadeVolume() {
+        if (!sleepTimerFadeActive) return
+        sleepTimerFadeActive = false
+        if (!isCasting && playerDelegate.isInitialized() && unduckedVolume == null) {
+            runCatching { player.volume = appVolume }
+        }
+        runCatching { nativeAudioEngine.get().setOutputVolume(if (bitPerfectEnabled) 1f else appVolume) }
+    }
+
+    private fun updateSleepTimerTick(): Long? {
+        val remaining = sleepTimerDeadlineMs?.minus(SystemClock.elapsedRealtime()) ?: return null
+        if (remaining <= 0L) {
+            sleepTimerDeadlineMs = null
+            sleepTimerStep = 0
+            pause()
+            // Wait for the last silent audio frames to drain before restoring gain so pause never pops.
+            applicationScope.launch(Dispatchers.Main.immediate) {
+                delay(180L)
+                if (!_state.value.isPlaying) restoreSleepFadeVolume()
+            }
+            _state.update { it.copy(sleepTimerRemainingMs = null) }
+            return null
+        }
+        if (remaining <= SLEEP_FADE_WINDOW_MS &&
+            _state.value.isPlaying &&
+            !isCasting &&
+            !bitPerfectEnabled &&
+            !exclusiveUsbOutput.isActive() &&
+            unduckedVolume == null &&
+            playerDelegate.isInitialized()
+        ) {
+            val factor = (remaining.toFloat() / SLEEP_FADE_WINDOW_MS.toFloat()).coerceIn(0f, 1f)
+            val faded = (appVolume * factor * factor).coerceIn(0f, 1f)
+            sleepTimerFadeActive = true
+            runCatching { player.volume = faded }
+            runCatching { nativeAudioEngine.get().setOutputVolume(faded) }
+        }
+        return remaining.coerceAtLeast(0L)
+    }
+
     fun cycleSleepTimer() = onMain {
-        setSleepTimerMinutes(SLEEP_TIMER_MINUTES[(sleepTimerStep + 1) % SLEEP_TIMER_MINUTES.size])
+        if (sleepTimerEndOfTrack) {
+            setSleepTimerMinutes(0)
+            return@onMain
+        }
+        val nextIndex = sleepTimerStep + 1
+        if (nextIndex >= SLEEP_TIMER_MINUTES.size) {
+            setSleepTimerEndOfTrack()
+        } else {
+            setSleepTimerMinutes(SLEEP_TIMER_MINUTES[nextIndex])
+        }
     }
 
     fun setSleepTimerMinutes(minutes: Int) = onMain {
         if (minutes < 0) return@onMain
+        sleepTimerEndOfTrack = false
+        restoreSleepFadeVolume()
         sleepTimerStep = SLEEP_TIMER_MINUTES.indexOf(minutes).coerceAtLeast(0)
         sleepTimerDeadlineMs = minutes.takeIf { it > 0 }
             ?.let { SystemClock.elapsedRealtime() + it * 60_000L }
         _state.update {
-            it.copy(sleepTimerRemainingMs = sleepTimerDeadlineMs?.minus(SystemClock.elapsedRealtime()))
+            it.copy(
+                sleepTimerRemainingMs = sleepTimerDeadlineMs?.minus(SystemClock.elapsedRealtime()),
+                sleepTimerEndOfTrack = false,
+            )
         }
+    }
+
+    fun setSleepTimerEndOfTrack() = onMain {
+        restoreSleepFadeVolume()
+        sleepTimerDeadlineMs = null
+        sleepTimerStep = 0
+        sleepTimerEndOfTrack = true
+        _state.update {
+            it.copy(
+                sleepTimerRemainingMs = null,
+                sleepTimerEndOfTrack = true,
+            )
+        }
+    }
+
+    fun cycleAbLoop() = onMain {
+        val snap = _state.value
+        if (snap.current == null) return@onMain
+        val dur = snap.durationMs.takeIf { it > 0L } ?: snap.current.durationMs ?: 0L
+        val pos = snap.positionMs.coerceAtLeast(0L)
+        val curA = abLoopStartMs
+        val curB = abLoopEndMs
+        when {
+            curA == null -> {
+                abLoopStartMs = pos
+                abLoopEndMs = null
+                _state.update { it.copy(abLoopStartMs = pos, abLoopEndMs = null) }
+            }
+            curB == null -> {
+                var a = curA
+                var b = pos
+                if (b < a) {
+                    val tmp = a
+                    a = b
+                    b = tmp
+                }
+                if (b - a < AB_LOOP_MIN_SPAN_MS) {
+                    b = if (dur > 0L) (a + AB_LOOP_MIN_SPAN_MS).coerceAtMost(dur) else a + AB_LOOP_MIN_SPAN_MS
+                    if (b - a < AB_LOOP_MIN_SPAN_MS && dur > AB_LOOP_MIN_SPAN_MS) {
+                        a = (b - AB_LOOP_MIN_SPAN_MS).coerceAtLeast(0L)
+                    }
+                }
+                abLoopStartMs = a
+                abLoopEndMs = b
+                lastAbLoopSeekWallMs = SystemClock.elapsedRealtime()
+                _state.update { it.copy(abLoopStartMs = a, abLoopEndMs = b) }
+                seekTo(a)
+            }
+            else -> clearAbLoop()
+        }
+    }
+
+    fun clearAbLoop() = onMain {
+        if (abLoopStartMs == null && abLoopEndMs == null) return@onMain
+        abLoopStartMs = null
+        abLoopEndMs = null
+        _state.update { it.copy(abLoopStartMs = null, abLoopEndMs = null) }
     }
     fun clearUpcoming() = onMain {
         if (isCasting) {
@@ -4205,6 +4343,10 @@ class MusicPlayer @Inject constructor(
         unavailableSkipJob?.cancel()
         sleepTimerDeadlineMs = null
         sleepTimerStep = 0
+        sleepTimerEndOfTrack = false
+        restoreSleepFadeVolume()
+        abLoopStartMs = null
+        abLoopEndMs = null
         // Save the podcast resume position before the queue is torn down.
         checkpointPodcastProgress()
         // stop() keeps playWhenReady unchanged, so no listener callback would
@@ -4226,7 +4368,17 @@ class MusicPlayer @Inject constructor(
             // Keep the song where it stopped, for resume() and for the saved
             // session that restores it after the process is gone.
             resumeAfterStopPositionMs = stoppedAtMs.coerceAtLeast(0L)
-            _state.update { it.copy(isPlaying = false, isBuffering = false, positionMs = stoppedAtMs.coerceAtLeast(0L)) }
+            _state.update {
+                it.copy(
+                    isPlaying = false,
+                    isBuffering = false,
+                    positionMs = stoppedAtMs.coerceAtLeast(0L),
+                    sleepTimerRemainingMs = null,
+                    sleepTimerEndOfTrack = false,
+                    abLoopStartMs = null,
+                    abLoopEndMs = null,
+                )
+            }
             persistPlaybackSession()
         }
         if (clearSession) resumeAfterStopPositionMs = null
@@ -9355,6 +9507,9 @@ class MusicPlayer @Inject constructor(
             bitDepth = previous.bitDepth.takeIf { hasExplicitPrevious } ?: streamForCurrent?.bitDepth,
             samplingRateKHz = previous.samplingRateKHz.takeIf { hasExplicitPrevious } ?: streamForCurrent?.samplingRateKHz,
             sleepTimerRemainingMs = sleepTimerDeadlineMs?.minus(SystemClock.elapsedRealtime())?.coerceAtLeast(0),
+            sleepTimerEndOfTrack = sleepTimerEndOfTrack,
+            abLoopStartMs = abLoopStartMs,
+            abLoopEndMs = abLoopEndMs,
             error = if (isPlayingState) null else previous.error,
         )
         // automix telemetry is written from another thread, take it from the
@@ -9604,6 +9759,8 @@ class MusicPlayer @Inject constructor(
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         )
         val SLEEP_TIMER_MINUTES = intArrayOf(0, 15, 30, 60)
+        const val SLEEP_FADE_WINDOW_MS = 15_000L
+        const val AB_LOOP_MIN_SPAN_MS = 1_500L
     }
 }
 

@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+)
 
 package com.lastwave.app.ui.player
 
@@ -214,6 +217,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalContext
 import com.lastwave.app.ui.comic.clip
+import com.lastwave.app.ui.comic.clipOnly
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -617,6 +621,10 @@ internal fun SeekBar(
     secondaryColor: Color = MaterialTheme.colorScheme.secondary,
     tertiaryColor: Color = MaterialTheme.colorScheme.tertiary,
     telemetry: com.lastwave.app.playback.automix.api.DeckBlendTelemetry = com.lastwave.app.playback.automix.api.DeckBlendTelemetry(),
+    abLoopStartMs: Long? = null,
+    abLoopEndMs: Long? = null,
+    onCycleAbLoop: (() -> Unit)? = null,
+    onClearAbLoop: (() -> Unit)? = null,
 ) {
     // The 60 ms ticker is read in the draw phase (bar) and at 1 s (labels +
     // invisible slider semantics). Collecting it from composition recomposed
@@ -813,6 +821,61 @@ internal fun SeekBar(
                 )
             }
 
+            // A-B loop range & pin markers: overlays cleanly on both capsule and wavy tracks.
+            if (abLoopStartMs != null && boundedDurationMs > 0L) {
+                val loopAccent = remember(tertiaryColor, darkBackdrop) {
+                    tertiaryColor.ensureVisibleOnBackdrop(darkBackdrop, 0.42f)
+                }
+                Canvas(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+                    val width = size.width
+                    val centerY = size.height / 2f
+                    val durF = boundedDurationMs.toFloat().coerceAtLeast(1f)
+                    val aX = ((abLoopStartMs.toFloat() / durF).coerceIn(0f, 1f) * width)
+                    val bX = abLoopEndMs?.let { ((it.toFloat() / durF).coerceIn(0f, 1f) * width) }
+                    val liveX = ((dragFraction ?: progressFraction.floatValue).coerceIn(0f, 1f) * width)
+                    val spanStart = minOf(aX, bX ?: liveX)
+                    val spanEnd = maxOf(aX, bX ?: liveX)
+                    val spanW = (spanEnd - spanStart).coerceAtLeast(0f)
+                    val bandH = 16.dp.toPx()
+                    val bandRadius = CornerRadius(bandH / 2f, bandH / 2f)
+                    if (spanW > 1f) {
+                        drawRoundRect(
+                            color = loopAccent.copy(alpha = if (bX != null) 0.30f else 0.16f),
+                            topLeft = Offset(spanStart, centerY - bandH / 2f),
+                            size = Size(spanW, bandH),
+                            cornerRadius = bandRadius,
+                        )
+                        drawRoundRect(
+                            color = loopAccent.copy(alpha = if (bX != null) 0.78f else 0.45f),
+                            topLeft = Offset(spanStart, centerY - bandH / 2f),
+                            size = Size(spanW, bandH),
+                            cornerRadius = bandRadius,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2.dp.toPx()),
+                        )
+                    }
+                    val pinW = 3.dp.toPx()
+                    val pinH = 22.dp.toPx()
+                    val pinRadius = CornerRadius(pinW / 2f, pinW / 2f)
+                    fun drawPin(x: Float) {
+                        val clampedX = x.coerceIn(pinW / 2f, (width - pinW / 2f).coerceAtLeast(pinW / 2f))
+                        drawRoundRect(
+                            color = PlayerPalette.shade.copy(alpha = 0.45f),
+                            topLeft = Offset(clampedX - pinW / 2f - 1.dp.toPx(), centerY - pinH / 2f - 1.dp.toPx()),
+                            size = Size(pinW + 2.dp.toPx(), pinH + 2.dp.toPx()),
+                            cornerRadius = CornerRadius((pinW + 2.dp.toPx()) / 2f, (pinW + 2.dp.toPx()) / 2f),
+                        )
+                        drawRoundRect(
+                            color = loopAccent,
+                            topLeft = Offset(clampedX - pinW / 2f, centerY - pinH / 2f),
+                            size = Size(pinW, pinH),
+                            cornerRadius = pinRadius,
+                        )
+                    }
+                    drawPin(aX)
+                    if (bX != null) drawPin(bX)
+                }
+            }
+
             // Invisible Material interaction layer: custom visuals, reliable seeking semantics.
             val scrubHaptics = rememberScrubHaptics()
             Slider(
@@ -865,17 +928,69 @@ internal fun SeekBar(
         val formattedRemaining = remember(remainingSecond, boundedDurationMs) {
             if (boundedDurationMs > 0L) "\u2212${formatTime(remainingSecond * 1000L)}" else "--:--"
         }
+        val haptics = LocalHapticFeedback.current
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = formattedElapsed,
                 style = if (isTranslucent) MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium) else MaterialTheme.typography.labelMedium,
                 color = textColor,
             )
+            if (onCycleAbLoop != null && boundedDurationMs > 0L) {
+                val loopActive = abLoopStartMs != null
+                val loopLabel = when {
+                    abLoopStartMs != null && abLoopEndMs != null ->
+                        "A–B ${formatTime(abLoopStartMs)}–${formatTime(abLoopEndMs)}"
+                    abLoopStartMs != null ->
+                        "A ${formatTime(abLoopStartMs)} · Set B"
+                    else -> "A–B"
+                }
+                val pillAccent = remember(tertiaryColor, darkBackdrop) {
+                    tertiaryColor.ensureVisibleOnBackdrop(darkBackdrop, 0.42f)
+                }
+                val pillBg = if (loopActive) pillAccent.copy(alpha = 0.22f) else Color.Transparent
+                val pillBorder = if (loopActive) pillAccent.copy(alpha = 0.65f) else Color.Transparent
+                val pillTextColor = if (loopActive) PlayerPalette.ink.copy(alpha = 0.96f) else textColor.copy(alpha = 0.56f)
+                val pillShape = androidx.compose.foundation.shape.RoundedCornerShape(50)
+                Box(
+                    modifier = Modifier
+                        .let { if (loopActive) it.clip(pillShape) else it.clipOnly(pillShape) }
+                        .background(pillBg, pillShape)
+                        .then(if (loopActive) Modifier.border(1.dp, pillBorder, pillShape) else Modifier)
+                        .combinedClickable(
+                            onClick = {
+                                haptics.performHapticFeedback(
+                                    if (abLoopEndMs != null) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn,
+                                )
+                                onCycleAbLoop()
+                            },
+                            onLongClick = {
+                                if (loopActive && onClearAbLoop != null) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onClearAbLoop()
+                                }
+                            },
+                        )
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = loopLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = if (loopActive) FontWeight.SemiBold else FontWeight.Medium,
+                            fontFeatureSettings = "tnum",
+                        ),
+                        color = pillTextColor,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
             Text(
                 text = formattedRemaining,
                 style = if (isTranslucent) MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium) else MaterialTheme.typography.labelMedium,

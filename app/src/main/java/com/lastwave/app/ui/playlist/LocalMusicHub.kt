@@ -181,6 +181,32 @@ internal enum class LocalSortMode(val labelRes: Int) {
     FORMAT(R.string.local_sort_format),
 }
 
+internal enum class LocalFormatFilter(val labelRes: Int) {
+    ALL(R.string.local_filter_all),
+    LOSSLESS(R.string.local_filter_lossless),
+    FLAC(R.string.local_filter_flac),
+    DSD(R.string.local_filter_dsd),
+    WAV_AIFF(R.string.local_filter_wav_aiff),
+    LOSSY(R.string.local_filter_lossy),
+}
+
+private val LOCAL_LOSSLESS_EXTENSIONS = setOf("flac", "wav", "wave", "aif", "aiff", "aifc", "alac", "dsf", "dff")
+private val LOCAL_DSD_EXTENSIONS = setOf("dsf", "dff")
+private val LOCAL_WAV_AIFF_EXTENSIONS = setOf("wav", "wave", "aif", "aiff", "aifc")
+
+internal fun GeneratedTrack.matchesLocalFormat(filter: LocalFormatFilter): Boolean {
+    if (filter == LocalFormatFilter.ALL) return true
+    val ext = LocalAudioFormats.extensionOf(url)
+    return when (filter) {
+        LocalFormatFilter.ALL -> true
+        LocalFormatFilter.LOSSLESS -> ext in LOCAL_LOSSLESS_EXTENSIONS
+        LocalFormatFilter.FLAC -> ext == "flac"
+        LocalFormatFilter.DSD -> ext in LOCAL_DSD_EXTENSIONS
+        LocalFormatFilter.WAV_AIFF -> ext in LOCAL_WAV_AIFF_EXTENSIONS
+        LocalFormatFilter.LOSSY -> ext.isNotEmpty() && ext !in LOCAL_LOSSLESS_EXTENSIONS
+    }
+}
+
 internal sealed interface LocalDetailRoute {
     data class Album(val key: String, val title: String, val artist: String) : LocalDetailRoute
     data class Artist(val key: String, val name: String) : LocalDetailRoute
@@ -360,6 +386,7 @@ fun LocalMusicHub(
     var activeTab by rememberSaveable(playlist.id) { mutableStateOf(LocalHubTab.SONGS) }
     var sortMode by rememberSaveable(playlist.id) { mutableStateOf(LocalSortMode.TITLE) }
     var sortAscending by rememberSaveable(playlist.id) { mutableStateOf(true) }
+    var formatFilter by rememberSaveable(playlist.id) { mutableStateOf(LocalFormatFilter.ALL) }
     var isGridView by rememberSaveable(playlist.id) { mutableStateOf(false) }
     var isSearchActive by rememberSaveable(playlist.id) { mutableStateOf(false) }
     var searchQuery by rememberSaveable(playlist.id) { mutableStateOf("") }
@@ -457,6 +484,38 @@ fun LocalMusicHub(
         }
     }
 
+    LaunchedEffect(detailRoute) {
+        formatFilter = LocalFormatFilter.ALL
+    }
+
+    val formatBaseTracks = if (detailRoute != null) currentDetailTracks else playlist.tracks
+    val availableFormatChips = remember(formatBaseTracks) {
+        if (formatBaseTracks.isEmpty()) return@remember emptyList<Pair<LocalFormatFilter, Int>>()
+        val total = formatBaseTracks.size
+        val flacCount = formatBaseTracks.count { it.matchesLocalFormat(LocalFormatFilter.FLAC) }
+        val dsdCount = formatBaseTracks.count { it.matchesLocalFormat(LocalFormatFilter.DSD) }
+        val wavCount = formatBaseTracks.count { it.matchesLocalFormat(LocalFormatFilter.WAV_AIFF) }
+        val losslessCount = formatBaseTracks.count { it.matchesLocalFormat(LocalFormatFilter.LOSSLESS) }
+        val lossyCount = formatBaseTracks.count { it.matchesLocalFormat(LocalFormatFilter.LOSSY) }
+        val chips = mutableListOf(LocalFormatFilter.ALL to total)
+        val distinctLosslessBuckets = listOf(flacCount, dsdCount, wavCount).count { it > 0 }
+        val hasOtherLossless = losslessCount > (flacCount + dsdCount + wavCount)
+        if (losslessCount in 1 until total && (distinctLosslessBuckets > 1 || hasOtherLossless)) {
+            chips += LocalFormatFilter.LOSSLESS to losslessCount
+        }
+        if (flacCount > 0) chips += LocalFormatFilter.FLAC to flacCount
+        if (dsdCount > 0) chips += LocalFormatFilter.DSD to dsdCount
+        if (wavCount > 0) chips += LocalFormatFilter.WAV_AIFF to wavCount
+        if (lossyCount > 0) chips += LocalFormatFilter.LOSSY to lossyCount
+        if (chips.size > 2) chips else emptyList()
+    }
+
+    LaunchedEffect(availableFormatChips) {
+        if (formatFilter != LocalFormatFilter.ALL && availableFormatChips.none { it.first == formatFilter }) {
+            formatFilter = LocalFormatFilter.ALL
+        }
+    }
+
     val displayedSongs = remember(
         playlist.tracks,
         currentDetailTracks,
@@ -464,13 +523,19 @@ fun LocalMusicHub(
         sortMode,
         sortAscending,
         searchQuery,
+        formatFilter,
     ) {
         val base = if (detailRoute != null) currentDetailTracks else playlist.tracks
-        val filtered = if (searchQuery.isBlank()) {
+        val formatFiltered = if (formatFilter == LocalFormatFilter.ALL) {
             base
         } else {
+            base.filter { it.matchesLocalFormat(formatFilter) }
+        }
+        val filtered = if (searchQuery.isBlank()) {
+            formatFiltered
+        } else {
             val q = searchQuery.trim()
-            base.filter { t ->
+            formatFiltered.filter { t ->
                 t.name.contains(q, ignoreCase = true) ||
                     t.artist.contains(q, ignoreCase = true) ||
                     (t.album?.contains(q, ignoreCase = true) == true)
@@ -891,15 +956,55 @@ fun LocalMusicHub(
                 }
             }
 
+            // 7b. Smart Audio Format Filter Chips (Lossless / FLAC / DSD / WAV / MP3)
+            if ((detailRoute != null || activeTab == LocalHubTab.SONGS) && availableFormatChips.isNotEmpty()) {
+                item(key = "local_format_filters") {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(vertical = 2.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        items(availableFormatChips, key = { it.first.name }) { (filter, count) ->
+                            val selected = formatFilter == filter
+                            Surface(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                    formatFilter = filter
+                                },
+                                shape = ExpressivePillShape,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                contentColor = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            ) {
+                                Text(
+                                    text = "${stringResource(filter.labelRes)} ($count)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // 8. Body Content
             when {
                 detailRoute != null -> {
                     if (displayedSongs.isEmpty()) {
                         item(key = "detail_empty") {
                             LocalEmptyState(
-                                message = if (detailRoute == LocalDetailRoute.OfflineLikes && searchQuery.isBlank()) {
+                                message = if (detailRoute == LocalDetailRoute.OfflineLikes && searchQuery.isBlank() && formatFilter == LocalFormatFilter.ALL) {
                                     stringResource(R.string.local_empty_offline_likes)
-                                } else if (searchQuery.isNotBlank()) {
+                                } else if (searchQuery.isNotBlank() || formatFilter != LocalFormatFilter.ALL) {
                                     stringResource(R.string.local_empty_filtered)
                                 } else {
                                     stringResource(R.string.local_empty_tracks)
@@ -959,12 +1064,13 @@ fun LocalMusicHub(
 
                 activeTab == LocalHubTab.SONGS -> {
                     if (displayedSongs.isEmpty()) {
+                        val isFiltered = searchQuery.isNotBlank() || formatFilter != LocalFormatFilter.ALL
                         item(key = "songs_empty") {
                             LocalEmptyState(
-                                message = if (searchQuery.isNotBlank()) stringResource(R.string.local_empty_filtered)
+                                message = if (isFiltered) stringResource(R.string.local_empty_filtered)
                                 else stringResource(R.string.local_empty_tracks),
-                                primaryActionLabel = if (searchQuery.isBlank()) stringResource(R.string.local_choose_folder) else null,
-                                onPrimaryAction = if (searchQuery.isBlank()) { { folderPicker.launch(null) } } else null,
+                                primaryActionLabel = if (!isFiltered) stringResource(R.string.local_choose_folder) else null,
+                                onPrimaryAction = if (!isFiltered) { { folderPicker.launch(null) } } else null,
                             )
                         }
                     } else if (isGridView) {

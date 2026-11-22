@@ -543,6 +543,25 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
+    fun removeDuplicates(playlistId: Long) {
+        if (playlistId < 0L) return
+        viewModelScope.launch {
+            val result = playlistRepository.removeDuplicates(playlistId)
+            val (updated, removed) = result ?: return@launch
+            _uiState.update { current ->
+                current.copy(
+                    detailPlaylist = if (current.detailPlaylist?.id == playlistId) updated else current.detailPlaylist,
+                    toastMessage = when {
+                        removed <= 0 -> "No duplicate songs found"
+                        removed == 1 -> "Removed 1 duplicate song"
+                        else -> "Removed $removed duplicate songs"
+                    },
+                )
+            }
+            if (removed > 0) load()
+        }
+    }
+
     /**
      * Permanent drag-reorder for local playlists. Updates the open detail
      * immediately (so the row stays under the finger) then persists the new

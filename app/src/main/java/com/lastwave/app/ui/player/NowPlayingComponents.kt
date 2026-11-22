@@ -198,6 +198,37 @@ import com.lastwave.app.ui.theme.comicNightWash
 import com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported
 import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.ui.theme.liquidGlassContainerColor
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.AbsoluteAlignment
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
+import com.lastwave.app.ui.comic.clipOnly
+import com.lastwave.app.ui.shell.liquidBubbleHighlight
+import com.lastwave.app.ui.shell.liquidNavigationIndex
+import com.lastwave.app.ui.shell.liquidNavigationRawPosition
+import com.lastwave.app.ui.shell.liquidNavigationRubberBand
+import com.lastwave.app.ui.shell.liquidNavigationVisualIndex
+import com.lastwave.app.ui.theme.GlassRecipe
+import com.lastwave.app.ui.theme.LiquidGlassIntensity
+import com.lastwave.app.ui.theme.glassRim
+import com.lastwave.app.ui.theme.waterDropJiggle
+import io.github.fletchmckee.liquid.liquefiable
+import io.github.fletchmckee.liquid.liquid
+import io.github.fletchmckee.liquid.rememberLiquidState
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import com.lastwave.app.util.ArtistHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -1054,6 +1085,10 @@ internal fun PlaybackSeekBar(
     modifier: Modifier = Modifier,
     /** Where the song's best part starts; drawn as a tappable dot on the track. */
     bestPartMs: Long? = null,
+    abLoopStartMs: Long? = null,
+    abLoopEndMs: Long? = null,
+    onCycleAbLoop: (() -> Unit)? = null,
+    onClearAbLoop: (() -> Unit)? = null,
 ) {
     // Duration only: collecting progress itself would recompose on every 60 ms tick.
     val durationMs by remember(progressState) {
@@ -1090,6 +1125,10 @@ internal fun PlaybackSeekBar(
             secondaryColor = secondaryColor,
             tertiaryColor = tertiaryColor,
             telemetry = telemetry,
+            abLoopStartMs = abLoopStartMs,
+            abLoopEndMs = abLoopEndMs,
+            onCycleAbLoop = onCycleAbLoop,
+            onClearAbLoop = onClearAbLoop,
         )
         if (showBestPart) {
             BestPartPill(
@@ -1456,6 +1495,18 @@ internal fun MainPlaybackControls(
     }
 }
 
+private data class DockActionItem(
+    val key: String,
+    val icon: ImageVector,
+    val label: String,
+    val showBadgeDot: Boolean,
+    val comicAccent: Color,
+    val isLoading: Boolean = false,
+    val progressPercent: Int = 0,
+    val succeeded: Boolean = false,
+    val onClick: () -> Unit,
+)
+
 @Composable
 internal fun SecondaryActionRow(
     hasLyrics: Boolean,
@@ -1463,78 +1514,428 @@ internal fun SecondaryActionRow(
     onShowLyrics: () -> Unit,
     onShowQueue: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Swaps the cover for the synced music video; null hides the tile (no video). */
+    /** Swaps the cover for the synced music video; null hides the slot (no video). */
     onToggleVideo: (() -> Unit)? = null,
     isVideoActive: Boolean = false,
     downloadState: NowPlayingDownloadState = NowPlayingDownloadState(),
     /**
-     * One-tap track download while streaming; null hides the tile (disabled in Settings or local tracks).
-     * Once saved it becomes a one-time Library shortcut, then hides: nothing left to do here.
+     * One-tap track download while streaming; null hides the slot (disabled in Settings or local tracks).
+     * Once saved it becomes a one-time Library shortcut, then hides and the remaining slots center cleanly.
      */
     onDownload: (() -> Unit)? = null,
 ) {
-    // Only the destinations people jump to while listening. Output is the speaker
-    // chip above, EQ sits in the tune sheet, and Share is in the ⋮ menu.
-    // Comic Pop gives each tile its own accent (pink video, cyan queue,
-    // mint lyrics, yellow download) tuned for both cream-paper light mode and dark mode.
-    val itemHeight = if (compact) 48.dp else 54.dp
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val isDownloaded = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADED
+    val isDownloading = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADING
+    val queueLabel = stringResource(R.string.player_queue)
+    val lyricsLabel = stringResource(R.string.player_lyrics)
+    val downloadLabel = when {
+        isDownloaded -> stringResource(R.string.player_download_library)
+        isDownloading && downloadState.progressPercent > 0 -> "${downloadState.progressPercent}%"
+        else -> stringResource(R.string.player_download)
+    }
+
+    val actions = buildList {
         if (onToggleVideo != null) {
-            SecondaryActionTile(
-                icon = Icons.Filled.SmartDisplay,
-                label = if (isVideoActive) "Cover" else "Video",
-                showBadgeDot = isVideoActive,
-                height = itemHeight,
-                onClick = onToggleVideo,
-                modifier = Modifier.weight(1f),
-                comicAccent = ComicPink,
-                isHighlighted = isVideoActive,
+            add(
+                DockActionItem(
+                    key = "video",
+                    icon = Icons.Filled.SmartDisplay,
+                    label = if (isVideoActive) "Cover" else "Video",
+                    showBadgeDot = isVideoActive,
+                    comicAccent = ComicPink,
+                    onClick = onToggleVideo,
+                ),
             )
         }
-        SecondaryActionTile(
-            icon = Icons.AutoMirrored.Filled.QueueMusic,
-            label = stringResource(R.string.player_queue),
-            showBadgeDot = false,
-            height = itemHeight,
-            onClick = onShowQueue,
-            modifier = Modifier.weight(1f),
-            comicAccent = ComicCyan,
-            isHighlighted = true,
+        add(
+            DockActionItem(
+                key = "queue",
+                icon = Icons.AutoMirrored.Filled.QueueMusic,
+                label = queueLabel,
+                showBadgeDot = false,
+                comicAccent = ComicCyan,
+                onClick = onShowQueue,
+            ),
         )
-        SecondaryActionTile(
-            icon = Icons.Filled.FormatQuote,
-            label = stringResource(R.string.player_lyrics),
-            showBadgeDot = hasLyrics,
-            height = itemHeight,
-            onClick = onShowLyrics,
-            modifier = Modifier.weight(1f),
-            comicAccent = ComicMint,
-            isHighlighted = hasLyrics,
+        add(
+            DockActionItem(
+                key = "lyrics",
+                icon = Icons.Filled.FormatQuote,
+                label = lyricsLabel,
+                showBadgeDot = hasLyrics,
+                comicAccent = ComicMint,
+                onClick = onShowLyrics,
+            ),
         )
-        val isDownloaded = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADED
         if (onDownload != null && (!isDownloaded || downloadState.openInLibrary)) {
-            val isDownloading = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADING
-            val downloadLabel = when {
-                isDownloaded -> stringResource(R.string.player_download_library)
-                isDownloading && downloadState.progressPercent > 0 -> "${downloadState.progressPercent}%"
-                else -> stringResource(R.string.player_download)
+            add(
+                DockActionItem(
+                    key = "download",
+                    icon = if (isDownloaded) Icons.Filled.LibraryMusic else Icons.Filled.Download,
+                    label = downloadLabel,
+                    showBadgeDot = isDownloaded,
+                    comicAccent = ComicAccent,
+                    isLoading = isDownloading,
+                    progressPercent = downloadState.progressPercent,
+                    succeeded = isDownloaded,
+                    onClick = onDownload,
+                ),
+            )
+        }
+    }
+    if (actions.isEmpty()) return
+
+    val count = actions.size
+    val isComic = LocalComicTheme.current
+    val isDark = LocalIsDarkTheme.current
+    val darkBackdrop = PlayerPalette.shade.luminance() < 0.5f
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val density = LocalDensity.current
+    val haptics = LocalHapticFeedback.current
+    val useRefractionLens = !isComic && LocalLiquidGlass.current && isLiquidGlassBackdropSupported()
+    val dockHeight = if (compact) 50.dp else 56.dp
+
+    // Anchor resting lens by semantic key so adding/removing Download or Video keeps the pill stable.
+    var restKey by remember { mutableStateOf("lyrics") }
+    LaunchedEffect(isVideoActive) {
+        if (isVideoActive) restKey = "video"
+    }
+    val selectedIndex = actions.indexOfFirst { it.key == restKey }
+        .takeIf { it >= 0 }
+        ?: actions.indexOfFirst { it.key == "lyrics" }.coerceAtLeast(0)
+
+    val latestActions by rememberUpdatedState(actions)
+    val startVisual = liquidNavigationVisualIndex(selectedIndex, count, isRtl)
+    val settledPosition = remember(count, isRtl) { Animatable(startVisual) }
+    val trailingPosition = remember(count, isRtl) { Animatable(startVisual) }
+    var pressed by remember { mutableStateOf(false) }
+    var cancelled by remember { mutableStateOf(false) }
+    var touchPosition by remember { mutableFloatStateOf(Float.NaN) }
+    var touchY by remember { mutableFloatStateOf(0f) }
+    var releaseGeneration by remember { mutableIntStateOf(0) }
+    var innerWidthPx by remember { mutableIntStateOf(0) }
+
+    val lift by animateFloatAsState(
+        targetValue = if ((pressed && !cancelled) || settledPosition.isRunning) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.88f, stiffness = 520f),
+        label = "playerDockLift",
+    )
+    val currentPosition = {
+        if (touchPosition.isFinite()) touchPosition else settledPosition.value
+    }
+
+    LaunchedEffect(selectedIndex, pressed, releaseGeneration) {
+        if (!pressed) {
+            if (touchPosition.isFinite()) {
+                settledPosition.snapTo(touchPosition)
+                touchPosition = Float.NaN
             }
-            SecondaryActionTile(
-                icon = if (isDownloaded) Icons.Filled.LibraryMusic else Icons.Filled.Download,
-                label = downloadLabel,
-                showBadgeDot = isDownloaded,
-                height = itemHeight,
-                onClick = onDownload,
-                modifier = Modifier.weight(1f),
-                comicAccent = ComicAccent,
-                isHighlighted = isDownloading || isDownloaded,
-                isLoading = isDownloading,
-                progressPercent = downloadState.progressPercent,
-                succeeded = isDownloaded,
+            settledPosition.animateTo(
+                liquidNavigationVisualIndex(selectedIndex, count, isRtl),
+                spring(dampingRatio = 0.78f, stiffness = 320f),
+            )
+        }
+    }
+    LaunchedEffect(count, isRtl) {
+        snapshotFlow { currentPosition() }.collectLatest {
+            trailingPosition.animateTo(it, spring(dampingRatio = 0.92f, stiffness = 540f))
+        }
+    }
+
+    val activeSlotIndex = liquidNavigationIndex(currentPosition(), count, isRtl).coerceIn(actions.indices)
+    val comicLensColor by animateColorAsState(
+        targetValue = actions[activeSlotIndex].comicAccent.copy(alpha = if (isDark) 0.44f else 1f),
+        animationSpec = tween(160),
+        label = "playerDockComicLens",
+    )
+
+    // Center neatly when fewer than 4 slots (e.g. Download disabled or already saved).
+    val dockWidthModifier = when (count) {
+        1 -> Modifier.widthIn(min = 124.dp, max = 160.dp)
+        2 -> Modifier.fillMaxWidth(0.64f).widthIn(min = 196.dp, max = 256.dp)
+        3 -> Modifier.fillMaxWidth(0.86f).widthIn(min = 256.dp, max = 328.dp)
+        else -> Modifier.fillMaxWidth().widthIn(max = 420.dp)
+    }
+
+    val railState = rememberLiquidState()
+    val pressedScale = dockHeight.value / (dockHeight.value - 8f).coerceAtLeast(1f)
+    val slotWidthPx = if (innerWidthPx > 0) innerWidthPx.toFloat() / count else 0f
+    val slotWidthDp = with(density) { slotWidthPx.toDp() }
+    val accent = MaterialTheme.colorScheme.primary
+    val outerBg = when {
+        isComic -> MaterialTheme.colorScheme.surfaceContainerHigh
+        else -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+    }
+
+    val gestureModifier = Modifier.pointerInput(count, isRtl) {
+        val cancelMarginPx = 36.dp.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val width = size.width
+            val height = size.height
+            if (width <= 0) return@awaitEachGesture
+            val fingerStart = liquidNavigationRawPosition(down.position.x, width.toFloat(), count)
+            val visualStart = currentPosition()
+            val onExistingLens = abs(fingerStart - visualStart) <= 0.5f
+            val grabOffset = if (onExistingLens) visualStart - fingerStart else 0f
+            touchPosition = liquidNavigationRubberBand(fingerStart + grabOffset, count)
+            touchY = 0f
+            cancelled = false
+            pressed = true
+            var dragged = false
+            var lastHoveredIndex = liquidNavigationIndex(touchPosition, count, isRtl)
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    val dx = change.position.x - down.position.x
+                    val dy = change.position.y - down.position.y
+                    if (event.changes.count { it.pressed } > 1 || change.isConsumed) {
+                        cancelled = true
+                        break
+                    }
+                    if (!dragged && abs(dy) > viewConfiguration.touchSlop && abs(dy) >= abs(dx)) {
+                        cancelled = true
+                        break
+                    }
+                    val outOfVerticalBounds =
+                        change.position.y < -cancelMarginPx || change.position.y > height + cancelMarginPx
+                    cancelled = outOfVerticalBounds
+                    touchPosition = liquidNavigationRubberBand(
+                        liquidNavigationRawPosition(change.position.x, width.toFloat(), count) + grabOffset,
+                        count,
+                    )
+                    touchY = (dy / height.coerceAtLeast(1)).coerceIn(-0.2f, 0.2f)
+                    val hovered = liquidNavigationIndex(touchPosition, count, isRtl)
+                    if (!outOfVerticalBounds && hovered != lastHoveredIndex) {
+                        lastHoveredIndex = hovered
+                        haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                    }
+                    if (!change.pressed) {
+                        if (!cancelled) {
+                            change.consume()
+                            val currentList = latestActions
+                            val destination = liquidNavigationIndex(touchPosition, currentList.size, isRtl)
+                                .coerceIn(currentList.indices)
+                            restKey = currentList[destination].key
+                            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            currentList[destination].onClick()
+                        }
+                        break
+                    }
+                    if (abs(dx) > viewConfiguration.touchSlop && abs(dx) > abs(dy)) dragged = true
+                    if (dragged) change.consume()
+                }
+            } finally {
+                pressed = false
+                cancelled = false
+                touchY = 0f
+                releaseGeneration++
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        val dockModifier = dockWidthModifier
+            .height(dockHeight)
+            .let { if (!isComic) it.waterDropJiggle(amplitude = 0.018f) else it }
+
+        // Keep outer container unclipped so the lifted lens can swell past the rail like Home UI.
+        Box(modifier = dockModifier) {
+            // Rail + slots captured together when real refraction is active; sliding lens stays an acyclic sibling.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .let { if (useRefractionLens) it.liquefiable(railState) else it },
+            ) {
+                if (isComic) {
+                    Surface(
+                        shape = CircleShape,
+                        color = outerBg,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.matchParentSize(),
+                    ) {}
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(outerBg, CircleShape)
+                            .liquidGlassChrome(CircleShape, LocalLiquidGlass.current, LiquidGlassPreset.PlayerControls)
+                            .glassRim(),
+                    )
+                }
+                if (useRefractionLens) {
+                    DockSlotsRow(
+                        actions = actions,
+                        selectedIndex = selectedIndex,
+                        isComic = isComic,
+                        isDark = isDark,
+                        isRtl = isRtl,
+                        lifted = pressed && !cancelled,
+                        currentPosition = currentPosition,
+                        onActivate = { item ->
+                            restKey = item.key
+                            item.onClick()
+                        },
+                        modifier = Modifier.fillMaxSize().padding(4.dp),
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp)
+                    .onSizeChanged { innerWidthPx = it.width }
+                    .then(gestureModifier),
+            ) {
+                if (slotWidthPx > 0f) {
+                    val lensBaseModifier = Modifier
+                        .align(AbsoluteAlignment.TopLeft)
+                        .absoluteOffset {
+                            IntOffset((currentPosition() * slotWidthPx).roundToInt(), 0)
+                        }
+                        .width(slotWidthDp)
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            val amount = lift.coerceIn(0f, 1f)
+                            val flow = ((currentPosition() - trailingPosition.value) * 2f).coerceIn(-1f, 1f)
+                            scaleX = 1f + amount * (pressedScale - 1f + 0.03f * abs(flow))
+                            scaleY = 1f + amount * (pressedScale - 1f - 0.015f * abs(flow))
+                            translationY = (-1.dp.toPx() + touchY * 3.dp.toPx()) * amount
+                            alpha = if (cancelled) 0.35f else 1f
+                            shape = CircleShape
+                            clip = false
+                            if (!isComic) {
+                                shadowElevation = (1.5.dp.toPx() + 3.5.dp.toPx() * amount)
+                                ambientShadowColor = Color.Black.copy(alpha = 0.08f)
+                                spotShadowColor = Color.Black.copy(alpha = 0.16f)
+                            }
+                        }
+
+                    when {
+                        useRefractionLens -> {
+                            Box(
+                                lensBaseModifier
+                                    .liquidBubbleHighlight(darkBackdrop) { 0.30f + 0.70f * lift.coerceIn(0f, 1f) }
+                                    .liquid(railState) {
+                                        val amount = lift.coerceIn(0f, 1f)
+                                        shape = CircleShape
+                                        frost = 0.dp
+                                        refraction = 0.08f + 0.34f * amount
+                                        curve = 0.04f + 0.16f * amount
+                                        edge = 0.012f + 0.023f * amount
+                                        dispersion = 0.12f * amount
+                                        saturation = LiquidGlassIntensity.saturation(
+                                            GlassRecipe.SATURATION_FROSTED,
+                                            GlassRecipe.SATURATION_CLEAR,
+                                        )
+                                        tint = lerp(
+                                            accent.copy(alpha = if (darkBackdrop) 0.30f else 0.22f),
+                                            Color.White.copy(alpha = if (darkBackdrop) 0.02f else 0.03f),
+                                            amount,
+                                        )
+                                    },
+                            )
+                        }
+                        isComic -> {
+                            Box(
+                                lensBaseModifier
+                                    .clipOnly(CircleShape)
+                                    .background(comicLensColor, CircleShape)
+                                    .border(1.8.dp, ComicInk, CircleShape),
+                            )
+                        }
+                        else -> {
+                            val restTint = PlayerPalette.ink.copy(alpha = if (darkBackdrop) 0.18f else 0.14f)
+                            val liftTint = PlayerPalette.ink.copy(alpha = if (darkBackdrop) 0.28f else 0.22f)
+                            Box(
+                                lensBaseModifier
+                                    .clipOnly(CircleShape)
+                                    .background(lerp(restTint, liftTint, lift.coerceIn(0f, 1f)), CircleShape)
+                                    .liquidBubbleHighlight(darkBackdrop) { 0.30f + 0.70f * lift.coerceIn(0f, 1f) },
+                            )
+                        }
+                    }
+                }
+                if (!useRefractionLens) {
+                    DockSlotsRow(
+                        actions = actions,
+                        selectedIndex = selectedIndex,
+                        isComic = isComic,
+                        isDark = isDark,
+                        isRtl = isRtl,
+                        lifted = pressed && !cancelled,
+                        currentPosition = currentPosition,
+                        onActivate = { item ->
+                            restKey = item.key
+                            item.onClick()
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DockSlotsRow(
+    actions: List<DockActionItem>,
+    selectedIndex: Int,
+    isComic: Boolean,
+    isDark: Boolean,
+    isRtl: Boolean,
+    lifted: Boolean,
+    currentPosition: () -> Float,
+    onActivate: (DockActionItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val count = actions.size
+    val slotContentColor = if (isComic && !isDark) ComicInk else PlayerPalette.ink.copy(alpha = 0.94f)
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        actions.forEachIndexed { index, item ->
+            val visualSlot = liquidNavigationVisualIndex(index, count, isRtl)
+            DockActionSlot(
+                item = item,
+                contentColor = slotContentColor,
+                isComic = isComic,
+                isDark = isDark,
+                scaleProvider = {
+                    val dist = abs(currentPosition() - visualSlot)
+                    when {
+                        lifted -> 1f + (1f - dist).coerceAtLeast(0f) * 0.12f
+                        index == selectedIndex -> 1.03f
+                        else -> 1f
+                    }
+                },
+                alphaProvider = {
+                    val dist = abs(currentPosition() - visualSlot)
+                    when {
+                        lifted -> if (dist < 0.65f) 1f else 0.66f
+                        index == selectedIndex -> 1f
+                        else -> 0.80f
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .semantics(mergeDescendants = true) {
+                        role = Role.Button
+                        contentDescription = item.label
+                        onClick(label = item.label) {
+                            onActivate(item)
+                            true
+                        }
+                    },
             )
         }
     }
@@ -1568,30 +1969,22 @@ internal fun DrawInTick(progress: () -> Float, color: Color, modifier: Modifier 
 }
 
 @Composable
-private fun SecondaryActionTile(
-    icon: ImageVector,
-    label: String,
-    showBadgeDot: Boolean,
-    height: Dp,
-    onClick: () -> Unit,
+private fun DockActionSlot(
+    item: DockActionItem,
+    contentColor: Color,
+    isComic: Boolean,
+    isDark: Boolean,
+    scaleProvider: () -> Float,
+    alphaProvider: () -> Float,
     modifier: Modifier = Modifier,
-    comicAccent: Color? = null,
-    isHighlighted: Boolean = false,
-    isLoading: Boolean = false,
-    progressPercent: Int = 0,
-    /** The loading work finished well: a tick draws in before [icon] returns. */
-    succeeded: Boolean = false,
 ) {
-    val isComic = LocalComicTheme.current
-    val isDark = LocalIsDarkTheme.current
-    // Smooth ring instead of a jump per reported percent.
-    val shownProgress by animateFloatAsState(progressPercent / 100f, tween(300), label = "secActionProgress")
+    val shownProgress by animateFloatAsState(item.progressPercent / 100f, tween(300), label = "dockDlProgress")
     val tick = remember { Animatable(0f) }
     var showTick by remember { mutableStateOf(false) }
-    var wasLoading by remember { mutableStateOf(isLoading) }
-    LaunchedEffect(isLoading) {
-        val finished = wasLoading && !isLoading && succeeded
-        wasLoading = isLoading
+    var wasLoading by remember { mutableStateOf(item.isLoading) }
+    LaunchedEffect(item.isLoading) {
+        val finished = wasLoading && !item.isLoading && item.succeeded
+        wasLoading = item.isLoading
         if (finished) {
             showTick = true
             tick.snapTo(0f)
@@ -1600,47 +1993,53 @@ private fun SecondaryActionTile(
             showTick = false
         }
     }
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.92f else 1f, ExpressiveMotion.spatialSpring(), label = "secActionScale")
-    val shape = RoundedCornerShape(14.dp)
-    val tileColor by animateColorAsState(
-        targetValue = when {
-            isComic && comicAccent != null && !isDark ->
-                if (isHighlighted) comicAccent else comicAccent.copy(alpha = 0.44f)
-            isComic && comicAccent != null ->
-                comicAccent.copy(alpha = if (isHighlighted) 0.36f else 0.22f)
-            else -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
-        },
-        animationSpec = tween(180),
-        label = "secActionColor",
-    )
-    val tileContentColor = if (isComic && comicAccent != null && !isDark) ComicInk else PlayerPalette.ink.copy(alpha = 0.94f)
 
-    LiquidGlassSurface(
-        glassModifier = Modifier.liquidGlassChrome(shape, LocalLiquidGlass.current, LiquidGlassPreset.PlayerControls, interactionSource = interaction),
-        onClick = hapticClick(action = onClick),
-        interactionSource = interaction,
-        shape = shape,
-        color = tileColor,
-        contentColor = tileContentColor,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
+    Column(
         modifier = modifier
-            .height(height)
+            .padding(horizontal = 4.dp)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                val s = scaleProvider()
+                scaleX = s
+                scaleY = s
+                alpha = alphaProvider()
             },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.fillMaxSize()) {
-            if (showBadgeDot) {
+        Box(contentAlignment = Alignment.Center) {
+            if (showTick) {
+                DrawInTick(progress = { tick.value }, color = contentColor, modifier = Modifier.size(18.dp))
+            } else if (item.isLoading) {
+                if (item.progressPercent in 1..99) {
+                    CircularProgressIndicator(
+                        progress = { shownProgress },
+                        modifier = Modifier.size(18.dp),
+                        color = contentColor,
+                        trackColor = contentColor.copy(alpha = 0.22f),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = contentColor,
+                        strokeWidth = 2.dp,
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            if (item.showBadgeDot) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 6.dp, end = 6.dp)
-                        .size(6.dp)
-                        .clip(CircleShape)
+                        .offset(x = 5.dp, y = (-2).dp)
+                        .size(5.dp)
+                        .clipOnly(CircleShape)
                         .background(
                             if (isComic) {
                                 if (isDark) ComicAccent else ComicInk
@@ -1650,43 +2049,15 @@ private fun SecondaryActionTile(
                         ),
                 )
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                if (showTick) {
-                    DrawInTick(progress = { tick.value }, color = tileContentColor, modifier = Modifier.size(19.dp))
-                } else if (isLoading) {
-                    if (progressPercent in 1..99) {
-                        CircularProgressIndicator(
-                            progress = { shownProgress },
-                            modifier = Modifier.size(18.dp),
-                            color = tileContentColor,
-                            trackColor = tileContentColor.copy(alpha = 0.22f),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = tileContentColor,
-                            strokeWidth = 2.dp,
-                        )
-                    }
-                } else {
-                    Icon(imageVector = icon, contentDescription = label, modifier = Modifier.size(19.dp))
-                }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = item.label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold),
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -2331,6 +2702,10 @@ internal fun NowPlayingScreen(
                         tertiaryColor = tertiaryColor,
                         telemetry = state.deckBlendTelemetry,
                         bestPartMs = rememberBestPartMs(player, track),
+                        abLoopStartMs = state.abLoopStartMs,
+                        abLoopEndMs = state.abLoopEndMs,
+                        onCycleAbLoop = player::cycleAbLoop,
+                        onClearAbLoop = player::clearAbLoop,
                     )
 
                     if (!ultraCompactHeight) {

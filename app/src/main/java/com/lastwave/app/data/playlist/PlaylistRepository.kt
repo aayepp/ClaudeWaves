@@ -8,6 +8,7 @@ import com.lastwave.app.data.generate.GeneratedTrack
 import com.lastwave.app.data.generate.isLocalFile
 import com.lastwave.app.data.generate.StoredTrack
 import com.lastwave.app.data.generate.pinnedWithVideoIdsPreserving
+import com.lastwave.app.data.generate.distinctSongs
 import com.lastwave.app.data.generate.sameSongAs
 import com.lastwave.app.data.generate.toGenerated
 import com.lastwave.app.data.generate.toStored
@@ -421,6 +422,19 @@ class PlaylistRepository @Inject constructor(
             val playlist = entity.toDomain()
             if (index !in playlist.tracks.indices) return@withLock playlist
             persist(entity.withTracks(playlist.tracks.toMutableList().apply { removeAt(index) }))
+        }
+    }
+
+    /** Drops later duplicate entries (same videoId or normalized title+artist) under [saveMutex]. */
+    suspend fun removeDuplicates(id: Long): Pair<SavedPlaylist, Int>? {
+        awaitStartupSync()
+        return saveMutex.withLock {
+            val entity = dao.getById(id) ?: return@withLock null
+            val playlist = entity.toDomain()
+            val deduped = playlist.tracks.distinctSongs()
+            val removed = playlist.tracks.size - deduped.size
+            if (removed <= 0) return@withLock playlist to 0
+            persist(entity.withTracks(deduped)) to removed
         }
     }
 

@@ -70,7 +70,7 @@ import androidx.compose.material3.MaterialTheme
 import com.lastwave.app.ui.comic.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
+import com.lastwave.app.ui.comic.Slider
 import androidx.compose.material3.SliderDefaults
 import com.lastwave.app.ui.comic.Surface
 import com.lastwave.app.ui.comic.Switch

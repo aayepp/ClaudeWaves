@@ -876,7 +876,8 @@ fun Slider(
     }
 
     val trackOffColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.12f)
-    val activeColor = MaterialTheme.colorScheme.primary
+    val activeColor = colors.activeTrackColor.takeIf { it != Color.Unspecified && it != Color.Transparent }
+        ?: MaterialTheme.colorScheme.primary
 
     Box(
         modifier = modifier

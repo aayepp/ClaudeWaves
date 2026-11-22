@@ -61,6 +61,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
@@ -129,6 +130,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lastwave.app.data.generate.GeneratedTrack
+import com.lastwave.app.data.generate.distinctSongs
 import com.lastwave.app.data.playlist.LIKED_SONGS_MODE
 import com.lastwave.app.data.playlist.LOCAL_SONGS_MODE
 import com.lastwave.app.data.generate.isLocalFile
@@ -1157,6 +1159,20 @@ fun PlaylistDetailScreen(
                                 },
                             )
                             if (!playlist.isYouTubeOnly) {
+                                val duplicateCount = remember(playlist.tracks) {
+                                    playlist.tracks.size - playlist.tracks.distinctSongs().size
+                                }
+                                if (duplicateCount > 0) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(com.lastwave.app.R.string.pd_remove_duplicates, duplicateCount)) },
+                                        leadingIcon = { Icon(Icons.Filled.DeleteSweep, contentDescription = null) },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                            viewModel.removeDuplicates(playlistId)
+                                            overflowMenuOpen = false
+                                        },
+                                    )
+                                }
                                 val isSyncedToYt = syncedPlaylistIds == null || playlistId in (syncedPlaylistIds ?: emptySet())
                                 DropdownMenuItem(
                                     text = { Text(if (isSyncedToYt) stringResource(com.lastwave.app.R.string.pd_syncing_yt) else stringResource(com.lastwave.app.R.string.pd_sync_yt)) },

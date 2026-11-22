@@ -21,7 +21,7 @@ import com.lastwave.app.ui.comic.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import com.lastwave.app.ui.comic.OutlinedButton
-import androidx.compose.material3.Slider
+import com.lastwave.app.ui.comic.Slider
 import com.lastwave.app.ui.comic.Surface
 import androidx.compose.material3.Text
 import com.lastwave.app.ui.comic.TextButton

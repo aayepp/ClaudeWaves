@@ -522,6 +522,10 @@ internal fun FullPlayerLandscape(
                     tertiaryColor = ambientDeep,
                     telemetry = state.deckBlendTelemetry,
                     bestPartMs = rememberBestPartMs(player, track),
+                    abLoopStartMs = state.abLoopStartMs,
+                    abLoopEndMs = state.abLoopEndMs,
+                    onCycleAbLoop = player::cycleAbLoop,
+                    onClearAbLoop = player::clearAbLoop,
                 )
 
                 if (!isUltraShortPane) {

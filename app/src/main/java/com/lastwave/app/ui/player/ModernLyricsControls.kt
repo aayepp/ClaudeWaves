@@ -84,7 +84,8 @@ import com.lastwave.app.ui.comic.Surface
 import androidx.compose.material3.Text
 import com.lastwave.app.ui.comic.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.material3.Slider
+import com.lastwave.app.ui.comic.Slider
+import com.lastwave.app.ui.comic.Switch
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -914,7 +915,7 @@ internal fun LyricsOptionsMenuDialog(
                             ) {
                                 Icon(Icons.Filled.Translate, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                                 Text("Translate Lyrics", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                androidx.compose.material3.Switch(
+                                Switch(
                                     checked = displayMode == LyricsDisplayMode.Translated,
                                     onCheckedChange = { onToggleTranslation() },
                                 )
@@ -931,7 +932,7 @@ internal fun LyricsOptionsMenuDialog(
                             ) {
                                 Icon(Icons.Filled.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                                 Text("Romanize Lyrics", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                androidx.compose.material3.Switch(
+                                Switch(
                                     checked = displayMode == LyricsDisplayMode.Romanized,
                                     onCheckedChange = { onToggleRomanization() },
                                 )

@@ -514,6 +514,12 @@
     <string name="local_tab_artists">Artists</string>
     <string name="local_tab_folders">Folders</string>
     <string name="local_tab_playlists">Playlists</string>
+    <string name="local_filter_all">All</string>
+    <string name="local_filter_lossless">Lossless</string>
+    <string name="local_filter_flac">FLAC</string>
+    <string name="local_filter_dsd">DSD</string>
+    <string name="local_filter_wav_aiff">WAV / AIFF</string>
+    <string name="local_filter_lossy">MP3 / AAC</string>
     <string name="local_sort_title">Title</string>
     <string name="local_sort_artist">Artist</string>
     <string name="local_sort_album">Album</string>
@@ -660,7 +666,9 @@
     <string name="menu_sleep_timer">Sleep timer</string>
     <string name="menu_custom_timer">Custom Timer</string>
     <string name="menu_timer_off">Off</string>
+    <string name="menu_timer_end_of_track">End of current track</string>
     <string name="menu_timer_minutes">%1$d minutes</string>
+    <string name="menu_timer_fade_hint">Timed sleep fades out gently over the final 15s</string>
     <string name="menu_add_queue">Add to queue</string>
     <string name="menu_open_lastfm">Open in Last.fm</string>
     <string name="menu_copy_link">Copy link</string>
@@ -778,6 +786,7 @@
     <string name="pd_cancel_downloads">Cancel playlist downloads</string>
     <string name="pd_change_cover">Change cover image</string>
     <string name="pd_export_share">Export / Share</string>
+    <string name="pd_remove_duplicates">Remove duplicates (%1$d)</string>
     <string name="pd_delete_title">Delete playlist?</string>
     <string name="pd_delete_text">This will permanently remove “%1$s”.</string>
     <string name="pd_clear_search_cd">Clear search</string>

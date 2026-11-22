@@ -537,16 +537,38 @@ fun TrackContextMenuSheet(
                             Icon(Icons.Filled.Add, stringResource(R.string.menu_custom_timer))
                         }
                     }
-                    Spacer(Modifier.height(16.dp))
-                    listOf(0, 15, 30, 60).forEach { minutes ->
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(
+                        onClick = {
+                            musicPlayer.setSleepTimerMinutes(0)
+                            showTimerDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.menu_timer_off)) }
+                    TextButton(
+                        onClick = {
+                            musicPlayer.setSleepTimerEndOfTrack()
+                            showTimerDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.menu_timer_end_of_track)) }
+                    listOf(15, 30, 60).forEach { minutes ->
                         TextButton(
                             onClick = {
                                 musicPlayer.setSleepTimerMinutes(minutes)
                                 showTimerDialog = false
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text(if (minutes == 0) stringResource(R.string.menu_timer_off) else stringResource(R.string.menu_timer_minutes, minutes)) }
+                        ) { Text(stringResource(R.string.menu_timer_minutes, minutes)) }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.menu_timer_fade_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
                 }
             }
         }
