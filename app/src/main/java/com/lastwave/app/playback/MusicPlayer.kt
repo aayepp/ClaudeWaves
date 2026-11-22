@@ -769,10 +769,20 @@ class MusicPlayer @Inject constructor(
      * other way round. No factory User-Agent either, since Media3 appends it
      * after the per-request one.
      */
+    /**
+     * Media3's paywall filter refuses every type containing "xml", which made
+     * any DASH manifest fetched over HTTP fail as INVALID_HTTP_CONTENT_TYPE and
+     * dropped add-on Hi-Res (served as an .mpd) to the YouTube fallback.
+     */
+    private val MEDIA_CONTENT_TYPES = com.google.common.base.Predicate<String> { type ->
+        HttpDataSource.REJECT_PAYWALL_TYPES.apply(type) ||
+            type?.contains("dash+xml", ignoreCase = true) == true
+    }
+
     private val httpUpstreamFactory: OkHttpDataSource.Factory by lazy {
         OkHttpDataSource.Factory(mediaHttpClient)
             .setUserAgent(null)
-            .setContentTypePredicate(HttpDataSource.REJECT_PAYWALL_TYPES)
+            .setContentTypePredicate(MEDIA_CONTENT_TYPES)
             .setDefaultRequestProperties(NEUTRAL_MEDIA_HEADERS)
     }
 
@@ -4673,7 +4683,7 @@ class MusicPlayer @Inject constructor(
     private val prefixDataSourceFactory: CacheDataSource.Factory by lazy {
         val upstream = OkHttpDataSource.Factory(
             mediaHttpClient.newBuilder().callTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build(),
-        ).setContentTypePredicate(HttpDataSource.REJECT_PAYWALL_TYPES)
+        ).setContentTypePredicate(MEDIA_CONTENT_TYPES)
             .setUserAgent(null)
             .setDefaultRequestProperties(NEUTRAL_MEDIA_HEADERS)
         // Prefix reads share the byte cache and transport, but have their
