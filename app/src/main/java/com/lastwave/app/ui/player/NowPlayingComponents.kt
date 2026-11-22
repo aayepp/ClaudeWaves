@@ -248,8 +248,9 @@ internal fun BoxScope.FullScreenArtworkBackground(
         label = "fullBleedArtworkAlpha",
     )
     val heroCover = if (canvasCover >= 0.95f) 0f else (1f - canvasCover).coerceIn(0f, 1f)
-    // Skip expensive full-screen RenderEffect blur + radial glow when opaque full-bleed cover fills the viewport.
-    val hiddenBehindFullBleed = showFullBleed && isNowPlaying && heroAlpha >= 0.99f && heroCover >= 0.99f
+    // Skip the expensive blurred backdrop only while a full-screen Canvas video covers it;
+    // the square cover alone fills just the top of the screen.
+    val hiddenBehindFullBleed = showFullBleed && isNowPlaying && heroAlpha >= 0.99f && canvasCover >= 0.99f
 
     Box(
         Modifier
@@ -330,11 +331,13 @@ internal fun BoxScope.FullScreenArtworkBackground(
                 artist = track.artist,
                 embeddedUrl = track.artworkUrl,
                 resolvedUrl = resolvedAmbientUrl,
-                bottomFade = 0f,
+                // Full width at its own square shape, fading into the blurred cover below:
+                // cropping a square to the tall screen cut off the sides of the artwork.
+                bottomFade = 0.32f,
                 alpha = heroAlpha * heroCover,
                 contentScale = ContentScale.Crop,
-                alignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize(),
+                alignment = Alignment.TopCenter,
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().aspectRatio(1f),
             )
             if (activeCanvas != null) {
                 CanvasArtworkPlayer(
