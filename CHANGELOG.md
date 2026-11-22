@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.13] - 2026-11-22
+
+### Changed
+- **Better diagnostics for add-on playback:** exported diagnostics now include add-on search, the chosen track, the stream it answered with and why a song fell back to YouTube, so quality problems can be traced from one report.
+
 ## [1.0.12] - 2026-11-22
 
 ### Fixed
