@@ -588,6 +588,12 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun toggleFullArtwork() {
+        viewModelScope.launch {
+            settingsPreferences.setCanvasFullBleed(!settings.value.canvasFullBleed)
+        }
+    }
+
     fun setLyricsFontScale(scale: Float) {
         viewModelScope.launch {
             settingsPreferences.setLyricsFontScale(scale)

@@ -1014,6 +1014,7 @@ internal fun ExpandedPlayer(
         // One saved state drives the heart and YouTube sync.
         onToggleLiked = { currentTrack?.let(viewModel::toggleLiked) },
         onDoubleTapLike = { currentTrack?.let(viewModel::like) },
+        onToggleFullArtwork = viewModel::toggleFullArtwork,
         youTubeLiked = youTubeLiked,
         onToggleYouTubeLike = { currentTrack?.let(viewModel::toggleYouTubeLike) },
         onDragStatusChange = onDragStatusChange,

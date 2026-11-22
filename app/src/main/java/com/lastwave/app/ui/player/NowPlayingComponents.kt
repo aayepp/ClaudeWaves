@@ -1929,6 +1929,7 @@ internal fun NowPlayingScreen(
     onToggleLiked: () -> Unit,
     onDoubleTapLike: () -> Unit,
     onOpenArtist: (String) -> Unit,
+    onToggleFullArtwork: () -> Unit = {},
     onOpenAudioControls: () -> Unit,
     onOpenSignalPath: () -> Unit,
     onOpenOutputPicker: () -> Unit,
@@ -2007,10 +2008,29 @@ internal fun NowPlayingScreen(
                             val touchSlop = viewConfiguration.touchSlop
                             val initialX = down.position.x
                             val initialY = down.position.y
+                            val longPressAt = SystemClock.uptimeMillis() + viewConfiguration.longPressTimeoutMillis
+                            var longPressed = false
 
                             while (true) {
-                                val event = awaitPointerEvent()
+                                // Held still past the long-press timeout: toggle Full Artwork
+                                // here instead of making users hunt for it in Settings.
+                                val event = if (isDrag || longPressed) awaitPointerEvent() else
+                                    withTimeoutOrNull((longPressAt - SystemClock.uptimeMillis()).coerceAtLeast(0L)) { awaitPointerEvent() }
+                                if (event == null) {
+                                    longPressed = true
+                                    pendingSingleTapJob?.cancel()
+                                    lastTapRegion = -1
+                                    lastTapTimestamp = 0L
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onToggleFullArtwork()
+                                    continue
+                                }
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (longPressed) {
+                                    change.consume()
+                                    if (!change.pressed) break
+                                    continue
+                                }
                                 if (!change.pressed) {
                                     if (isDrag) {
                                         when {
