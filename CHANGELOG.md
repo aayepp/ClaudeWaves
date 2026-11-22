@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.14] - 2026-11-22
+
+### Fixed
+- **Hi-Res from add-ons plays as Hi-Res:** tracks an add-on serves as a DASH stream (Tidal Hi-Res, 24-bit FLAC) were refused by the player and fell back to YouTube AAC right after loading. They now play in Hi-Res.
+
+### Changed
+- **Add-on quality tiers:** ClaudeWaves now asks each add-on in its own quality names (for example Maximum / High / Low) instead of fixed ones, so every add-on returns its best stream.
+
 ## [1.0.13] - 2026-11-22
 
 ### Changed
