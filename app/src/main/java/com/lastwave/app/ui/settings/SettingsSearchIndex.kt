@@ -1304,17 +1304,18 @@ object SettingsSearchIndex {
                 SettingsEntry(
                     id = "discord.presence",
                     title = "Discord Rich Presence",
-                    subtitle = "Show the playing track, quality and cover on your Discord profile",
+                    subtitle = "Sign in to Discord to show playing tracks, Hi-Res quality, cover art & YouTube Music link",
                     keywords = listOf(
                         "discord", "rich presence", "discord rpc", "now playing discord",
-                        "discord status", "listening to", "presence", "show what im playing"
+                        "discord status", "listening to", "presence", "show what im playing",
+                        "discord login", "discord token", "discord account", "youtube music"
                     ),
                     icon = Icons.Filled.Public,
                     iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
                     iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
                     parentTab = SettingsTab.LAST_FM,
                     section = "Integrations / Scrobbling",
-                    type = EntryType.TOGGLE,
+                    type = EntryType.ACTION,
                 )
             )
 

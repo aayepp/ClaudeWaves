@@ -70,7 +70,18 @@ object DiscordPresence {
     const val PROJECT_URL = "https://github.com/aayepp/ClaudeWaves"
     const val RELEASES_URL = "$PROJECT_URL/releases"
     const val DEFAULT_BUTTON_1 = "Listen On ClaudeWaves"
+    const val GATEWAY_BUTTON_1 = "Listen on YouTube Music"
     const val DEFAULT_BUTTON_2 = "Get ClaudeWaves"
+
+    fun youtubeMusicUrl(videoId: String): String = "https://music.youtube.com/watch?v=$videoId"
+
+    private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[A-Za-z0-9_-]{11}$")
+
+    /** Returns a YouTube Music watch URL only when [videoId] is a valid 11-character YouTube ID. */
+    fun youtubeWatchUrl(videoId: String?): String? {
+        val clean = videoId?.trim().orEmpty()
+        return if (YOUTUBE_VIDEO_ID_REGEX.matches(clean)) youtubeMusicUrl(clean) else null
+    }
 
     /** Discord truncates nothing for us: over-long fields are dropped. */
     const val MAX_FIELD = 120
@@ -337,6 +348,129 @@ object DiscordPresence {
                 put("nonce", nonce)
             },
         )
+
+    /**
+     * Gateway v10 `Activity` object for `op = 3` (`PRESENCE_UPDATE`).
+     *
+     * Key differences from the local IPC schema above:
+     * - Timestamps are in **milliseconds** and scale by playback speed.
+     * - Buttons split into `buttons: [label]` + `metadata.button_urls: [url]`.
+     * - External artwork URLs use Discord's `mp:external/...` resolved asset paths.
+     */
+    fun buildGatewayActivity(
+        state: MusicPlayerState,
+        settings: DiscordSettings,
+        nowMs: Long,
+        resolvedLargeImage: String?,
+        resolvedSmallImage: String?,
+    ): JsonObject {
+        val track = requireNotNull(state.current) { "no current track" }
+        val speed = state.speed.takeIf { it.isFinite() && it > 0.1f } ?: 1.0f
+        val titleWithSpeed = if (kotlin.math.abs(speed - 1.0f) >= 0.01f) {
+            "${track.title} [${String.format(java.util.Locale.US, "%.2fx", speed)}]"
+        } else {
+            track.title
+        }
+        val title = clip(titleWithSpeed)
+        val duration = durationMs(state)
+        val playing = isPlayingForPresence(state)
+
+        val timestamps = if (playing && duration > 0L) {
+            val position = state.positionMs.coerceIn(0L, duration)
+            val adjustedElapsed = (position / speed).toLong()
+            val adjustedRemaining = ((duration - position) / speed).toLong()
+            buildJsonObject {
+                put("start", nowMs - adjustedElapsed)
+                put("end", nowMs + adjustedRemaining)
+            }
+        } else {
+            null
+        }
+
+        val album = track.album?.trim().orEmpty()
+        val quality = if (settings.showAudioQuality) qualityLine(state) else ""
+        val watchUrl = youtubeWatchUrl(track.videoId)
+        val stateText = stateLine(track.artist, track.album, quality)
+        val largeText = clip(
+            when {
+                quality.isNotEmpty() -> quality
+                album.isNotEmpty() -> album
+                else -> title
+            },
+        )
+        val smallText = clip(if (quality.isEmpty()) "ClaudeWaves" else "ClaudeWaves \u00B7 $quality")
+
+        val buttonPairs = buildList {
+            if (settings.showListenButton && watchUrl != null) {
+                add(GATEWAY_BUTTON_1 to watchUrl)
+            }
+            if (settings.showAppButton) {
+                add(DEFAULT_BUTTON_2 to PROJECT_URL)
+            }
+        }
+
+        return buildJsonObject {
+            put("application_id", APPLICATION_ID)
+            put("type", settings.activityType.code)
+            put("name", "ClaudeWaves")
+            put("details", title)
+            if (watchUrl != null) put("details_url", watchUrl)
+            put("state", stateText)
+            timestamps?.let { put("timestamps", it) }
+            if (resolvedLargeImage != null || resolvedSmallImage != null) {
+                put("assets", buildJsonObject {
+                    resolvedLargeImage?.let {
+                        put("large_image", it)
+                        put("large_text", largeText)
+                    }
+                    resolvedSmallImage?.let {
+                        put("small_image", it)
+                        put("small_text", smallText)
+                    }
+                })
+            }
+            if (buttonPairs.isNotEmpty()) {
+                putJsonArray("buttons") {
+                    buttonPairs.forEach { (label, _) -> add(JsonPrimitive(label)) }
+                }
+                put("metadata", buildJsonObject {
+                    putJsonArray("button_urls") {
+                        buttonPairs.forEach { (_, url) -> add(JsonPrimitive(url)) }
+                    }
+                })
+            }
+        }
+    }
+
+    /** Gateway `op = 3` (`PRESENCE_UPDATE`) frame; null [activity] clears the card cleanly. */
+    fun gatewayPresenceFrame(
+        activity: JsonObject?,
+        status: String = "online",
+        nowMs: Long = System.currentTimeMillis(),
+    ): String = frame(
+        buildJsonObject {
+            put("op", 3)
+            put("d", buildJsonObject {
+                put("since", if (activity != null) nowMs else 0L)
+                putJsonArray("activities") {
+                    if (activity != null) add(activity)
+                }
+                put("status", status)
+                put("afk", false)
+            })
+        },
+    )
+
+    fun gatewaySignature(state: MusicPlayerState, settings: DiscordSettings): String =
+        buildString {
+            append(signature(state))
+            append("|sp=").append(String.format(java.util.Locale.US, "%.2f", state.speed))
+            append("|sq=").append(settings.showAudioQuality)
+            append("|b1=").append(settings.showListenButton)
+            append("|b2=").append(settings.showAppButton)
+            append("|t=").append(settings.activityType.id)
+            append("|st=").append(settings.presenceStatus)
+        }
 
     private fun frame(payload: JsonObject): String = payload.toString()
 }

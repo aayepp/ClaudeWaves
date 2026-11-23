@@ -383,6 +383,7 @@ fun SettingsScreen(
     onOpenExternalImport: () -> Unit = {},
     onOpenSpotifyLogin: () -> Unit = {},
     onOpenSpotifyTokenImport: () -> Unit = {},
+    onOpenDiscordSettings: () -> Unit = {},
     onRepeatTutorial: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     jamViewModel: LastWaveJamViewModel = hiltViewModel(),
@@ -417,7 +418,15 @@ fun SettingsScreen(
     val internalDirectAvailability by viewModel.internalDirectAvailability.collectAsStateWithLifecycle()
     val loudness by viewModel.loudness.collectAsStateWithLifecycle()
     val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()
-    val discordPresenceEnabled by viewModel.discordPresenceEnabled.collectAsStateWithLifecycle()
+    val discordSettings by viewModel.discordSettings.collectAsStateWithLifecycle()
+    val discordSubtitle = when {
+        discordSettings.isSignedIn && discordSettings.enabled ->
+            "Connected as @${discordSettings.username} \u2022 Live with YouTube Music link"
+        discordSettings.isSignedIn ->
+            "Signed in as @${discordSettings.username} \u2022 Paused"
+        else ->
+            "Sign in with Discord to show tracks & YouTube Music link"
+    }
     val isLastFmConnected by viewModel.isLastFmConnected.collectAsStateWithLifecycle()
     val hasApiKey by viewModel.hasApiKey.collectAsStateWithLifecycle()
     val lastFmAuthUrl by viewModel.lastFmAuthUrl.collectAsStateWithLifecycle()
@@ -764,6 +773,19 @@ fun SettingsScreen(
                                         modifier = Modifier.weight(1f),
                                     )
                                 }
+                            }
+                        }
+                        item {
+                            SettingsGroup(rowCount = 1) { _, position ->
+                                SettingsActionCard(
+                                    icon = Icons.Filled.Public,
+                                    iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    title = stringResource(R.string.set_discord_title),
+                                    subtitle = discordSubtitle,
+                                    onClick = onOpenDiscordSettings,
+                                    position = position,
+                                )
                             }
                         }
                         item {
@@ -2136,24 +2158,15 @@ fun SettingsScreen(
                             }
                         },
                     )
-                    // Discord presence, next to Last.fm because both are "tell
-                    // other services what I'm listening to" integrations and
-                    // neither is required for playback. Unlike Last.fm this
-                    // needs no account in LastWave — it publishes as the
-                    // LastWave application through the Discord app itself, so
-                    // the copy says exactly that.
-                    SettingsToggleCard(
+                    // Discord Rich Presence: opens dedicated account login, live
+                    // card preview, YouTube Music link button & status controls.
+                    SettingsActionCard(
                         icon = Icons.Filled.Public,
                         iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                         iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                         title = stringResource(R.string.set_discord_title),
-                        subtitle = if (discordPresenceEnabled) {
-                            stringResource(R.string.set_discord_on)
-                        } else {
-                            stringResource(R.string.set_discord_off)
-                        },
-                        checked = discordPresenceEnabled,
-                        onCheckedChange = viewModel::setDiscordPresenceEnabled,
+                        subtitle = discordSubtitle,
+                        onClick = onOpenDiscordSettings,
                         isHighlighted = (highlightedSettingId == "discord.presence"),
                     )
                 }

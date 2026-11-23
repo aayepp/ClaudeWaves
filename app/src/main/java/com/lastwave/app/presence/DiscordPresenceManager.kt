@@ -16,33 +16,28 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.OkHttpClient
 
 /**
  * Publishes what is playing to Discord as a Rich Presence activity.
  *
- * Behaviour is ported from the desktop client
- * (`LastWave-Desktop/lib/features/presence/discord_presence_service.dart`):
- * push on track or play-state change, never on the position ticker; stay silent
- * when Discord is absent, refuses, or rate-limits; clear the card the moment
- * playback stops or the switch is turned off.
+ * Two transports, selected automatically:
+ * 1. **Discord Gateway WebSocket** ([DiscordGatewayTransport]) when the user has
+ *    signed in with their Discord account in Settings → Discord. Works reliably on
+ *    every Android device even when the Discord app is closed, and includes a
+ *    "Listen on YouTube Music" link + Hi-Res quality line + live artwork.
+ * 2. **Local Android IPC** ([DiscordIpcTransport]) fallback when signed out.
  *
- * Two throttles, both inherited from desktop and both load-bearing:
- * - [DiscordPresence.PUSH_INTERVAL_MS] on a signature of everything the card
- *   shows, so the ~16 Hz position stream costs at most one frame per interval.
- * - [DiscordPresence.RETRY_INTERVAL_MS] on connection attempts, because the
- *   common case is a user who simply does not have Discord installed and that
- *   must never be polled harder than the push cadence.
- *
- * A slow heartbeat re-evaluates on the same interval as the push throttle, so
- * presence can never go quietly stale (missed snapshot, Discord restarted while
- * paused, a push dropped by a dead transport).
- *
- * Playback is never touched, delayed or gated by anything in here: every
+ * Playback is never touched, delayed, or gated by anything in here: every
  * failure is swallowed and every frame is fire-and-forget.
  */
 @Singleton
@@ -50,18 +45,26 @@ class DiscordPresenceManager @Inject constructor(
     private val musicPlayer: MusicPlayer,
     private val preferences: DiscordPresencePreferences,
     private val artworkRepository: ArtworkRepository,
+    private val okHttpClient: OkHttpClient,
     private val applicationScope: CoroutineScope,
     @ApplicationContext private val context: Context,
 ) {
     private val lock = Mutex()
 
-    private var transport: DiscordTransport? = null
+    private var ipcTransport: DiscordTransport? = null
+    private var gatewayTransport: DiscordGatewayTransport? = null
+    private var gatewayToken: String = ""
+    private var gatewayStatusJob: Job? = null
     private var started = false
 
-    @Volatile private var enabled = true
+    @Volatile private var latestSettings = DiscordSettings()
     private var lastAttemptMs = 0L
     private var lastKey = ""
     private var lastPushMs = 0L
+
+    private val _connectionStatus = MutableStateFlow(DiscordConnectionStatus.SIGNED_OUT)
+    val connectionStatus: StateFlow<DiscordConnectionStatus> = _connectionStatus.asStateFlow()
+
     private val deferredArtwork = DeferredArtworkLookup(
         scope = applicationScope,
         source = "discord",
@@ -85,13 +88,13 @@ class DiscordPresenceManager @Inject constructor(
             try {
                 combine(
                     musicPlayer.state,
-                    preferences.enabled,
+                    preferences.settings,
                     artworkRepository.resolved,
-                ) { state, on, resolved ->
-                    Triple(state, on, resolved)
-                }.collect { (state, on, resolved) ->
-                    enabled = on
-                    evaluate(state, resolved)
+                ) { state, settings, resolved ->
+                    Triple(state, settings, resolved)
+                }.collect { (state, settings, resolved) ->
+                    latestSettings = settings
+                    evaluate(state, settings, resolved)
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -102,116 +105,258 @@ class DiscordPresenceManager @Inject constructor(
         heartbeat = applicationScope.launch(Dispatchers.Default) {
             while (isActive) {
                 delay(DiscordPresence.PUSH_INTERVAL_MS)
-                val snapshot = musicPlayer.state.value
-                evaluate(snapshot, artworkRepository.resolved.value)
+                evaluate(musicPlayer.state.value, latestSettings, artworkRepository.resolved.value)
             }
         }
     }
 
-    /** Re-evaluates immediately (settings toggle, or an explicit refresh). */
+    /** Re-evaluates immediately (settings toggle, login, or explicit refresh). */
     fun refresh() {
         applicationScope.launch(Dispatchers.Default) {
-            evaluate(musicPlayer.state.value, artworkRepository.resolved.value)
+            val settings = runCatching { preferences.settings.first() }.getOrDefault(latestSettings)
+            latestSettings = settings
+            evaluate(musicPlayer.state.value, settings, artworkRepository.resolved.value, force = true)
         }
     }
 
-    private suspend fun evaluate(state: MusicPlayerState, resolvedArt: Map<String, String>) {
+    /** Validates a Discord token via `/users/@me`, saves the account locally, and connects immediately. */
+    suspend fun signInWithToken(rawToken: String): Result<DiscordUserProfile> {
+        val clean = rawToken.trim().removeSurrounding("\"")
+        val result = DiscordGatewayTransport.fetchCurrentUser(okHttpClient, clean)
+        result.onSuccess { profile ->
+            preferences.saveAccount(
+                token = clean,
+                userId = profile.id,
+                username = profile.username,
+                displayName = profile.displayName,
+                avatarUrl = profile.avatarUrl,
+            )
+            refresh()
+        }
+        return result
+    }
+
+    /** Clears active presence, tears down Gateway socket, and wipes local token & profile cache. */
+    suspend fun signOut() {
+        lock.withLock {
+            clearGatewayQuiet()
+            closeGatewayLocked()
+            lastKey = ""
+        }
+        preferences.clearAccount()
+        _connectionStatus.value = DiscordConnectionStatus.SIGNED_OUT
+    }
+
+    private suspend fun evaluate(
+        state: MusicPlayerState,
+        settings: DiscordSettings,
+        resolvedArt: Map<String, String>,
+        force: Boolean = false,
+    ) {
         val now = SystemClock.elapsedRealtime()
         lock.withLock {
-            // Disabled or unconfigured: hide anything still on the profile.
-            if (!enabled || !DiscordPresence.isConfigured()) {
-                deferredArtwork.cancel()
-                clearQuiet()
+            if (!settings.isSignedIn) {
+                closeGatewayLocked()
+                _connectionStatus.value = DiscordConnectionStatus.SIGNED_OUT
+                evaluateIpcLocked(state, settings.enabled, resolvedArt, now)
                 return
             }
+
+            // Signed in: prefer Discord Gateway WebSocket and drop any idle IPC bind.
+            closeIpcLocked()
+            if (!settings.enabled || !DiscordPresence.isConfigured()) {
+                deferredArtwork.cancel()
+                clearGatewayQuiet(settings.presenceStatus)
+                closeGatewayLocked()
+                _connectionStatus.value = DiscordConnectionStatus.DISCONNECTED
+                return
+            }
+
+            if (gatewayToken != settings.token) {
+                closeGatewayLocked()
+                lastKey = ""
+                lastAttemptMs = 0L
+            }
+
             val track = state.current
-            if (track == null || track.title.isBlank()) {
+            val playing = track != null && track.title.isNotBlank() && DiscordPresence.isPlayingForPresence(state)
+            if (!playing || track == null) {
                 deferredArtwork.cancel()
-                clearQuiet()
-                return
-            }
-            // The track's own http(s) art is exact; otherwise take whatever
-            // the multi-provider pipeline (Apple -> Tidal -> Deezer ->
-            // Spotify -> YouTube) has resolved for this title+artist. Either
-            // way Discord gets a fetchable cover instead of the logo key.
-            val ownArt = track.artworkUrl?.trim()
-                ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-            val pipelineArt = resolvedArt[ArtworkNormalizer.cacheKey(track.title, track.artist)]
-                ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-            if (ownArt == null && pipelineArt == null) {
-                // Nothing cached yet. Wait before Deezer/iTunes/Tidal so a
-                // skip does not search. The publish re-emits `resolved`,
-                // which re-runs this evaluation with art.
-                deferredArtwork.request(track.title, track.artist)
-            }
-            val effectiveState =
-                if (pipelineArt != null && pipelineArt != track.artworkUrl) {
-                    state.copy(current = track.copy(artworkUrl = pipelineArt))
-                } else {
-                    state
+                clearGatewayQuiet(settings.presenceStatus)
+                if (gatewayTransport == null && _connectionStatus.value == DiscordConnectionStatus.SIGNED_OUT) {
+                    _connectionStatus.value = DiscordConnectionStatus.DISCONNECTED
                 }
-            val key = DiscordPresence.signature(effectiveState)
-            if (key == lastKey && now - lastPushMs < DiscordPresence.PUSH_INTERVAL_MS) {
-                return // Position ticks must not become frames.
-            }
-            val active = ensureConnected(now)
-            if (active == null) {
-                // ensureConnected already logged why (throttled vs missing).
                 return
             }
-            val sent = runCatching {
-                active.setActivity(DiscordPresence.buildActivity(effectiveState, System.currentTimeMillis()))
-            }.onFailure {
-                Log.w(TAG, "Discord presence push failed", it)
-            }.getOrDefault(false)
+
+            val effectiveState = withResolvedArtwork(state, resolvedArt)
+            val key = DiscordPresence.gatewaySignature(effectiveState, settings)
+            if (!force && key == lastKey && now - lastPushMs < DiscordPresence.PUSH_INTERVAL_MS && gatewayTransport?.isConnectingOrReady == true) {
+                return
+            }
+
+            val gw = ensureGatewayLocked(settings, now, force) ?: return
+            val coverUrl = DiscordPresence.largeImage(effectiveState.current?.artworkUrl)
+            val largeAsset = DiscordGatewayTransport.resolveExternalAsset(okHttpClient, settings.token, coverUrl)
+                ?: DiscordGatewayTransport.resolveExternalAsset(okHttpClient, settings.token, DiscordPresence.DISCORD_LOGO_URL)
+            val smallAsset = DiscordGatewayTransport.resolveExternalAsset(okHttpClient, settings.token, DiscordPresence.DISCORD_LOGO_URL)
+
+            val nowWallMs = System.currentTimeMillis()
+            val activity = DiscordPresence.buildGatewayActivity(
+                state = effectiveState,
+                settings = settings,
+                nowMs = nowWallMs,
+                resolvedLargeImage = largeAsset,
+                resolvedSmallImage = smallAsset,
+            )
+            val frame = DiscordPresence.gatewayPresenceFrame(
+                activity = activity,
+                status = settings.presenceStatus,
+                nowMs = nowWallMs,
+            )
+            val sent = gw.sendPresence(frame, settings.presenceStatus)
             if (!sent) {
-                // Transport died mid-push: drop it so the next evaluation
-                // reconnects instead of writing into a dead connection.
-                Log.w(TAG, "Discord push rejected; dropping connection")
-                runCatching { active.close() }
-                transport = null
+                Log.w(TAG, "Discord Gateway send failed; will reconnect")
+                closeGatewayLocked()
                 lastAttemptMs = SystemClock.elapsedRealtime()
                 return
             }
             lastKey = key
             lastPushMs = now
-            // One line per frame actually handed to Discord: a card that never
-            // appears is then diagnosable as "no pushes at all" (observer /
-            // heartbeat dead), "pushes but refused" (WARN above), or "pushes
-            // fine, Discord drops it" (an app-side or rate-limit problem).
-            Log.d(TAG, "Discord presence pushed: $key")
+            Log.d(TAG, "Discord Gateway presence queued/pushed: ${track.title}")
         }
     }
 
-    /** Existing connection, or a new one if the retry throttle allows it. */
-    private suspend fun ensureConnected(now: Long): DiscordTransport? {
-        val existing = transport
+    private fun ensureGatewayLocked(
+        settings: DiscordSettings,
+        now: Long,
+        force: Boolean = false,
+    ): DiscordGatewayTransport? {
+        val existing = gatewayTransport
+        if (existing != null) {
+            if (existing.status.value == DiscordConnectionStatus.AUTH_FAILED) {
+                _connectionStatus.value = DiscordConnectionStatus.AUTH_FAILED
+                return null
+            }
+            if (existing.isConnectingOrReady) return existing
+            if (!force && now - lastAttemptMs < DiscordPresence.RETRY_INTERVAL_MS) return null
+            lastAttemptMs = now
+            existing.connect()
+            return existing
+        }
+        if (!force && now - lastAttemptMs < DiscordPresence.RETRY_INTERVAL_MS) return null
+        lastAttemptMs = now
+        gatewayToken = settings.token
+        val fresh = DiscordGatewayTransport(
+            okHttpClient = okHttpClient,
+            token = settings.token,
+            scope = applicationScope,
+            initialStatus = settings.presenceStatus,
+        )
+        gatewayTransport = fresh
+        gatewayStatusJob?.cancel()
+        gatewayStatusJob = applicationScope.launch(Dispatchers.Default) {
+            fresh.status.collect { st ->
+                _connectionStatus.value = st
+            }
+        }
+        fresh.connect()
+        return fresh
+    }
+
+    private suspend fun evaluateIpcLocked(
+        state: MusicPlayerState,
+        enabled: Boolean,
+        resolvedArt: Map<String, String>,
+        now: Long,
+    ) {
+        if (!enabled || !DiscordPresence.isConfigured()) {
+            deferredArtwork.cancel()
+            clearIpcQuiet()
+            return
+        }
+        val track = state.current
+        if (track == null || track.title.isBlank()) {
+            deferredArtwork.cancel()
+            clearIpcQuiet()
+            return
+        }
+        val effectiveState = withResolvedArtwork(state, resolvedArt)
+        val key = DiscordPresence.signature(effectiveState)
+        if (key == lastKey && now - lastPushMs < DiscordPresence.PUSH_INTERVAL_MS) {
+            return
+        }
+        val active = ensureIpcConnectedLocked(now) ?: return
+        val sent = runCatching {
+            active.setActivity(DiscordPresence.buildActivity(effectiveState, System.currentTimeMillis()))
+        }.onFailure {
+            Log.w(TAG, "Discord IPC push failed", it)
+        }.getOrDefault(false)
+        if (!sent) {
+            closeIpcLocked()
+            lastAttemptMs = SystemClock.elapsedRealtime()
+            return
+        }
+        lastKey = key
+        lastPushMs = now
+    }
+
+    private fun withResolvedArtwork(
+        state: MusicPlayerState,
+        resolvedArt: Map<String, String>,
+    ): MusicPlayerState {
+        val track = state.current ?: return state
+        val ownArt = track.artworkUrl?.trim()
+            ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        val pipelineArt = resolvedArt[ArtworkNormalizer.cacheKey(track.title, track.artist)]
+            ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        if (ownArt == null && pipelineArt == null) {
+            deferredArtwork.request(track.title, track.artist)
+        }
+        return if (pipelineArt != null && pipelineArt != track.artworkUrl) {
+            state.copy(current = track.copy(artworkUrl = pipelineArt))
+        } else {
+            state
+        }
+    }
+
+    private suspend fun ensureIpcConnectedLocked(now: Long): DiscordTransport? {
+        val existing = ipcTransport
         if (existing != null && existing.isOpen) return existing
         if (existing != null && !existing.isOpen) {
-            Log.d(TAG, "Discord transport dead; reconnecting")
-            runCatching { existing.close() }
-            transport = null
+            closeIpcLocked()
         }
         if (now - lastAttemptMs < DiscordPresence.RETRY_INTERVAL_MS) return null
-        runCatching { existing?.close() }
-        transport = null
         lastAttemptMs = now
         val fresh = DiscordIpcTransport.connectOrNull(context)
-        if (fresh == null) {
-            Log.w(TAG, "Discord connect failed (app missing/signed-out/refusing?); retry in 15s")
-        }
-        return fresh?.also { transport = it }
+        return fresh?.also { ipcTransport = it }
     }
 
-    /**
-     * Hides the card without tearing the connection down, and forgets the last
-     * signature so the next real track is never deduped away as "unchanged".
-     */
-    private fun clearQuiet() {
+    private fun clearIpcQuiet() {
         lastKey = ""
-        val active = transport ?: return
+        val active = ipcTransport ?: return
         runCatching { active.clearActivity() }
-            .onFailure { Log.d(TAG, "Discord presence clear ignored", it) }
+            .onFailure { Log.d(TAG, "Discord IPC clear ignored", it) }
+    }
+
+    private fun closeIpcLocked() {
+        runCatching { ipcTransport?.close() }
+        ipcTransport = null
+    }
+
+    private fun clearGatewayQuiet(status: String = latestSettings.presenceStatus) {
+        lastKey = ""
+        val active = gatewayTransport ?: return
+        runCatching { active.clearPresence(status) }
+            .onFailure { Log.d(TAG, "Discord Gateway clear ignored", it) }
+    }
+
+    private fun closeGatewayLocked() {
+        gatewayStatusJob?.cancel()
+        gatewayStatusJob = null
+        runCatching { gatewayTransport?.close() }
+        gatewayTransport = null
+        gatewayToken = ""
     }
 
     /** Best-effort clear + release. Never throws. */
@@ -221,9 +366,10 @@ class DiscordPresenceManager @Inject constructor(
         observer?.cancel()
         observer = null
         lock.withLock {
-            clearQuiet()
-            runCatching { transport?.close() }
-            transport = null
+            clearIpcQuiet()
+            closeIpcLocked()
+            clearGatewayQuiet()
+            closeGatewayLocked()
         }
         started = false
     }

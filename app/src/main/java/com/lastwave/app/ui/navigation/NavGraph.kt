@@ -517,8 +517,27 @@ fun LastWaveNavHost(
                     onOpenYouTubeLogin = { navController.navigate(Screen.YouTubeLogin.route) },
                     onOpenSpotifyLogin = { navController.navigate(Screen.SpotifyLogin.route) },
                     onOpenSpotifyTokenImport = { navController.navigate(Screen.SpotifyTokenImport.route) },
+                    onOpenDiscordSettings = { navController.navigate(Screen.DiscordSettings.route) },
                     onOpenExternalImport = { navController.navigate(Screen.ExternalPlaylistImport.route) },
                     onRepeatTutorial = { navController.navigate(Screen.Onboarding.createRoute(repeat = true)) },
+                )
+            }
+        }
+
+        composable(Screen.DiscordSettings.route) { backStackEntry ->
+            PredictiveBackScreen(onBack = { navController.safePopBackStack(backStackEntry) }) {
+                com.lastwave.app.ui.settings.DiscordSettingsScreen(
+                    onBack = { navController.safePopBackStack(backStackEntry) },
+                    onOpenLogin = { navController.navigate(Screen.DiscordLogin.route) },
+                )
+            }
+        }
+
+        composable(Screen.DiscordLogin.route) { backStackEntry ->
+            PredictiveBackScreen(onBack = { navController.safePopBackStack(backStackEntry) }) {
+                com.lastwave.app.ui.settings.DiscordLoginScreen(
+                    onBack = { navController.safePopBackStack(backStackEntry) },
+                    onConnected = { navController.safePopBackStack(backStackEntry) },
                 )
             }
         }

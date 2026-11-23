@@ -36,6 +36,8 @@ sealed class Screen(val route: String) {
 
     /** The session cookie pasted in by hand, without the browser sign-in. */
     data object SpotifyTokenImport : Screen("spotify_token_import")
+    data object DiscordSettings : Screen("discord_settings")
+    data object DiscordLogin : Screen("discord_login")
     data object Jam : Screen("jam?code={code}") {
         fun createRoute(code: String? = null) = if (code.isNullOrBlank()) "jam" else "jam?code=${encodeArg(code)}"
     }

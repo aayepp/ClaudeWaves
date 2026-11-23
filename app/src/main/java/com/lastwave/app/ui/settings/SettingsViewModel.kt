@@ -252,6 +252,10 @@ class SettingsViewModel @Inject constructor(
         .withSettingsFallback("Discord presence preference", true)
         .stateIn(viewModelScope, SettingsSharing, true)
 
+    val discordSettings: StateFlow<com.lastwave.app.presence.DiscordSettings> = discordPresencePreferences.settings
+        .withSettingsFallback("Discord presence settings", com.lastwave.app.presence.DiscordSettings())
+        .stateIn(viewModelScope, SettingsSharing, com.lastwave.app.presence.DiscordSettings())
+
     fun setDiscordPresenceEnabled(enabled: Boolean) {
         launchSettingsAction("update Discord presence") {
             discordPresencePreferences.setEnabled(enabled)

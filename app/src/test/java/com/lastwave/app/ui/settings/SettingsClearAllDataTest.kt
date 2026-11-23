@@ -101,6 +101,7 @@ class SettingsClearAllDataTest {
         every { playlistRepository.playlists } returns MutableStateFlow(emptyList())
         every { scrobblerPreferences.settings } returns MutableStateFlow(ScrobblerSettings())
         every { discordPresencePreferences.enabled } returns MutableStateFlow(true)
+        every { discordPresencePreferences.settings } returns MutableStateFlow(com.lastwave.app.presence.DiscordSettings())
         every { equalizerPreferences.settings } returns MutableStateFlow(EqualizerSettings())
         every { loudnessPrefs.settings } returns MutableStateFlow(LoudnessSettings())
         every { ytAuthManager.connection } returns MutableStateFlow(YtConnection.DISCONNECTED)
