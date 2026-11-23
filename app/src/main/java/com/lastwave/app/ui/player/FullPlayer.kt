@@ -1074,6 +1074,12 @@ internal fun FullPlayer(
                 showRecommendationExclusion = true,
             ),
             playableTrack = track,
+            compactNowPlaying = true,
+            playerState = state,
+            onOpenSignalPath = {
+                showTrackMenu = false
+                showSignalPath = true
+            },
             onDismiss = { showTrackMenu = false },
             onPlayInLastWave = { player.play(track, sourceLabel = state.sourceLabel) },
             canWatchVideo = canWatchVideo,

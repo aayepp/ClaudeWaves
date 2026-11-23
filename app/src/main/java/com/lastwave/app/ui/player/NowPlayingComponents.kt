@@ -16,6 +16,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.material3.minimumInteractiveComponentSize
 import com.lastwave.app.data.lossless.LosslessListTier
+import com.lastwave.app.ui.common.LocalBadgeOnDarkBackdrop
 import com.lastwave.app.ui.common.QualityBadge
 import com.lastwave.app.ui.common.QualityTierBadge
 import android.content.Context
@@ -90,6 +91,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Close
@@ -126,6 +128,7 @@ import com.lastwave.app.ui.common.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -592,20 +595,20 @@ internal fun NowPlayingHeader(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(44.dp)
                 .padding(horizontal = horizontalPadding),
         ) {
             IconButton(
                 onClick = hapticClick(action = onBackOrCollapse),
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .size(48.dp),
+                    .size(40.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.ExpandMore,
                     contentDescription = "Minimize player",
                     tint = PlayerPalette.ink.copy(alpha = 0.90f),
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(24.dp),
                 )
             }
             Text(
@@ -617,19 +620,19 @@ internal fun NowPlayingHeader(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(horizontal = 52.dp),
+                    .padding(horizontal = 46.dp),
             )
             IconButton(
                 onClick = hapticClick(action = onOpenTrackMenu),
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .size(48.dp),
+                    .size(40.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
                     contentDescription = "Song options",
                     tint = PlayerPalette.ink.copy(alpha = 0.90f),
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -639,7 +642,7 @@ internal fun NowPlayingHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(54.dp)
+            .height(48.dp)
             .padding(horizontal = horizontalPadding),
     ) {
         LiquidGlassSurface(
@@ -654,13 +657,13 @@ internal fun NowPlayingHeader(
             ),
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .size(48.dp),
+                .size(40.dp),
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AnimatedToggleIcon(
                     on = currentTab != FullPlayerTab.NOW_PLAYING, onIcon = Icons.AutoMirrored.Filled.ArrowBack, offIcon = Icons.Filled.ExpandMore,
                     contentDescription = if (currentTab != FullPlayerTab.NOW_PLAYING) "Back to player" else "Minimize player",
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
@@ -668,7 +671,7 @@ internal fun NowPlayingHeader(
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(horizontal = if (showLyricsOffsetAction) 108.dp else 60.dp),
+                .padding(horizontal = if (showLyricsOffsetAction) 96.dp else 52.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -713,7 +716,7 @@ internal fun NowPlayingHeader(
         Row(
             modifier = Modifier.align(Alignment.CenterEnd),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (showLyricsOffsetAction) {
                 LiquidGlassSurface(
@@ -735,13 +738,13 @@ internal fun NowPlayingHeader(
                         LiquidGlassPreset.FloatingControls,
                     ),
                     modifier = Modifier
-                        .size(48.dp),
+                        .size(40.dp),
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Filled.Timer,
                             contentDescription = stringResource(R.string.player_lyrics_offset_cd),
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(19.dp),
                         )
                     }
                 }
@@ -757,13 +760,13 @@ internal fun NowPlayingHeader(
                     LiquidGlassPreset.FloatingControls,
                 ),
                 modifier = Modifier
-                    .size(48.dp),
+                    .size(40.dp),
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.Filled.MoreVert,
                         contentDescription = "Song options",
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
@@ -980,7 +983,7 @@ private fun resolveAudioOutputDisplay(
 }
 
 /** Lossy streams get a plain codec badge ("AAC", "OPUS"); null when nothing is known yet. */
-private fun lossyCodecLabel(state: MusicPlayerState): String? {
+internal fun lossyCodecLabel(state: MusicPlayerState): String? {
     val codec = state.audioCodec?.uppercase()?.replace(Regex("""\s*\d+\s*K(?:BPS)?"""), "")?.trim()
     return codec?.takeIf { it.isNotBlank() && it != "AUDIO" }
         ?: state.bitrateKbps?.let { "$it KBPS" }
@@ -1167,36 +1170,148 @@ internal fun PlaybackSeekBar(
             }
         }
     }
-    Box(modifier = modifier.fillMaxWidth()) {
-        SeekBar(
-            progressState = progressState,
-            isPlaying = isPlaying,
-            trackKey = trackKey,
-            wavyEnabled = wavyEnabled,
-            onSeek = onSeek,
-            isTranslucent = isTranslucent,
-            fallbackDurationMs = fallbackDurationMs,
-            primaryColor = primaryColor,
-            secondaryColor = secondaryColor,
-            tertiaryColor = tertiaryColor,
-            telemetry = telemetry,
-            abLoopStartMs = abLoopStartMs,
-            abLoopEndMs = abLoopEndMs,
-            onCycleAbLoop = onCycleAbLoop,
-            onClearAbLoop = onClearAbLoop,
-            minimalStyle = minimalStyle,
-            centerLabel = centerLabel,
-        )
-        if (showBestPart) {
-            BestPartPill(
-                border = Brush.sweepGradient(listOf(primaryColor, secondaryColor, tertiaryColor, primaryColor)),
-                onClick = { onSeek(bestPartMs!!) },
-                pulse = { pulse.value },
-                // Above the track in the bar's empty headroom: under it, between the time
-                // labels, it crowded the controls.
-                modifier = Modifier.align(Alignment.TopCenter).offset(y = (-12).dp).zIndex(1f),
+    if (minimalStyle) {
+        Column(
+            modifier = modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (showBestPart) {
+                MinimalBestPartWhisper(
+                    onClick = { onSeek(bestPartMs!!) },
+                    pulse = { pulse.value },
+                    modifier = Modifier.padding(bottom = 3.dp),
+                )
+            }
+            SeekBar(
+                progressState = progressState,
+                isPlaying = isPlaying,
+                trackKey = trackKey,
+                wavyEnabled = wavyEnabled,
+                onSeek = onSeek,
+                isTranslucent = isTranslucent,
+                fallbackDurationMs = fallbackDurationMs,
+                primaryColor = primaryColor,
+                secondaryColor = secondaryColor,
+                tertiaryColor = tertiaryColor,
+                telemetry = telemetry,
+                abLoopStartMs = abLoopStartMs,
+                abLoopEndMs = abLoopEndMs,
+                onCycleAbLoop = onCycleAbLoop,
+                onClearAbLoop = onClearAbLoop,
+                minimalStyle = true,
+                centerLabel = centerLabel,
             )
         }
+    } else {
+        Box(modifier = modifier.fillMaxWidth()) {
+            SeekBar(
+                progressState = progressState,
+                isPlaying = isPlaying,
+                trackKey = trackKey,
+                wavyEnabled = wavyEnabled,
+                onSeek = onSeek,
+                isTranslucent = isTranslucent,
+                fallbackDurationMs = fallbackDurationMs,
+                primaryColor = primaryColor,
+                secondaryColor = secondaryColor,
+                tertiaryColor = tertiaryColor,
+                telemetry = telemetry,
+                abLoopStartMs = abLoopStartMs,
+                abLoopEndMs = abLoopEndMs,
+                onCycleAbLoop = onCycleAbLoop,
+                onClearAbLoop = onClearAbLoop,
+                minimalStyle = false,
+                centerLabel = centerLabel,
+            )
+            if (showBestPart) {
+                BestPartPill(
+                    border = Brush.sweepGradient(listOf(primaryColor, secondaryColor, tertiaryColor, primaryColor)),
+                    onClick = { onSeek(bestPartMs!!) },
+                    pulse = { pulse.value },
+                    // Above the track in the bar's empty headroom: under it, between the time
+                    // labels, it crowded the controls.
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = (-12).dp).zIndex(1f),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Quiet editorial "Best part" action chip for Minimal Design: frosted hairline pill
+ * with press scale + ripple, flame icon, label (no timestamp numbers), and chevron
+ * so users recognize it immediately as a clickable control.
+ */
+@Composable
+private fun MinimalBestPartWhisper(
+    onClick: () -> Unit,
+    pulse: () -> Float,
+    modifier: Modifier = Modifier,
+) {
+    val isComic = LocalComicTheme.current
+    val isDark = PlayerPalette.shade.luminance() < 0.5f
+    val accentColor = when {
+        isComic -> MaterialTheme.colorScheme.onSecondaryContainer
+        isDark -> Color(0xFFFFD60A).copy(alpha = 0.92f)
+        else -> Color(0xFF8A6000)
+    }
+    val pillBackground = when {
+        isComic -> MaterialTheme.colorScheme.secondaryContainer
+        isDark -> PlayerPalette.ink.copy(alpha = 0.09f)
+        else -> PlayerPalette.ink.copy(alpha = 0.07f)
+    }
+    val pillBorder = when {
+        isComic -> ComicInk
+        isDark -> PlayerPalette.ink.copy(alpha = 0.20f)
+        else -> PlayerPalette.ink.copy(alpha = 0.18f)
+    }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = ExpressiveMotion.spatialFast(),
+        label = "minBestPartScale",
+    )
+    Row(
+        modifier = modifier
+            .graphicsLayer {
+                val s = (1f + 0.08f * pulse()) * pressScale
+                scaleX = s
+                scaleY = s
+            }
+            .clip(CircleShape)
+            .background(pillBackground)
+            .border(if (isComic) 1.5.dp else 0.75.dp, pillBorder, CircleShape)
+            .clickable(
+                interactionSource = interaction,
+                indication = androidx.compose.material3.ripple(),
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClick = hapticClick(HapticFeedbackType.ContextClick, onClick),
+            )
+            .padding(horizontal = 9.dp, vertical = 3.5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(
+            imageVector = androidx.compose.material.icons.Icons.Outlined.LocalFireDepartment,
+            contentDescription = null,
+            tint = accentColor,
+            modifier = Modifier.size(12.dp),
+        )
+        Text(
+            text = stringResource(R.string.player_best_part),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.2.sp,
+            ),
+            color = accentColor,
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = accentColor.copy(alpha = 0.78f),
+            modifier = Modifier.size(13.dp),
+        )
     }
 }
 
@@ -2473,6 +2588,7 @@ internal fun NowPlayingScreen(
     val artworkDrag = remember { Animatable(0f) }
     val rippleProgress = remember { Animatable(1f) }
     val coverPopScale = remember { Animatable(1f) }
+    val reflectionReveal = remember { Animatable(1f) }
     var sleeveWidthPx by remember { mutableFloatStateOf(0f) }
     var committingSwipeDirection by remember { mutableIntStateOf(0) }
     var suppressNextDirectionalSlide by remember { mutableStateOf(false) }
@@ -2534,13 +2650,14 @@ internal fun NowPlayingScreen(
             committingSwipeDirection = 0
             suppressNextDirectionalSlide = false
             settledDragTrackKey = trackKey
+            coverPopScale.snapTo(1f)
             if (landedFromSwipe) {
-                coverPopScale.snapTo(1f)
-            } else {
+                reflectionReveal.snapTo(0f)
                 launch {
-                    coverPopScale.snapTo(0.92f)
-                    coverPopScale.animateTo(1f, spring(dampingRatio = 0.65f, stiffness = 380f))
+                    reflectionReveal.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
                 }
+            } else {
+                reflectionReveal.snapTo(1f)
             }
             launch {
                 rippleProgress.snapTo(0f)
@@ -2857,18 +2974,53 @@ internal fun NowPlayingScreen(
                         ?.takeIf { lyricsPreview && it.isSynced && !it.isInstrumental && it.lines.isNotEmpty() }
                         ?.lines
                     val hasLyricsPreview = previewLines != null
+                    val isLyricsPending = lyricsPreview && (lyricsState is LyricsUiState.Loading || lyricsState is LyricsUiState.Idle)
+                    // Hold the lyrics slot steady while the next track's lyrics load or
+                    // while a 3D swipe is in motion so sleeveSide never resizes/glitches mid-swipe.
+                    val isSwipingArtwork = committingSwipeDirection != 0 || abs(artworkDrag.value) > 1f
+                    var lastResolvedHadLyrics by remember { mutableStateOf(hasLyricsPreview) }
+                    LaunchedEffect(lyricsPreview, lyricsState) {
+                        if (!lyricsPreview) {
+                            lastResolvedHadLyrics = false
+                        } else if (!isLyricsPending) {
+                            lastResolvedHadLyrics = hasLyricsPreview
+                        }
+                    }
+                    var pendingHoldExpired by remember(trackKey) { mutableStateOf(false) }
+                    LaunchedEffect(trackKey, isLyricsPending, lastResolvedHadLyrics) {
+                        pendingHoldExpired = false
+                        if (isLyricsPending && lastResolvedHadLyrics) {
+                            delay(1_400L)
+                            pendingHoldExpired = true
+                        }
+                    }
+                    val keepLyricsSlot = hasLyricsPreview ||
+                        ((isLyricsPending || isSwipingArtwork) && lastResolvedHadLyrics && !pendingHoldExpired)
                     val lyricsPresence by animateFloatAsState(
-                        targetValue = if (hasLyricsPreview) 1f else 0f,
+                        targetValue = if (keepLyricsSlot) 1f else 0f,
                         animationSpec = ExpressiveMotion.spatialSlow(),
                         label = "nowPlayingLyricsPresence",
                     )
+                    val lyricsTextAlpha by animateFloatAsState(
+                        targetValue = if (hasLyricsPreview) 1f else 0f,
+                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                        label = "nowPlayingLyricsTextAlpha",
+                    )
                     var retainedLines by remember { mutableStateOf(previewLines) }
-                    LaunchedEffect(previewLines, lyricsPresence <= 0.01f) {
-                        if (previewLines != null) retainedLines = previewLines
-                        else if (lyricsPresence <= 0.01f) retainedLines = null
+                    LaunchedEffect(trackKey, previewLines, lyricsTextAlpha <= 0.01f) {
+                        if (previewLines != null) {
+                            retainedLines = previewLines
+                        } else if (lyricsTextAlpha <= 0.01f) {
+                            retainedLines = null
+                        }
+                    }
+                    // Clear stale lyrics text immediately on track change while keeping the
+                    // height slot steady, so old lines never jump to index 0 mid-3D swipe.
+                    LaunchedEffect(trackKey) {
+                        if (previewLines == null) retainedLines = null
                     }
                     val activePreviewLines = previewLines ?: retainedLines
-                    val sleeveInset = if (nowPlayingMinimalStyle) 4.dp else 16.dp
+                    val sleeveInset = if (nowPlayingMinimalStyle) 6.dp else 16.dp
                     val isComic = LocalComicTheme.current
                     val isDarkTheme = LocalIsDarkTheme.current
                     val comicAccent = ComicAccent
@@ -2877,25 +3029,23 @@ internal fun NowPlayingScreen(
                         else listOf(primaryColor, secondaryColor, tertiaryColor)
                     }
 
-                    BoxWithConstraints(
-                        Modifier.fillMaxSize(),
-                        // With lyrics the block eases lower, so the lines read with the title below
-                        // instead of floating up and leaving an empty band above the title.
-                        contentAlignment = BiasAlignment(
-                            0f,
-                            if (nowPlayingMinimalStyle) (-0.12f + 0.30f * lyricsPresence) else (0.6f * lyricsPresence),
-                        ),
-                    ) {
-                        // One animated progress drives alignment, sleeve shrink, and preview reveal
-                        // together so the cover eases down seamlessly when lyrics appear.
-                        val previewHeight = (LYRIC_PREVIEW_HEIGHT * lyricsPresence).coerceAtLeast(0.dp)
-                        val reflectionAllowance = if (!isComic && !hasLyricsPreview) 24.dp * (1f - lyricsPresence) else 0.dp
-                        val sleeveSide = (minOf(maxWidth, maxHeight - previewHeight - reflectionAllowance) - sleeveInset).coerceIn(0.dp, 520.dp)
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                        // One animated progress drives top spacer, sleeve shrink, reflection collapse,
+                        // and centered 3-line lyrics gap so nothing jumps or glides unevenly.
+                        val lyricsBlockBudget = (LYRIC_PREVIEW_HEIGHT + 22.dp) * lyricsPresence
+                        val reflectionAllowance = if (!isComic) 28.dp * (1f - lyricsPresence) else 0.dp
+                        val sleeveSide = (minOf(maxWidth, maxHeight - lyricsBlockBudget - reflectionAllowance) - sleeveInset).coerceIn(0.dp, 520.dp)
                         val sleeveShape = RoundedCornerShape(24.dp)
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Spacer(Modifier.weight((1f - lyricsPresence).coerceAtLeast(0.001f)))
+                            Spacer(Modifier.height((if (ultraCompactHeight) 2.dp else 6.dp) * lyricsPresence))
                             Box(
                                 modifier = Modifier
                                     .size(sleeveSide)
+                                    .zIndex(1f)
                                     .onSizeChanged { sleeveWidthPx = it.width.toFloat() }
                                     .drawBehind {
                                         val rp = rippleProgress.value
@@ -2961,7 +3111,8 @@ internal fun NowPlayingScreen(
                                                     rotationY = -sideSign * androidx.compose.ui.util.lerp(24f, 0f, ease)
                                                     translationX = sideSign * wPx * 0.56f * (1f - ease)
                                                     alpha = (towardThis * 2.2f).coerceIn(0f, 1f)
-                                                },
+                                                }
+                                                .shadow(elevation = if (state.isPlaying) 28.dp else 14.dp, shape = sleeveShape),
                                             corner = 24.dp,
                                             isPlaying = false,
                                             pausedForTransition = true,
@@ -2973,7 +3124,7 @@ internal fun NowPlayingScreen(
                                     track = track,
                                     stepDirection = stepDirection,
                                     clip = false,
-                                    slideFraction = 0.35f,
+                                    slideFraction = 0.26f,
                                     animate = !suppressNextDirectionalSlide && committingSwipeDirection == 0,
                                     label = "nowPlayingArtworkSlide",
                                     // On the content, not the gesture box: moving that would
@@ -3015,18 +3166,21 @@ internal fun NowPlayingScreen(
                                     )
                                 }
                             }
-                            if (!isComic && lyricsPresence <= 0.01f) {
+                            val reflHeight = 34.dp * (1f - lyricsPresence)
+                            val reflTopGap = 6.dp * (1f - lyricsPresence)
+                            if (!isComic && reflHeight > 0.5.dp) {
                                 val flightFlying = LocalArtworkFlight.current?.flying == true
-                                val reflBaseAlpha = if (flightFlying) 0f else if (isDarkTheme) 0.26f else 0.16f
+                                val reflBaseAlpha = (if (flightFlying) 0f else if (isDarkTheme) 0.26f else 0.16f) * (1f - lyricsPresence)
                                 Box(
                                     modifier = Modifier
-                                        .padding(top = 6.dp)
+                                        .padding(top = reflTopGap)
                                         .width(sleeveSide)
-                                        .height(34.dp)
+                                        .height(reflHeight)
                                         .clipToBounds()
                                         .graphicsLayer {
+                                            val effectiveRefl = reflBaseAlpha * reflectionReveal.value
                                             if (trackKey != settledDragTrackKey) {
-                                                alpha = reflBaseAlpha
+                                                alpha = effectiveRefl
                                                 translationX = 0f
                                                 rotationY = 0f
                                                 compositingStrategy = CompositingStrategy.Offscreen
@@ -3036,7 +3190,7 @@ internal fun NowPlayingScreen(
                                             val wPx = size.width.coerceAtLeast(1f)
                                             val progress = (drag / wPx).coerceIn(-1f, 1f)
                                             val absP = abs(progress)
-                                            alpha = reflBaseAlpha * (1f - (absP * 1.4f).coerceIn(0f, 1f))
+                                            alpha = effectiveRefl * (1f - (absP * 1.4f).coerceIn(0f, 1f))
                                             translationX = drag * 0.96f
                                             cameraDistance = 16f * this.density
                                             rotationY = (-progress * 26f).coerceIn(-28f, 28f)
@@ -3067,23 +3221,28 @@ internal fun NowPlayingScreen(
                                     )
                                 }
                             }
-                            if (activePreviewLines != null && lyricsPresence > 0.01f) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(sleeveSide)
-                                        .height(previewHeight)
-                                        .clipToBounds(),
-                                ) {
+                            // Centered 3-line lyrics gap container: mathematically centers
+                            // the preview between artwork bottom edge and song info / progress.
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp)
+                                    .clipToBounds(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (lyricsPresence > 0.01f && activePreviewLines != null && lyricsTextAlpha > 0.01f) {
                                     NowPlayingLyricsPreview(
                                         lines = activePreviewLines,
                                         progressState = progressState,
                                         onOpenLyrics = onOpenLyrics,
+                                        compact = compactHeight,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .requiredHeight(LYRIC_PREVIEW_HEIGHT)
+                                            .height(LYRIC_PREVIEW_HEIGHT)
                                             .graphicsLayer {
-                                                alpha = ((lyricsPresence - 0.15f) / 0.85f).coerceIn(0f, 1f)
-                                                translationY = (1f - lyricsPresence) * 14.dp.toPx()
+                                                alpha = (((lyricsPresence - 0.15f) / 0.85f).coerceIn(0f, 1f)) * lyricsTextAlpha
+                                                translationY = (1f - lyricsPresence) * 6.dp.toPx()
                                             },
                                     )
                                 }
@@ -3138,7 +3297,7 @@ internal fun NowPlayingScreen(
                         .fillMaxWidth()
                         .padding(
                             bottom = if (nowPlayingMinimalStyle) {
-                                if (ultraCompactHeight) 8.dp else if (compactHeight) 14.dp else 20.dp
+                                if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp
                             } else {
                                 if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp
                             },
@@ -3158,7 +3317,7 @@ internal fun NowPlayingScreen(
                             stepDirection = stepDirection,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 10.dp else if (compactHeight) 16.dp else 22.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 10.dp else 14.dp))
 
                         PlaybackSeekBar(
                             progressState = progressState,
@@ -3187,7 +3346,7 @@ internal fun NowPlayingScreen(
                             },
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 10.dp else if (compactHeight) 16.dp else 24.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 12.dp else 16.dp))
 
                         MinimalPlaybackControls(
                             state = state,
@@ -3195,7 +3354,7 @@ internal fun NowPlayingScreen(
                             compact = compactHeight,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 10.dp else if (compactHeight) 16.dp else 22.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 10.dp else 14.dp))
 
                         MinimalBottomActionRow(
                             hasLyrics = hasLyrics,
@@ -3635,6 +3794,31 @@ internal fun MinimalSongInfoRow(
     }
 }
 
+/** Shared compact song-list quality badge for a live [MusicPlayerState]. */
+@Composable
+internal fun CompactStreamQualityBadge(
+    state: MusicPlayerState,
+    modifier: Modifier = Modifier,
+    neutralContent: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    neutralContainer: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+) {
+    val qualityTier = remember(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth) {
+        resolveAudioQualityTier(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth)
+    }
+    val mixing = state.deckBlendTelemetry.isBlendingActive || state.deckBlendTelemetry.phase == BlendPhase.MIX_COMPLETED
+    when {
+        mixing -> QualityBadge("AUTOMIX", QualityGlyphs.AutoMix, neutralContent, neutralContainer, modifier, compact = true)
+        state.isCrossfading -> QualityBadge("CROSSFADE", QualityGlyphs.Crossfade, neutralContent, neutralContainer, modifier, compact = true)
+        isSpatialAudioCodec(state.audioCodec) -> QualityTierBadge(LosslessListTier.ATMOS, modifier, compact = true)
+        qualityTier == AudioQualityTier.HI_RES -> QualityTierBadge(LosslessListTier.HI_RES, modifier, compact = true)
+        qualityTier == AudioQualityTier.LOSSLESS -> QualityTierBadge(LosslessListTier.LOSSLESS, modifier, compact = true)
+        else -> {
+            val label = lossyCodecLabel(state) ?: return
+            QualityBadge(label, QualityGlyphs.Standard, neutralContent, neutralContainer, modifier, compact = true)
+        }
+    }
+}
+
 @Composable
 internal fun MinimalInlineQualityLabel(
     state: MusicPlayerState,
@@ -3643,35 +3827,8 @@ internal fun MinimalInlineQualityLabel(
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
-    val qualityTier = remember(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth) {
-        resolveAudioQualityTier(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth)
-    }
-    val mixing = state.deckBlendTelemetry.isBlendingActive || state.deckBlendTelemetry.phase == BlendPhase.MIX_COMPLETED
-    val label = remember(
-        mixing,
-        state.isCrossfading,
-        state.audioCodec,
-        qualityTier,
-        state.bitDepth,
-        state.samplingRateKHz,
-        state.bitrateKbps,
-    ) {
-        when {
-            mixing -> "AUTOMIX"
-            state.isCrossfading -> "CROSSFADE"
-            isSpatialAudioCodec(state.audioCodec) -> "Dolby Atmos"
-            qualityTier == AudioQualityTier.HI_RES -> buildString {
-                append("Hi-Res")
-                state.samplingRateKHz?.takeIf { it > 0.0 }?.let { append(" \u00b7 ${formatSampleRateKHz(it)}kHz") }
-            }
-            qualityTier == AudioQualityTier.LOSSLESS -> buildString {
-                state.bitDepth?.takeIf { it > 0 }?.let { append("${it}-bit \u00b7 ") }
-                val codec = state.audioCodec?.uppercase()?.takeIf { it.isNotBlank() && it != "AUDIO" }
-                append(codec ?: "Lossless")
-            }
-            else -> lossyCodecLabel(state)
-        }
-    } ?: return
+    val neutralContent = PlayerPalette.ink.copy(alpha = 0.86f)
+    val neutralContainer = PlayerPalette.ink.copy(alpha = 0.11f)
     val switching = state.qualitySwitch != null
     val pulse = if (switching) {
         rememberInfiniteTransition(label = "minQualityPulse").animateFloat(
@@ -3683,32 +3840,40 @@ internal fun MinimalInlineQualityLabel(
     } else {
         1f
     }
+    val onDarkBackdrop = PlayerPalette.shade.luminance() < 0.5f
 
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelSmall.copy(
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.2.sp,
-        ),
-        color = PlayerPalette.ink.copy(alpha = 0.72f * pulse),
-        maxLines = 1,
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .combinedClickable(
-                onClickLabel = "Signal path",
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onOpenSignalPath()
-                },
-                onLongClick = onCycleAbLoop?.let { cycle ->
-                    {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        cycle()
-                    }
+    CompositionLocalProvider(LocalBadgeOnDarkBackdrop provides onDarkBackdrop) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = modifier
+                .clip(RoundedCornerShape(6.dp))
+                .combinedClickable(
+                    onClickLabel = "Signal path",
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onOpenSignalPath()
+                    },
+                    onLongClick = onCycleAbLoop?.let { cycle ->
+                        {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            cycle()
+                        }
+                    },
+                )
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+        ) {
+            CompactStreamQualityBadge(
+                state = state,
+                neutralContent = neutralContent,
+                neutralContainer = neutralContainer,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = 0.90f
+                    scaleY = 0.90f
+                    alpha = pulse
                 },
             )
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    )
+        }
+    }
 }
 
 @Composable

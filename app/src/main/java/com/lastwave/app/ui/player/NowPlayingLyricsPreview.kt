@@ -34,12 +34,12 @@ import com.lastwave.app.playback.PlaybackProgressState
 import com.lastwave.app.ui.theme.PlayerPalette
 import kotlinx.coroutines.flow.StateFlow
 
-/** Height the four preview lines take. */
-internal val LYRIC_PREVIEW_HEIGHT = 112.dp
+/** Height the three preview lines take. */
+internal val LYRIC_PREVIEW_HEIGHT = 78.dp
 
-/** The same four lines in smaller type, for short landscape panes (car head units). */
-internal val LYRIC_PREVIEW_COMPACT_HEIGHT = 80.dp
-private const val PREVIEW_LINES = 4
+/** The same three lines in smaller type, for short landscape panes (car head units). */
+internal val LYRIC_PREVIEW_COMPACT_HEIGHT = 60.dp
+private const val PREVIEW_LINES = 3
 
 /**
  * Stacks lines top-down from the current one and stops at the first that would not fit
@@ -73,9 +73,9 @@ private fun FittingLines(gap: Dp, content: @Composable () -> Unit) {
 }
 
 /**
- * Four synced lyric lines in Now Playing: the current line bright, the next three
+ * Three synced lyric lines in Now Playing: previous, current (bright), and next
  * dimmed, stepping up as the song moves on. Tap opens Lyrics. The block is centred
- * both ways in the space it is given, so it never hugs one edge of it.
+ * both ways in the space it is given, so it sits centered between artwork and controls.
  */
 @Composable
 internal fun NowPlayingLyricsPreview(
@@ -104,26 +104,28 @@ internal fun NowPlayingLyricsPreview(
             },
             label = "nowPlayingLyricsPreview",
         ) { active ->
-            // Before the first line, the opening lines wait dimmed.
-            val first = active.coerceAtLeast(0)
-            FittingLines(gap = if (compact) 0.dp else 2.dp) {
+            val first = when {
+                lines.size <= PREVIEW_LINES -> 0
+                active <= 0 -> 0
+                active >= lines.lastIndex -> (lines.size - PREVIEW_LINES).coerceAtLeast(0)
+                else -> active - 1
+            }
+            FittingLines(gap = if (compact) 1.dp else 3.dp) {
                 for (i in first until minOf(first + PREVIEW_LINES, lines.size)) {
+                    val line = lines.getOrNull(i) ?: continue
                     val isCurrent = i == active
                     val base = if (isCurrent) currentStyle else otherStyle
-                    // A long line wraps onto a second row at full size (shrinking at
-                    // most 10% first) instead of being cut with "..."; shrinking to fit
-                    // one row made long lines too small to read.
                     BasicText(
-                        text = lines[i].text.ifBlank { "♪" },
+                        text = line.text.ifBlank { "♪" },
                         style = base.copy(
                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                            color = PlayerPalette.ink.copy(alpha = if (isCurrent) 1f else 0.5f),
+                            color = PlayerPalette.ink.copy(alpha = if (isCurrent) 1f else 0.48f),
                             textAlign = TextAlign.Center,
                         ),
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         autoSize = TextAutoSize.StepBased(
-                            minFontSize = base.fontSize * 0.9f,
+                            minFontSize = base.fontSize * 0.85f,
                             maxFontSize = base.fontSize,
                             stepSize = 0.5.sp,
                         ),

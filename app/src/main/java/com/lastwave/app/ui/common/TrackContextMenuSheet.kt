@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
@@ -97,8 +99,10 @@ import com.lastwave.app.ui.generate.MixLauncher
 import com.lastwave.app.ui.theme.LocalLiquidGlass
 import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.playback.toPlayableTrack
+import com.lastwave.app.playback.MusicPlayerState
 import com.lastwave.app.playback.PlayableTrack
 import com.lastwave.app.ui.navigation.ArtistAlbumNavigator
+import com.lastwave.app.ui.player.CompactStreamQualityBadge
 import com.lastwave.app.ui.player.LocalMusicPlayer
 import com.lastwave.app.ui.player.LocalAddToPlaylist
 import com.lastwave.app.ui.player.PlayerCastMenuRow
@@ -387,6 +391,10 @@ fun TrackContextMenuSheet(
     onRemoveFromQueue: (() -> Unit)? = null,
     onWatchVideo: (() -> Unit)? = null,
     canWatchVideo: Boolean = true,
+    /** Compact 4-tile grid + tight grouped sheet when opened from Now Playing 3-dot button. */
+    compactNowPlaying: Boolean = false,
+    playerState: MusicPlayerState? = null,
+    onOpenSignalPath: (() -> Unit)? = null,
     /** Shows a Share row (system share sheet); null hides it. */
     onShare: (() -> Unit)? = null,
     genreResolverViewModel: GenreRowViewModel = hiltViewModel(),
@@ -399,7 +407,7 @@ fun TrackContextMenuSheet(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = compactNowPlaying)
     val heldItem = remember(target) { LongPressOrigin.consume() }
     val musicPlayer = LocalMusicPlayer.current
     val addToPlaylist = LocalAddToPlaylist.current
@@ -603,13 +611,126 @@ fun TrackContextMenuSheet(
                 .align(Alignment.CenterHorizontally)
                 .padding(horizontal = 14.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 24.dp + safeDrawingBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(bottom = (if (compactNowPlaying) 18.dp else 24.dp) + safeDrawingBottomPadding()),
+            verticalArrangement = Arrangement.spacedBy(if (compactNowPlaying) 8.dp else 10.dp),
         ) {
             if (heldItem != null) {
                 LiftedHeldItemPreview(held = heldItem)
             }
-            if (target is TrackMenuTarget.Track) {
+            if (target is TrackMenuTarget.Track && compactNowPlaying) {
+                val playable = playableTrack ?: PlayableTrack(title = target.name, artist = target.artist)
+                val isSong = playable.mediaType == com.lastwave.app.playback.MediaType.SONG
+                val isLocalFile = com.lastwave.app.data.generate.LocalAudioFormats.importedPathOrNull(playable.playbackUrl) != null
+                val genre = resolvedGenre?.trim()?.takeIf { it.isNotBlank() && !it.equals("unknown", ignoreCase = true) }
+
+                CompactNowPlayingHeaderRow(
+                    title = target.name,
+                    artist = target.artist,
+                    genre = genre,
+                    resolvingGenre = resolvingGenre,
+                    artworkUrl = playable.artworkUrl,
+                    playerState = playerState,
+                    onGenreClick = genre?.let { g -> { exploreGenre(g); onDismiss() } },
+                    onQualityClick = onOpenSignalPath,
+                )
+
+                CompactNowPlayingQuickGrid(
+                    isSong = isSong,
+                    onPrimaryAction = {
+                        if (isSong) {
+                            if (onStartMix != null) onStartMix(target.name, target.artist)
+                            else startMixViewModel.startMix(target.name, target.artist, playable.videoId)
+                            onDismiss()
+                        } else {
+                            showJamSheet = true
+                        }
+                    },
+                    onAddToPlaylist = { addToPlaylist(playable); onDismiss() },
+                    onTimer = { showTimerDialog = true },
+                    onShareOrCopy = {
+                        if (onShare != null) {
+                            onShare()
+                            onDismiss()
+                        } else {
+                            clipboard.setText(AnnotatedString("${target.name} \u2014 ${target.artist}"))
+                            onDismiss()
+                        }
+                    },
+                )
+
+                val compactRows = buildList<@Composable (GroupPosition) -> Unit> {
+                    if (isSong) {
+                        add { pos ->
+                            CompactMenuActionRow(Icons.Filled.Group, stringResource(R.string.menu_quick_jam), position = pos) {
+                                showJamSheet = true
+                            }
+                        }
+                    }
+                    val splitArtists = com.lastwave.app.util.ArtistHelper.splitArtists(target.artist)
+                    for (art in if (isSong) splitArtists else emptyList()) {
+                        add { pos ->
+                            CompactMenuActionRow(Icons.Filled.Person, stringResource(R.string.menu_go_artist, art), position = pos) {
+                                artistAlbumViewModel.openArtist(art)
+                                onDismiss()
+                            }
+                        }
+                    }
+                    if (isSong && !playable.album.isNullOrBlank()) {
+                        val album = playable.album
+                        val albumArtist = playable.artist.ifBlank { target.artist }
+                        add { pos ->
+                            CompactMenuActionRow(Icons.Filled.Album, stringResource(R.string.menu_go_album, album), position = pos) {
+                                artistAlbumViewModel.openAlbum(album, albumArtist)
+                                onDismiss()
+                            }
+                        }
+                    }
+                    if (capabilities.showCopyActions) {
+                        add { pos ->
+                            CompactMenuActionRow(Icons.Filled.ContentCopy, stringResource(R.string.menu_copy_song), position = pos) {
+                                clipboard.setText(AnnotatedString("${target.name} \u2014 ${target.artist}"))
+                                onDismiss()
+                            }
+                        }
+                    }
+                    add { pos ->
+                        CompactMenuActionRow(Icons.Filled.Link, stringResource(R.string.menu_copy_link), position = pos) {
+                            val directId = playable.videoId?.takeIf { it.isNotBlank() } ?: extractYouTubeVideoId(target.url)
+                            if (directId != null) {
+                                clipboard.setText(AnnotatedString("https://www.youtube.com/watch?v=$directId"))
+                                android.widget.Toast.makeText(context, context.getString(R.string.link_copied), android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                trackLinkViewModel.copyYouTubeLink(target.name, target.artist, playable.videoId, target.url)
+                            }
+                            onDismiss()
+                        }
+                    }
+                    add { pos ->
+                        CompactMenuActionRow(Icons.Filled.Info, stringResource(R.string.menu_details_specs), position = pos) {
+                            showDetailsSheet = true
+                        }
+                    }
+                    add { pos ->
+                        Card(
+                            shape = groupShape(pos),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            PlayerCastMenuRow(musicPlayer, compact = true)
+                        }
+                    }
+                    if (capabilities.showRecommendationExclusion && !isLocalFile && isSong) {
+                        add { pos ->
+                            CompactMenuActionRow(Icons.Filled.ThumbDown, stringResource(R.string.menu_dont_recommend), position = pos) {
+                                exclusionViewModel.exclude(playable)
+                                onDismiss()
+                            }
+                        }
+                    }
+                }
+                ExpressiveGroup(rowCount = compactRows.size) { index, position -> compactRows[index](position) }
+            } else if (target is TrackMenuTarget.Track) {
                 val playable = playableTrack ?: PlayableTrack(title = target.name, artist = target.artist)
                 val isSong = playable.mediaType == com.lastwave.app.playback.MediaType.SONG
                 if (isSong) StartMixCard {
@@ -1199,6 +1320,220 @@ private fun MenuInfoRow(
             } else if (onClick != null) {
                 Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun CompactNowPlayingHeaderRow(
+    title: String,
+    artist: String,
+    genre: String?,
+    resolvingGenre: Boolean,
+    artworkUrl: String?,
+    playerState: MusicPlayerState?,
+    onGenreClick: (() -> Unit)?,
+    onQualityClick: (() -> Unit)?,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        ) {
+            ArtworkImage(
+                name = title,
+                artist = artist,
+                embeddedUrl = artworkUrl,
+                fallbackIcon = Icons.Filled.MusicNote,
+                modifier = Modifier.size(40.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val subText = when {
+                genre != null -> "$artist \u00b7 $genre"
+                resolvingGenre -> "$artist \u00b7 \u2026"
+                else -> artist
+            }
+            Text(
+                text = subText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = if (onGenreClick != null) {
+                    Modifier.clickable(onClick = onGenreClick)
+                } else Modifier,
+            )
+        }
+        if (playerState != null) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .then(if (onQualityClick != null) Modifier.clickable(onClick = onQualityClick) else Modifier)
+                    .padding(2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CompactStreamQualityBadge(state = playerState)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactNowPlayingQuickGrid(
+    isSong: Boolean,
+    onPrimaryAction: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onTimer: () -> Unit,
+    onShareOrCopy: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CompactQuickTile(
+            icon = if (isSong) Icons.Filled.AutoAwesome else Icons.Filled.Group,
+            label = if (isSong) "Mix" else stringResource(R.string.menu_quick_jam),
+            accent = isSong,
+            modifier = Modifier.weight(1f),
+            onClick = onPrimaryAction,
+        )
+        CompactQuickTile(
+            icon = Icons.Filled.PlaylistAdd,
+            label = stringResource(R.string.menu_quick_add_playlist),
+            modifier = Modifier.weight(1f),
+            onClick = onAddToPlaylist,
+        )
+        CompactQuickTile(
+            icon = Icons.Filled.Timer,
+            label = "Timer",
+            modifier = Modifier.weight(1f),
+            onClick = onTimer,
+        )
+        CompactQuickTile(
+            icon = Icons.Filled.Share,
+            label = "Share",
+            modifier = Modifier.weight(1f),
+            onClick = onShareOrCopy,
+        )
+    }
+}
+
+@Composable
+private fun CompactQuickTile(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    accent: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val scale = rememberGroupPressScale(interactionSource)
+    val container = if (accent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+    val iconTint = if (accent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+    val textTint = if (accent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = container),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(16.dp),
+        interactionSource = interactionSource,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = iconTint)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = textTint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactMenuActionRow(
+    icon: ImageVector,
+    label: String,
+    position: GroupPosition = GroupPosition.SINGLE,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val scale = rememberGroupPressScale(interactionSource)
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = groupShape(position),
+        interactionSource = interactionSource,
+        modifier = Modifier.fillMaxWidth().graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                modifier = Modifier.size(12.dp),
+            )
         }
     }
 }
