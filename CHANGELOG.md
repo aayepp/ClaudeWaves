@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.26] - 2026-11-23
+
+### Added
+- **In-app Discord token guide & helpers:** added step-by-step instructions (Browser DevTools Network & Console one-liner with one-tap copy), clipboard paste button, and show/hide toggle inside the Discord token dialog and login header.
+
+### Fixed
+- **Discord login WebView crash:** hardened `DiscordLoginScreen` with nullable WebView callbacks, detach-before-destroy lifecycle cleanup, `WebView`/`CookieManager` fallback handling, direct `evaluateJavascript` token harvesting (replacing `alert()`), non-HTTP scheme blocking (`discord://`/`intent://`), and stable keyboard inset clearance.
+
 ## [1.0.25] - 2026-11-23
 
 ### Fixed
