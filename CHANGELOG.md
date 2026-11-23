@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.29] - 2026-11-24
+
+### Changed
+- **Balanced Minimal quality badge size:** added a `medium` tier (`10.5.sp` text, `12.dp` icon, `6.dp × 2.dp` padding) in `LosslessTrackBadge` matching seekbar timestamps across Dark, Light, AMOLED, and Comic Pop themes, replacing the downscaled `0.90f` badge in `MinimalInlineQualityLabel`.
+- **Fullmode artwork framing & overlapping 3-line lyrics:** balanced `StaticArtworkHero` below the top bar (`statusBarsPadding().padding(top = 22.dp)`, `aspectRatio(0.92f)`) with subtle top/bottom feathering and lighter scrim gradients, and added overlapping 3-line `NowPlayingLyricsPreview` (`overArtwork`) with an adaptive soft gradient veil and text-shadow halo so lyrics stay crisp on any cover color.
+
+### Fixed
+- **Zero-stutter artwork positioning on slow lyrics loads:** locked artwork sleeve size and vertical slot whenever `lyricsPreview` is enabled (removing the `1.4s` hold timeout) so covers never drop down and snap back up while lyrics finish fetching.
+
 ## [1.0.28] - 2026-11-24
 
 ### Changed
