@@ -87,6 +87,28 @@ enum class LyricsProvider(val id: String, val title: String, val subtitle: Strin
     }
 }
 
+/** Shortcut revealed as the 2nd action when holding the docked Home pill. */
+enum class HomeHoldShortcut(
+    val id: String,
+    val label: String,
+    val shortLabel: String,
+    val subtitle: String,
+) {
+    LIBRARY("library", "Library", "Library", "Playlists & quick vaults"),
+    STATS("stats", "Stats", "Stats", "Listening graph & history"),
+    DOWNLOADS("downloads", "Downloads", "Offline", "Saved offline songs"),
+    SEARCH("search", "Search", "Search", "Jump straight to search"),
+    DISCOVER("discover", "Discover", "Discover", "Explore new music"),
+    JAM("jam", "Listen Together", "Jam", "Host or join a live Jam room"),
+    GENERATOR("generator", "Playlist Generator", "Create", "Build custom smart mixes"),
+    SETTINGS("settings", "Settings", "Settings", "App & audio preferences");
+
+    companion object {
+        fun fromId(id: String?): HomeHoldShortcut =
+            entries.firstOrNull { it.id == id } ?: LIBRARY
+    }
+}
+
 enum class RecommendationSource(val id: String, val titleRes: Int, val subtitleRes: Int) {
     YOUTUBE_MUSIC(
         "youtube_music",
@@ -137,6 +159,8 @@ data class MiscSettings(
     val collapsingNavBar: Boolean = true,
     /** The Home circle and docked tab sit at the right edge instead of the left (easier one-handed reach). */
     val homeButtonRight: Boolean = false,
+    /** 2nd shortcut revealed when holding the Home / docked nav pill. */
+    val homeHoldShortcut: String = HomeHoldShortcut.LIBRARY.id,
     /** Last.fm usernames pinned to the top of Home's friend-switcher sheet
      *  (long-press a friend row to toggle). Order among pinned friends
      *  follows whatever order user.getfriends itself returns them in —
@@ -458,6 +482,7 @@ class SettingsPreferences @Inject constructor(
         val USE_BOLD_FONT = booleanPreferencesKey("lw_use_bold_font")
         val COLLAPSING_NAV_BAR = booleanPreferencesKey("lw_collapsing_nav_bar")
         val HOME_BUTTON_RIGHT = booleanPreferencesKey("lw_home_button_right")
+        val HOME_HOLD_SHORTCUT = stringPreferencesKey("lw_home_hold_shortcut")
         val PINNED_FRIENDS = stringSetPreferencesKey("lw_pinned_friends")
         val PREFER_LOSSLESS_STREAMING = booleanPreferencesKey("lw_prefer_lossless_streaming")
         val QUALITY_FOLLOWS_OUTPUT = booleanPreferencesKey("lw_quality_follows_output")
@@ -586,6 +611,7 @@ class SettingsPreferences @Inject constructor(
                 useBoldFont = p.readSafely(Keys.USE_BOLD_FONT) ?: false,
                 collapsingNavBar = p.readSafely(Keys.COLLAPSING_NAV_BAR) ?: true,
                 homeButtonRight = p.readSafely(Keys.HOME_BUTTON_RIGHT) ?: false,
+                homeHoldShortcut = p.readSafely(Keys.HOME_HOLD_SHORTCUT) ?: HomeHoldShortcut.LIBRARY.id,
                 pinnedFriends = p.readSafely(Keys.PINNED_FRIENDS) ?: emptySet(),
                 preferLosslessStreaming = p.readSafely(Keys.PREFER_LOSSLESS_STREAMING) ?: true,
                 qualityFollowsOutput = p.readSafely(Keys.QUALITY_FOLLOWS_OUTPUT) ?: false,
@@ -905,6 +931,10 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setHomeButtonRight(enabled: Boolean) {
         dataStore.edit { it[Keys.HOME_BUTTON_RIGHT] = enabled }
+    }
+
+    suspend fun setHomeHoldShortcut(shortcutId: String) {
+        dataStore.edit { it[Keys.HOME_HOLD_SHORTCUT] = shortcutId }
     }
 
     suspend fun setPodcastsEnabled(enabled: Boolean) {

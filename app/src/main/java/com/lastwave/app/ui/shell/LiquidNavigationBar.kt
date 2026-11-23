@@ -459,21 +459,18 @@ internal fun LiquidNavigationPill(
         animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "liquidNavPillInk",
     )
-    Box(
-        modifier.trackBackdropBounds(pillBounds)
-            .railShadow()
-            .background(MaterialTheme.colorScheme.surface, CircleShape)
-            .navigationRail(liquidState, railTint(isDark))
-            .glassRim()
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            item.icon,
-            contentDescription = item.label,
-            tint = pillInk,
-            modifier = Modifier.size(24.dp),
+    Box(modifier) {
+        ExpandableHomeHoldPill(
+            primaryIcon = item.icon,
+            primaryLabel = item.label,
+            contentColor = pillInk,
+            onTap = onClick,
+            surfaceModifier = Modifier
+                .trackBackdropBounds(pillBounds)
+                .railShadow()
+                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                .navigationRail(liquidState, railTint(isDark))
+                .glassRim(),
         )
     }
 }

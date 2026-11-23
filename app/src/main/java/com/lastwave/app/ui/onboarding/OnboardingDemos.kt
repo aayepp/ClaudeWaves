@@ -25,22 +25,39 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.sp
+import com.lastwave.app.ui.theme.ComicInk
+import com.lastwave.app.ui.theme.LocalComicTheme
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -66,8 +83,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.lastwave.app.ui.theme.comicPanel
 import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.sin
 
 /** True for the tutorial page on screen; off-screen pages hold a still frame. */
 internal val LocalOnboardingPageActive = compositionLocalOf { true }
@@ -456,49 +471,584 @@ internal fun PermissionsDemo() {
     }
 }
 
-/** Quick tour: a finger swipes a song aside, then long-presses it. */
+/** Quick-tour gesture demos replaced by the dedicated mini-phone tutorials below. */
+
 @Composable
-internal fun QuickTourDemo() {
-    val t = demoClock(5000)
+private fun MiniPhoneTutorialFrame(
+    glowColor: Color,
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
-    val ring = scheme.primary
-    DemoFrame {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        val swipe = window(t.value, 0.05f, 0.28f) - window(t.value, 0.32f, 0.5f)
-                        val press = window(t.value, 0.6f, 0.75f) * (1f - window(t.value, 0.88f, 0.98f))
-                        translationX = swipe * 64.dp.toPx()
-                        scaleX = 1f + 0.04f * press
-                        scaleY = scaleX
-                    }
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(scheme.surfaceContainerHighest)
-                    .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    val comic = LocalComicTheme.current
+    val outerShape = RoundedCornerShape(30.dp)
+    val innerShape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(214.dp)
+                .height(310.dp)
+                .comicPanel(outerShape, offset = 3.dp)
+                .clip(outerShape)
+                .background(
+                    Brush.radialGradient(
+                        listOf(glowColor.copy(alpha = 0.22f), scheme.surfaceContainerHigh),
+                    ),
+                )
+                .border(
+                    width = if (comic) 2.dp else 1.2.dp,
+                    color = if (comic) ComicInk else scheme.outlineVariant.copy(alpha = 0.45f),
+                    shape = outerShape,
+                )
+                .padding(7.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(innerShape)
+                    .background(scheme.surfaceContainerLowest),
             ) {
-                IconBubble(Icons.Filled.MusicNote, scheme.primaryContainer, scheme.onPrimaryContainer, size = 40.dp)
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text("Song title", style = MaterialTheme.typography.labelLarge, color = scheme.onSurface)
-                    Caption("Artist")
+                content()
+                // Compact top speaker / camera island
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 6.dp)
+                        .width(46.dp)
+                        .height(9.dp)
+                        .clip(CircleShape)
+                        .background(if (comic) ComicInk else Color.Black.copy(alpha = 0.72f)),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TouchDotIndicator(
+    alpha: Float,
+    pressed: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    if (alpha <= 0.02f) return
+    val accent = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = modifier
+            .size(if (pressed) 30.dp else 24.dp)
+            .graphicsLayer { this.alpha = alpha },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(accent.copy(alpha = if (pressed) 0.30f else 0.18f)),
+        )
+        Box(
+            Modifier
+                .size(14.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.88f))
+                .border(1.5.dp, accent, CircleShape),
+        )
+    }
+}
+
+/**
+ * Tutorial #1: Liquid Ripple shockwave burst -> 3D Cover-Flow swipe + floor sheen -> Synced Video toggle.
+ */
+@Composable
+internal fun PlayerGesturesTutorialDemo() {
+    val t = demoClock(5200, still = 0.42f)
+    val scheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    val coverColors = listOf(scheme.tertiary, scheme.primary, scheme.secondary)
+
+    MiniPhoneTutorialFrame(glowColor = scheme.primary) {
+        val v = t.value
+        val rippleP = (v / 0.32f).coerceIn(0f, 1f)
+        val swipeFrac = window(v, 0.28f, 0.72f)
+        val coverCursor = 1f + sin(swipeFrac * PI).toFloat() * 0.92f
+        val videoBadgeOn = v >= 0.74f && v <= 0.95f
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            scheme.primary.copy(alpha = 0.24f),
+                            scheme.surfaceContainerLowest,
+                        ),
+                    ),
+                )
+                .padding(horizontal = 12.dp, vertical = 22.dp),
+        ) {
+            // Center 3D Cover-Flow Stack + Liquid Ripple
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp)
+                    .size(134.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    if (rippleP > 0.02f && rippleP < 0.98f) {
+                        val expand = 22.dp.toPx() * rippleP
+                        val a = (1f - rippleP) * (1f - rippleP) * 0.75f
+                        drawRoundRect(
+                            color = scheme.primary.copy(alpha = a),
+                            topLeft = Offset(-expand, -expand),
+                            size = Size(size.width + expand * 2f, size.height + expand * 2f),
+                            cornerRadius = CornerRadius(18.dp.toPx() + expand * 0.35f),
+                            style = Stroke(width = 2.5.dp.toPx() * (1f - 0.5f * rippleP)),
+                        )
+                    }
+                }
+                val order = listOf(0, 1, 2).sortedByDescending { abs(it - coverCursor) }
+                order.forEach { idx ->
+                    val d = idx - coverCursor
+                    if (abs(d) <= 1.25f) {
+                        val ad = abs(d)
+                        val sc = 1f - 0.24f * ad.coerceAtMost(1f)
+                        Box(
+                            modifier = Modifier
+                                .size(104.dp)
+                                .graphicsLayer {
+                                    cameraDistance = 12f * this.density
+                                    translationX = d * 68.dp.toPx()
+                                    translationY = ad * 6.dp.toPx()
+                                    rotationY = (-d * 22f).coerceIn(-26f, 26f)
+                                    scaleX = sc
+                                    scaleY = sc
+                                    alpha = 1f - 0.45f * ad.coerceAtMost(1f)
+                                }
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(coverColors[idx], coverColors[(idx + 1) % coverColors.size]),
+                                    ),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.MusicNote, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(34.dp))
+                        }
+                    }
                 }
             }
-            Canvas(Modifier.fillMaxSize()) {
-                val press = window(t.value, 0.6f, 0.75f) * (1f - window(t.value, 0.88f, 0.98f))
-                if (press > 0f) drawCircle(ring.copy(alpha = 0.25f * press), 28.dp.toPx() * press, center)
+
+            // Soft mirrored floor sheen below cover
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 152.dp)
+                    .width(96.dp)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(scheme.primary.copy(alpha = 0.26f), Color.Transparent),
+                        ),
+                    ),
+            )
+
+            // Minimal controls + Synced Video chip
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(scheme.outlineVariant.copy(alpha = 0.35f))) {
+                    Box(Modifier.fillMaxWidth(0.35f + 0.4f * v).height(3.dp).clip(CircleShape).background(scheme.primary))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.SmartDisplay,
+                        null,
+                        tint = if (videoBadgeOn) scheme.primary else scheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Lyrics, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.CloudDownload, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                }
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer { alpha = if (videoBadgeOn) 1f else 0.4f }
+                        .clip(CircleShape)
+                        .background(if (videoBadgeOn) scheme.primaryContainer else scheme.surfaceContainerHighest)
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = if (videoBadgeOn) "SYNCED VIDEO ON" else "Swipe cover ↔",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (videoBadgeOn) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                    )
+                }
             }
-            Icon(
-                Icons.Filled.TouchApp,
-                null,
-                tint = scheme.onSurface,
-                modifier = Modifier.size(30.dp).offset(x = 6.dp, y = 18.dp).graphicsLayer {
-                    val swipe = window(t.value, 0.05f, 0.28f) - window(t.value, 0.32f, 0.5f)
-                    translationX = swipe * 64.dp.toPx()
-                },
+
+            // Finger swipe indicator over the artwork
+            val fingerAlpha = beat(v, 0.26f, 0.35f) * (1f - window(v, 0.68f, 0.76f))
+            TouchDotIndicator(
+                alpha = fingerAlpha,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 84.dp)
+                    .graphicsLayer { translationX = -cos(swipeFrac * PI).toFloat() * 34.dp.toPx() },
             )
         }
     }
 }
+
+/**
+ * Tutorial #2: Interactive 7-day Stats bar filter tap + Hold-Home expandable pill shifting MiniPlayer.
+ */
+@Composable
+internal fun DockStatsTutorialDemo() {
+    val t = demoClock(5200, still = 0.66f)
+    val scheme = MaterialTheme.colorScheme
+    val v = t.value
+    val satSelected = v >= 0.18f
+    val holdPhase = beat(v, 0.44f, 0.56f) * (1f - window(v, 0.86f, 0.96f))
+    val slide2nd = window(v, 0.60f, 0.78f)
+    val bars = listOf(0.45f, 0.42f, 0.38f, 0.28f, 0.56f, 0.88f, 0.30f)
+
+    MiniPhoneTutorialFrame(glowColor = scheme.tertiary) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(scheme.surfaceContainerLowest)
+                .padding(horizontal = 12.dp, vertical = 22.dp),
+        ) {
+            // Upper stage: 7-day Stats Bar Chart + Filtered Track rows
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = if (satSelected) "Stats · Saturday (18 plays)" else "Stats · 7-Day Activity",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (satSelected) scheme.primary else scheme.onSurface,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    bars.forEachIndexed { i, frac ->
+                        val active = (i == 5 && satSelected)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                                .padding(top = ((1f - frac) * 48).dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(
+                                    if (active) scheme.primary
+                                    else scheme.outlineVariant.copy(alpha = 0.45f),
+                                ),
+                        )
+                    }
+                }
+                repeat(3) { r ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (satSelected) scheme.primaryContainer.copy(alpha = 0.42f)
+                                else scheme.surfaceContainerHigh,
+                            )
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(Modifier.size(18.dp).clip(RoundedCornerShape(5.dp)).background(scheme.primary.copy(alpha = 0.65f)))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Box(Modifier.fillMaxWidth(0.7f - r * 0.1f).height(5.dp).clip(CircleShape).background(scheme.onSurface.copy(alpha = 0.7f)))
+                            Box(Modifier.fillMaxWidth(0.45f).height(4.dp).clip(CircleShape).background(scheme.onSurfaceVariant.copy(alpha = 0.45f)))
+                        }
+                    }
+                }
+            }
+
+            // Bottom Expandable Hold-Home Pill + sliding MiniPlayer
+            val pillW = 34.dp + (40.dp * holdPhase)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(pillW)
+                        .height(34.dp)
+                        .clip(CircleShape)
+                        .background(scheme.surfaceContainerHighest)
+                        .border(1.dp, scheme.primary.copy(alpha = 0.45f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (holdPhase < 0.25f) {
+                        Icon(Icons.Filled.Home, null, tint = scheme.primary, modifier = Modifier.size(16.dp))
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Home,
+                                null,
+                                tint = if (slide2nd < 0.5f) scheme.primary else scheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Icon(
+                                Icons.Filled.CloudDownload,
+                                null,
+                                tint = if (slide2nd >= 0.5f) scheme.primary else scheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .clip(CircleShape)
+                        .background(scheme.surfaceContainerHigh)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).background(scheme.primary))
+                    Box(Modifier.weight(1f).height(5.dp).clip(CircleShape).background(scheme.onSurface.copy(alpha = 0.65f)))
+                    Icon(Icons.Filled.PlayArrow, null, tint = scheme.onSurface, modifier = Modifier.size(15.dp))
+                }
+            }
+
+            // Finger tapping Sat bar (0.05..0.38) then holding & sliding Home pill (0.42..0.90)
+            if (v in 0.04f..0.38f) {
+                TouchDotIndicator(
+                    alpha = beat(v, 0.04f, 0.14f) * (1f - window(v, 0.30f, 0.38f)),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 54.dp, end = 28.dp),
+                )
+            } else if (v >= 0.42f) {
+                val fa = beat(v, 0.42f, 0.52f) * (1f - window(v, 0.84f, 0.94f))
+                TouchDotIndicator(
+                    alpha = fa,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 6.dp, bottom = 4.dp)
+                        .graphicsLayer { translationX = slide2nd * 34.dp.toPx() },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Tutorial #3: Playlist long-press Frosted Quick-Peek Card + Queue drag reorder + Jam live pill.
+ */
+@Composable
+internal fun QuickPeekJamTutorialDemo() {
+    val t = demoClock(5400, still = 0.45f)
+    val scheme = MaterialTheme.colorScheme
+    val v = t.value
+    val showQuickPeek = v < 0.55f
+    val cardPop = beat(v, 0.12f, 0.22f) * (1f - window(v, 0.46f, 0.54f))
+    val dragLift = beat(v, 0.60f, 0.68f) * (1f - window(v, 0.88f, 0.96f))
+    val dragSwap = window(v, 0.68f, 0.86f)
+
+    MiniPhoneTutorialFrame(glowColor = scheme.secondary) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(scheme.surfaceContainerLowest)
+                .padding(horizontal = 12.dp, vertical = 22.dp),
+        ) {
+            if (showQuickPeek) {
+                // Background Library Grid + Quick-Peek Overlay
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Library", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+                        Box(
+                            Modifier
+                                .clip(CircleShape)
+                                .background(scheme.primary.copy(alpha = 0.18f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Icon(Icons.Filled.People, null, tint = scheme.primary, modifier = Modifier.size(10.dp))
+                                Text("Jam", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = scheme.primary)
+                            }
+                        }
+                    }
+                    repeat(2) { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            repeat(2) { col ->
+                                val target = (row == 0 && col == 0)
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(scheme.surfaceContainerHigh)
+                                        .padding(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(54.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (target) scheme.primary else scheme.secondaryContainer),
+                                    )
+                                    Box(Modifier.fillMaxWidth(0.75f).height(5.dp).clip(CircleShape).background(scheme.onSurface.copy(alpha = 0.6f)))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (cardPop > 0.04f) {
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f * cardPop)))
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .fillMaxWidth(0.92f)
+                            .graphicsLayer {
+                                scaleX = 0.85f + 0.15f * cardPop
+                                scaleY = scaleX
+                                alpha = cardPop
+                            }
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(scheme.surfaceContainerHigh)
+                            .border(1.dp, scheme.primary.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(scheme.primary))
+                            Column {
+                                Text("Late Night Chill", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+                                Text("Quick Peek · 5 tracks", fontSize = 8.sp, color = scheme.primary)
+                            }
+                        }
+                        repeat(3) { r ->
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(scheme.surfaceContainerHighest),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(22.dp)
+                                .clip(CircleShape)
+                                .background(scheme.primary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("Play All", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = scheme.onPrimary)
+                        }
+                    }
+                }
+
+                if (v < 0.25f) {
+                    TouchDotIndicator(
+                        alpha = beat(v, 0.04f, 0.14f),
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 32.dp, top = 46.dp),
+                    )
+                }
+            } else {
+                // Phase B: Queue drag reorder with ≡ handle + Jam live header
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(CircleShape)
+                            .background(scheme.primaryContainer.copy(alpha = 0.6f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(Icons.Filled.People, null, tint = scheme.primary, modifier = Modifier.size(12.dp))
+                        Text("Listen Together Jam · Reorder Queue", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = scheme.onPrimaryContainer)
+                    }
+
+                    val rowStep = 38.dp
+                    Box(Modifier.fillMaxWidth().height(156.dp)) {
+                        listOf(0, 1, 2).sortedBy { if (it == 2) 10 else it }.forEach { idx ->
+                            val yDp = when (idx) {
+                                0 -> rowStep * dragSwap
+                                1 -> rowStep * (1f + dragSwap)
+                                else -> rowStep * (2f * (1f - dragSwap))
+                            }
+                            val lifted = idx == 2 && dragLift > 0.05f
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(32.dp)
+                                    .offset { IntOffset(0, with(density) { yDp.roundToPx() }) }
+                                    .graphicsLayer {
+                                        val sc = if (lifted) 1f + 0.05f * dragLift else 1f
+                                        scaleX = sc
+                                        scaleY = sc
+                                    }
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(if (lifted) scheme.primaryContainer else scheme.surfaceContainerHigh)
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Box(Modifier.size(18.dp).clip(RoundedCornerShape(5.dp)).background(if (idx == 2) scheme.primary else scheme.tertiary))
+                                Box(Modifier.weight(1f).height(6.dp).clip(CircleShape).background(scheme.onSurface.copy(alpha = 0.65f)))
+                                Icon(Icons.Filled.DragHandle, null, tint = if (lifted) scheme.primary else scheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                            }
+                        }
+
+                        if (dragLift > 0.05f) {
+                            val handleY = rowStep * (2f * (1f - dragSwap))
+                            TouchDotIndicator(
+                                alpha = dragLift,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(end = 2.dp, top = 2.dp)
+                                    .offset { IntOffset(0, with(density) { handleY.roundToPx() }) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

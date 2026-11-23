@@ -162,6 +162,10 @@ class OnboardingViewModel @Inject constructor(
         viewModelScope.launch { settingsPreferences.setSmartOfflineCacheEnabled(enabled) }
     }
 
+    fun setNowPlayingMinimalStyle(enabled: Boolean) {
+        viewModelScope.launch { settingsPreferences.setNowPlayingMinimalStyle(enabled) }
+    }
+
     fun completeOnboarding(onDone: () -> Unit) {
         viewModelScope.launch {
             settingsPreferences.setOnboardingCompleted(true)

@@ -142,6 +142,8 @@
     <string name="settings_collapsing_nav_bar_sub">Shrink the bar to a tab icon and dock the mini player beside it while scrolling</string>
     <string name="settings_home_button_right">Home Button on Right</string>
     <string name="settings_home_button_right_sub">Put the Home button and docked tab at the right edge, easier to reach with your thumb</string>
+    <string name="settings_home_hold_shortcut">Home Hold 2nd Shortcut</string>
+    <string name="settings_home_hold_shortcut_sub">Choose the 2nd shortcut revealed when holding the Home pill</string>
     <string name="settings_section_accent">Accent</string>
 
     <string name="settings_section_experimental">Experimental</string>

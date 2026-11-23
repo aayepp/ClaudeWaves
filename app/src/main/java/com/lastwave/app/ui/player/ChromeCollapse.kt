@@ -14,10 +14,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -156,6 +158,9 @@ internal fun Modifier.collapsingNavBar(progress: () -> Float): Modifier =
 /** Settings' "Home Button on Right": the Home circle and docked tab sit at the right edge. */
 internal val LocalHomeOnRight = staticCompositionLocalOf { false }
 
+/** Updates extra horizontal width added while the Home hold pill expands (`0dp .. 84dp`). */
+internal val LocalSetHomePillExtraWidth = staticCompositionLocalOf<(Dp) -> Unit> { {} }
+
 /**
  * Positions and sizes the compact nav pill; it grows in as the bar fades and is unplaced while
  * expanded. Callers align it to the bottom start or end per [LocalHomeOnRight].
@@ -180,17 +185,23 @@ internal fun Modifier.collapsedNavPill(progress: () -> Float): Modifier = this
             }
         }
     }
-    .size(CompactPillSize)
+    .height(CompactPillSize)
+    .widthIn(min = CompactPillSize)
 
 /**
  * Moves the mini player into the collapsed nav row, beside the pill. [lift] is its expanded
  * gap above the bottom inset. Done in layout, not as a draw translation, so the card's touch
  * bounds and the bounds the full player morphs from follow it.
  */
-internal fun Modifier.dockBesidePill(lift: Dp, progress: () -> Float, pillOnRight: Boolean = false): Modifier =
+internal fun Modifier.dockBesidePill(
+    lift: Dp,
+    progress: () -> Float,
+    pillOnRight: Boolean = false,
+    extraPillWidth: () -> Dp = { 0.dp },
+): Modifier =
     layout { measurable, constraints ->
         val p = progress()
-        val shiftX = ((CompactPillSize + CompactRowGap).toPx() * p).roundToInt()
+        val shiftX = ((CompactPillSize + extraPillWidth() + CompactRowGap).toPx() * p).roundToInt()
         val shiftY = ((lift - CompactRowBottomMargin).toPx() * p).roundToInt()
         val placeable = measurable.measure(constraints.offset(horizontal = -shiftX))
         // Reporting less height than measured drops the card by shiftY; only the empty

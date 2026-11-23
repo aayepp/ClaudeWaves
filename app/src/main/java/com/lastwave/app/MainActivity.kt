@@ -243,6 +243,40 @@ open class MainShellActivity : androidx.fragment.app.FragmentActivity() {
                     val artworkVm: ArtworkViewModel = hiltViewModel()
                     val losslessBadgeVm: LosslessBadgeViewModel = hiltViewModel()
                     val artworkCellular by artworkVm.isCellular.collectAsStateWithLifecycle()
+                    val requestedMainTab = androidx.compose.runtime.remember {
+                        androidx.compose.runtime.mutableStateOf<String?>(null)
+                    }
+                    val onExecuteHomeHoldShortcut: (com.lastwave.app.data.local.HomeHoldShortcut) -> Unit =
+                        androidx.compose.runtime.remember(navController) {
+                            { shortcut ->
+                                when (shortcut) {
+                                    com.lastwave.app.data.local.HomeHoldShortcut.LIBRARY -> {
+                                        requestedMainTab.value = "PLAYLISTS"
+                                        if (navController.currentDestination?.route != Screen.MainShell.route) {
+                                            goHome()
+                                        }
+                                    }
+                                    com.lastwave.app.data.local.HomeHoldShortcut.STATS -> {
+                                        requestedMainTab.value = "STATS"
+                                        if (navController.currentDestination?.route != Screen.MainShell.route) {
+                                            goHome()
+                                        }
+                                    }
+                                    com.lastwave.app.data.local.HomeHoldShortcut.DOWNLOADS ->
+                                        navController.navigate(Screen.Downloads.route) { launchSingleTop = true }
+                                    com.lastwave.app.data.local.HomeHoldShortcut.SEARCH ->
+                                        navController.navigate(Screen.Search.route) { launchSingleTop = true }
+                                    com.lastwave.app.data.local.HomeHoldShortcut.DISCOVER ->
+                                        navController.navigate(Screen.Discover.route) { launchSingleTop = true }
+                                    com.lastwave.app.data.local.HomeHoldShortcut.JAM ->
+                                        navController.navigate(Screen.Jam.createRoute()) { launchSingleTop = true }
+                                    com.lastwave.app.data.local.HomeHoldShortcut.GENERATOR ->
+                                        navController.navigate(Screen.Create.route) { launchSingleTop = true }
+                                    com.lastwave.app.data.local.HomeHoldShortcut.SETTINGS ->
+                                        navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                                }
+                            }
+                        }
                     val navContent = androidx.compose.runtime.remember(navController) {
                         @androidx.compose.runtime.Composable { LastWaveNavHost(navController) }
                     }
@@ -264,6 +298,7 @@ open class MainShellActivity : androidx.fragment.app.FragmentActivity() {
                         LocalArtworkCellular provides artworkCellular,
                         LocalLosslessBadgeViewModel provides losslessBadgeVm,
                         com.lastwave.app.ui.theme.LocalUserProfile provides userProfile,
+                        com.lastwave.app.ui.shell.LocalRequestedMainTab provides requestedMainTab,
                     ) {
                         PlayerHost(
                             hasBottomNavigation = hasBottomNavigation,
@@ -272,6 +307,7 @@ open class MainShellActivity : androidx.fragment.app.FragmentActivity() {
                             webContentScreen = isWebLoginScreen,
                             // Search's own bar takes the dock's place, so no Home circle there.
                             onHome = goHome.takeIf { offHome && !isSearchScreen },
+                            onExecuteHomeHoldShortcut = onExecuteHomeHoldShortcut,
                             searchBarBelow = isSearchScreen,
                             content = navContent,
                         )

@@ -41,7 +41,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.layout.onSizeChanged
@@ -828,23 +830,33 @@ internal fun FullPlayer(
                         // Matched fade durations keep both layers visible
                         // throughout the crossfade so the background never
                         // flashes through between cover and canvas/lyrics.
-                        // Same language as the player open/close: the panel
-                        // rises and grows into place like a card while the
-                        // one it covers recedes, and the reverse going back.
-                        val dur = 280
+                        // Switching Lyrics <-> Queue slides cleanly horizontally while
+                        // the top song pill & bottom bar stay anchored; opening from
+                        // Now Playing glides smoothly up into place.
+                        val dur = 260
                         val ease = tween<Float>(dur, easing = FastOutSlowInEasing)
-                        if (targetState != FullPlayerTab.NOW_PLAYING) {
-                            (slideInVertically(tween(dur, easing = FastOutSlowInEasing)) { it / 8 } +
-                                scaleIn(ease, initialScale = 0.92f, transformOrigin = TransformOrigin(0.5f, 1f)) +
-                                fadeIn(tween(dur))) togetherWith
-                                (scaleOut(ease, targetScale = 0.94f, transformOrigin = TransformOrigin(0.5f, 0f)) +
-                                    fadeOut(tween(dur)))
-                        } else {
-                            (scaleIn(ease, initialScale = 0.94f, transformOrigin = TransformOrigin(0.5f, 0f)) +
-                                fadeIn(tween(dur))) togetherWith
-                                (slideOutVertically(tween(dur, easing = FastOutSlowInEasing)) { it / 8 } +
-                                    scaleOut(ease, targetScale = 0.92f, transformOrigin = TransformOrigin(0.5f, 1f)) +
-                                    fadeOut(tween(dur)))
+                        when {
+                            initialState != FullPlayerTab.NOW_PLAYING && targetState != FullPlayerTab.NOW_PLAYING -> {
+                                val toQueue = targetState == FullPlayerTab.QUEUE
+                                (slideInHorizontally(tween(dur, easing = FastOutSlowInEasing)) { if (toQueue) it / 5 else -it / 5 } +
+                                    fadeIn(tween(dur))) togetherWith
+                                    (slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { if (toQueue) -it / 6 else it / 6 } +
+                                        fadeOut(tween(200)))
+                            }
+                            targetState != FullPlayerTab.NOW_PLAYING -> {
+                                (slideInVertically(tween(dur, easing = FastOutSlowInEasing)) { it / 8 } +
+                                    scaleIn(ease, initialScale = 0.92f, transformOrigin = TransformOrigin(0.5f, 1f)) +
+                                    fadeIn(tween(dur))) togetherWith
+                                    (scaleOut(ease, targetScale = 0.94f, transformOrigin = TransformOrigin(0.5f, 0f)) +
+                                        fadeOut(tween(dur)))
+                            }
+                            else -> {
+                                (scaleIn(ease, initialScale = 0.94f, transformOrigin = TransformOrigin(0.5f, 0f)) +
+                                    fadeIn(tween(dur))) togetherWith
+                                    (slideOutVertically(tween(dur, easing = FastOutSlowInEasing)) { it / 8 } +
+                                        scaleOut(ease, targetScale = 0.92f, transformOrigin = TransformOrigin(0.5f, 1f)) +
+                                        fadeOut(tween(dur)))
+                            }
                         }
                     },
                     label = "playerTabContent",

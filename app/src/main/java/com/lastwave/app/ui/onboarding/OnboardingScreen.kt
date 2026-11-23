@@ -56,21 +56,24 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.SwipeRight
-import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -121,7 +124,7 @@ import com.lastwave.app.ui.theme.pageBackground
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private const val ONBOARDING_PAGE_COUNT = 8
+private const val ONBOARDING_PAGE_COUNT = 10
 
 private val ACCENT_SWATCHES = listOf(
     Color(0xFF7C4DFF),
@@ -225,10 +228,12 @@ fun OnboardingScreen(
                     0 -> WowFeaturesSpotlightPage()
                     1 -> ThemeStylePage(
                         theme = theme,
+                        minimalNowPlaying = settings.nowPlayingMinimalStyle,
                         onThemeMode = viewModel::setThemeMode,
                         onAmoled = viewModel::setAmoled,
                         onComic = viewModel::setComicTheme,
                         onLiquidGlass = viewModel::setLiquidGlass,
+                        onMinimalNowPlaying = viewModel::setNowPlayingMinimalStyle,
                         onAccent = viewModel::setManualAccent,
                     )
                     2 -> ProfileSetupPage(
@@ -255,24 +260,33 @@ fun OnboardingScreen(
                         onSmartCache = viewModel::setSmartOfflineCacheEnabled,
                     )
                     6 -> PermissionsLocalMusicPage()
-                    7 -> InteractiveQuickTourPage()
+                    7 -> PlayerGesturesTutorialPage()
+                    8 -> DockStatsTutorialPage()
+                    9 -> QuickPeekJamTutorialPage()
                 }
                 }
             }
 
-            // Bottom action bar
+            // Bottom action bar with full balanced pill CTA
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "${pagerState.currentPage + 1} / $ONBOARDING_PAGE_COUNT",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Text(
+                        text = "${pagerState.currentPage + 1} / $ONBOARDING_PAGE_COUNT",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
                 Button(
                     onClick = {
                         if (isLastPage) {
@@ -282,11 +296,12 @@ fun OnboardingScreen(
                         }
                     },
                     shape = CircleShape,
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
                     Text(
                         text = if (isLastPage) "Get Started" else "Next",
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.width(8.dp))
                     Icon(
@@ -313,39 +328,44 @@ private fun OnboardingPageScaffold(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(56.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(28.dp),
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
         demo()
-        Spacer(Modifier.height(2.dp))
         content()
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
     }
 }
 
@@ -535,10 +555,12 @@ private fun AccountConnectCard(
 @Composable
 private fun ThemeStylePage(
     theme: ThemeUiState,
+    minimalNowPlaying: Boolean,
     onThemeMode: (ThemeMode) -> Unit,
     onAmoled: (Boolean) -> Unit,
     onComic: (Boolean) -> Unit,
     onLiquidGlass: (Boolean) -> Unit,
+    onMinimalNowPlaying: (Boolean) -> Unit,
     onAccent: (Color) -> Unit,
 ) {
     OnboardingPageScaffold(
@@ -579,6 +601,12 @@ private fun ThemeStylePage(
                         if (enabled) onComic(false)
                         onLiquidGlass(enabled)
                     },
+                )
+                ToggleRow(
+                    title = "Minimal Design",
+                    subtitle = "Clean frameless Now Playing layout with bare icons",
+                    checked = minimalNowPlaying,
+                    onCheckedChange = onMinimalNowPlaying,
                 )
                 ToggleRow(
                     title = "Comic Pop",
@@ -765,7 +793,7 @@ private fun AudioQualityPage(
     OnboardingPageScaffold(
         icon = Icons.Filled.HighQuality,
         title = "Audio Quality & Playback",
-        subtitle = "Tune how LastWave streams, blends tracks, and caches songs for offline listening.",
+        subtitle = "Tune how ClaudeWaves streams, blends tracks, and caches songs for offline listening.",
         demo = { AudioDemo() },
     ) {
         val isHiRes = settings.preferLosslessStreaming
@@ -930,7 +958,7 @@ private fun PermissionsLocalMusicPage() {
 private fun WowFeaturesSpotlightPage() {
     OnboardingPageScaffold(
         icon = Icons.Filled.AutoAwesome,
-        title = "Welcome to LastWave",
+        title = "Welcome to ClaudeWaves",
         subtitle = "Built for listeners who want audiophile sound, living visuals, and effortless offline playback.",
         demo = { WelcomeDemo() },
     ) {
@@ -1002,11 +1030,103 @@ private fun WowSpotlightCard(
     }
 }
 
-// ── Page 8: Interactive Quick Tour & Gestures ─────────────────────────────────
+// ── Page 8–10: Mini-Phone Visual Gesture Tutorials & WOW Walkthroughs ──────────
+
+@Composable
+private fun TutorialPageLayout(
+    title: String,
+    demo: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        demo()
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        content()
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun TutorialHowToRow(
+    icon: ImageVector,
+    title: String,
+    detail: String,
+) {
+    OnboardingCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(38.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(19.dp))
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerGesturesTutorialPage() {
+    TutorialPageLayout(
+        title = "3D Cover-Flow & Living Visuals",
+        demo = { PlayerGesturesTutorialDemo() },
+    ) {
+        TutorialHowToRow(
+            icon = Icons.Filled.SwipeRight,
+            title = "Swipe Cover Left or Right",
+            detail = "Glide across the album cover for a 3D Cover-Flow peek with mirrored floor reflection and chromatic Liquid Ripple track switch.",
+        )
+        TutorialHowToRow(
+            icon = Icons.Filled.SmartDisplay,
+            title = "Synced Video, Lyrics & Minimal Design",
+            detail = "Flip to synced Music Video, tap Best Part to jump to the chorus, or switch to Minimal Design anytime in Settings › Appearance.",
+        )
+    }
+}
+
+@Composable
+private fun DockStatsTutorialPage() {
+    TutorialPageLayout(
+        title = "Hold-Home & Interactive Stats",
+        demo = { DockStatsTutorialDemo() },
+    ) {
+        TutorialHowToRow(
+            icon = Icons.Filled.Home,
+            title = "Press & Hold Home Pill to Jump",
+            detail = "Hold the compact Home pill to expand [Home | 2nd Shortcut] while the mini player slides aside. Pick any 2nd shortcut in Settings.",
+        )
+        TutorialHowToRow(
+            icon = Icons.Filled.Leaderboard,
+            title = "Tap Any Stats Day Bar",
+            detail = "Tap Mon–Sun bars on Stats to filter and replay every track from that day, sorted by Most Played or Timeline.",
+        )
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun InteractiveQuickTourPage() {
+private fun QuickPeekJamTutorialPage() {
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
 
@@ -1019,13 +1139,22 @@ private fun InteractiveQuickTourPage() {
         label = "demoLift",
     )
 
-    OnboardingPageScaffold(
-        icon = Icons.Filled.TouchApp,
-        title = "Quick Interactive Tour",
-        subtitle = "Try the gestures below right now, plus key shortcuts across the app.",
-        demo = { QuickTourDemo() },
+    TutorialPageLayout(
+        title = "Quick-Peek, Queue & Jam Rooms",
+        demo = { QuickPeekJamTutorialDemo() },
     ) {
-        // Try-It Sandbox #1: Swipe-to-Queue
+        TutorialHowToRow(
+            icon = Icons.Filled.DragHandle,
+            title = "Playlist Quick-Peek & Queue Drag",
+            detail = "Long-press any playlist cover in Library to peek top 5 tracks, or hold ≡ in Queue to reorder Up Next.",
+        )
+        TutorialHowToRow(
+            icon = Icons.Filled.People,
+            title = "Listen Together Jam & AutoEQ",
+            detail = "Host real-time Jam sessions with friends or connect a USB DAC for bit-perfect playback with AutoEQ profiles.",
+        )
+
+        // Compact Try-It Sandbox so users feel Swipe-to-Queue & Long-Press Lift before tapping Get Started
         OnboardingCard(selected = swipedDone) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1035,7 +1164,7 @@ private fun InteractiveQuickTourPage() {
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = if (swipedDone) "Queued! Nice swipe." else "Try: Swipe this song right to queue",
+                        text = if (swipedDone) "Queued! Nice swipe." else "Try: Swipe song right or hold card",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -1046,6 +1175,18 @@ private fun InteractiveQuickTourPage() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .offset { IntOffset(swipeOffset.value.roundToInt(), 0) }
+                        .graphicsLayer {
+                            scaleX = liftScale
+                            scaleY = liftScale
+                        }
+                        .clip(RoundedCornerShape(14.dp))
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = {
+                                longPressDone = true
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                        )
                         .pointerInput(Unit) {
                             detectHorizontalDragGestures(
                                 onDragEnd = {
@@ -1072,99 +1213,22 @@ private fun InteractiveQuickTourPage() {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(Icons.Filled.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            if (longPressDone) Icons.Filled.CheckCircle else Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
                         Column(Modifier.weight(1f)) {
                             Text("Midnight Waves", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Drag right → Play Next", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = if (longPressDone) "Lifted! Long-press opens quick menu." else "Swipe right → Play Next  •  Hold → Quick Peek",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
             }
-        }
-
-        // Try-It Sandbox #2: Long-Press Lift Card
-        OnboardingCard(selected = longPressDone) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        if (longPressDone) Icons.Filled.CheckCircle else Icons.Filled.TouchApp,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = if (longPressDone) "Lifted! Long-press opens quick menu." else "Try: Press & hold this card",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            scaleX = liftScale
-                            scaleY = liftScale
-                        }
-                        .clip(RoundedCornerShape(14.dp))
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = {
-                                longPressDone = true
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            },
-                        ),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Column(Modifier.weight(1f)) {
-                            Text("Hold any song or album card", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Lifts the card for instant actions", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Cheat-sheet: Dock, Mini Player, Now Playing & Power Features
-        OnboardingCard {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("More Shortcuts to Know", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                GestureTipRow(
-                    icon = Icons.Filled.Tune,
-                    title = "Dock & Mini Player",
-                    detail = "Slide along the bottom tab pill to scrub tabs. Swipe the mini player left/right to skip, up to expand, or down to close.",
-                )
-                GestureTipRow(
-                    icon = Icons.Filled.Lyrics,
-                    title = "Now Playing & Lyrics",
-                    detail = "Tap the Best part pill to jump straight to the chorus, swipe up for Queue, and toggle lyrics translation or romanization.",
-                )
-                GestureTipRow(
-                    icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    title = "Power Features",
-                    detail = "Automix DJ crossfade, Listen Together Jam rooms, Music Haptics, and offline Hi-Res playback are all ready inside Settings.",
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun GestureTipRow(icon: ImageVector, title: String, detail: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -3,7 +3,13 @@
 package com.lastwave.app.ui.player
 
 import com.lastwave.app.ui.theme.comicPanel
+import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.NowPlayingPaletteScope
+import com.lastwave.app.data.local.HomeHoldShortcut
+import com.lastwave.app.ui.shell.ExpandableHomeHoldPill
+import com.lastwave.app.ui.shell.LocalHomeHoldShortcut
+import com.lastwave.app.ui.shell.LocalOnHomeHoldShortcut
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.foundation.BorderStroke
@@ -382,6 +388,8 @@ fun PlayerHost(
     webContentScreen: Boolean = false,
     /** Off the main tabs: a Home circle docks left of the mini player and pops back to the shell. */
     onHome: (() -> Unit)? = null,
+    /** Runs the user's configured 2nd shortcut when holding & sliding from the docked Home pill. */
+    onExecuteHomeHoldShortcut: (HomeHoldShortcut) -> Unit = {},
     /** Search draws its own bar where the dock sits (after Auris): the mini player rides above it. */
     searchBarBelow: Boolean = false,
     content: @Composable () -> Unit,
@@ -571,6 +579,7 @@ fun PlayerHost(
     val isShortCarViewport = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 560
     // Off: progress stays at 0, which is the classic full bar + full mini player layout (auto-enabled on short car head unit viewports).
     val chromeCollapse = rememberChromeCollapseState(enabled = hasBottomNavigation && (settings.collapsingNavBar || isShortCarViewport))
+    var homePillExtraWidth by remember { mutableStateOf(0.dp) }
     // While docking, the card slides down over the fading bar, not under it.
     val chromeDocking by remember { derivedStateOf { chromeCollapse.progress() > 0f } }
     LaunchedEffect(viewModel) {
@@ -603,6 +612,9 @@ fun PlayerHost(
         LocalLikeNudge provides likeNudge,
         LocalArtworkFlight provides artworkFlight,
         LocalHomeOnRight provides settings.homeButtonRight,
+        LocalSetHomePillExtraWidth provides { homePillExtraWidth = it },
+        LocalHomeHoldShortcut provides HomeHoldShortcut.fromId(settings.homeHoldShortcut),
+        LocalOnHomeHoldShortcut provides onExecuteHomeHoldShortcut,
     ) {
         Box(
             Modifier
@@ -710,7 +722,12 @@ fun PlayerHost(
                             // Follow the morphing card's top edge as it rises.
                             translationY = -(miniCardBounds?.top ?: 0f) * playerExpansion.value.coerceIn(0f, 1f)
                         }
-                        .dockBesidePill(miniBottomPadding, dockProgress, pillOnRight = settings.homeButtonRight),
+                        .dockBesidePill(
+                            miniBottomPadding,
+                            dockProgress,
+                            pillOnRight = settings.homeButtonRight,
+                            extraPillWidth = { homePillExtraWidth },
+                        ),
                 )
             }
 
@@ -843,6 +860,7 @@ fun PlayerHost(
                                     return@graphicsLayer
                                 }
                                 val p = playerExpansion.value.coerceIn(0f, 1f)
+                                val arc = sin(p * kotlin.math.PI.toFloat())
                                 // Undo the sheet's own lift and settle to find where the sleeve rests.
                                 val contentAlpha = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
                                 val lift = androidx.compose.ui.util.lerp(card.top, 0f, p) +
@@ -850,12 +868,14 @@ fun PlayerHost(
                                 val rest = host.localBoundingBoxOf(sleeve, clipBounds = false).translate(0f, -lift)
                                 val w = androidx.compose.ui.util.lerp(thumb.width, rest.width, p)
                                 val h = androidx.compose.ui.util.lerp(thumb.height, rest.height, p)
+                                val sideCurve = arc * (-10.dp.toPx() * (if (settings.homeButtonRight) -1f else 1f))
                                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
-                                translationX = androidx.compose.ui.util.lerp(thumb.left, rest.left, p)
+                                translationX = androidx.compose.ui.util.lerp(thumb.left, rest.left, p) + sideCurve
                                 translationY = androidx.compose.ui.util.lerp(thumb.top, rest.top, p)
                                 scaleX = w / size.width
                                 scaleY = h / size.height
                                 val radius = androidx.compose.ui.util.lerp(10.dp.toPx(), 24.dp.toPx(), p)
+                                shadowElevation = arc * 18.dp.toPx()
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(radius / scaleX.coerceAtLeast(0.01f))
                                 clip = true
                                 alpha = 1f
@@ -1166,29 +1186,26 @@ private fun HomeDockButton(
         animationSpec = androidx.compose.animation.core.tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "homeDockButtonInk",
     )
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = liquidGlassContainerColor(
-            MaterialTheme.colorScheme.surfaceContainerHigh,
-            enabled = liquidGlass,
-            backdrop = backdrop,
-        ),
-        contentColor = contentColor,
-        tonalElevation = if (liquidGlass) 0.dp else 6.dp,
-        shadowElevation = if (liquidGlass) 0.dp else 12.dp,
-        modifier = modifier
-            .trackBackdropBounds(buttonBounds)
-            .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop)
-            .then(if (liquidGlass) Modifier.glassRim() else Modifier),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Filled.Home,
-                contentDescription = androidx.compose.ui.res.stringResource(com.lastwave.app.R.string.feed_home),
-                modifier = Modifier.size(24.dp),
-            )
-        }
+    val comic = LocalComicTheme.current
+    val containerColor = liquidGlassContainerColor(
+        MaterialTheme.colorScheme.surfaceContainerHigh,
+        enabled = liquidGlass,
+        backdrop = backdrop,
+    )
+    Box(modifier) {
+        ExpandableHomeHoldPill(
+            primaryIcon = Icons.Filled.Home,
+            primaryLabel = androidx.compose.ui.res.stringResource(com.lastwave.app.R.string.feed_home),
+            contentColor = contentColor,
+            onTap = onClick,
+            surfaceModifier = Modifier
+                .trackBackdropBounds(buttonBounds)
+                .shadow(if (liquidGlass || comic) 0.dp else 12.dp, CircleShape)
+                .background(containerColor, CircleShape)
+                .comicPanel(CircleShape, translucent = liquidGlass)
+                .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop)
+                .then(if (liquidGlass) Modifier.glassRim() else Modifier),
+        )
     }
 }
 

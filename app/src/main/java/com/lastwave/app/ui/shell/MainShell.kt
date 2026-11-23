@@ -89,6 +89,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.lastwave.app.ui.comic.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.isSpecified
@@ -298,6 +299,24 @@ fun MainShell(
             selectedTabIndex != pagerState.settledPage
         ) {
             selectedTabIndex = pagerState.settledPage
+        }
+    }
+    val requestedMainTabState = LocalRequestedMainTab.current
+    val requestedTabName = requestedMainTabState?.value
+    LaunchedEffect(requestedTabName) {
+        val targetTab = when (requestedTabName) {
+            "PLAYLISTS" -> MainTab.PLAYLISTS
+            "STATS" -> MainTab.STATS
+            "FEED" -> MainTab.FEED
+            else -> null
+        }
+        if (targetTab != null) {
+            val idx = tabs.indexOf(targetTab)
+            if (idx >= 0) {
+                selectedTabIndex = idx
+                pagerState.scrollToPage(idx)
+            }
+            requestedMainTabState?.value = null
         }
     }
     val ytConnection by mainShellViewModel.ytConnection.collectAsStateWithLifecycle()
@@ -872,29 +891,26 @@ private fun FloatingNavPill(
         animationSpec = tween(com.lastwave.app.ui.theme.ADAPTIVE_INK_FADE_MS),
         label = "floatingNavPillInk",
     )
-    Surface(
-        onClick = onClick,
-        shape = PillShape,
-        color = liquidGlassContainerColor(
-            MaterialTheme.colorScheme.surfaceContainerHigh,
-            enabled = liquidGlass,
-            backdrop = backdrop,
-        ),
-        contentColor = contentColor,
-        tonalElevation = if (liquidGlass) 0.dp else 6.dp,
-        shadowElevation = if (liquidGlass) 0.dp else 12.dp,
-        modifier = modifier
-            .trackBackdropBounds(pillBounds)
-            .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop)
-            .then(if (liquidGlass) Modifier.glassRim() else Modifier),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = tab.icon(),
-                contentDescription = androidx.compose.ui.res.stringResource(tab.labelRes),
-                modifier = Modifier.size(24.dp),
-            )
-        }
+    val comic = LocalComicTheme.current
+    val containerColor = liquidGlassContainerColor(
+        MaterialTheme.colorScheme.surfaceContainerHigh,
+        enabled = liquidGlass,
+        backdrop = backdrop,
+    )
+    Box(modifier) {
+        ExpandableHomeHoldPill(
+            primaryIcon = tab.icon(),
+            primaryLabel = androidx.compose.ui.res.stringResource(tab.labelRes),
+            contentColor = contentColor,
+            onTap = onClick,
+            surfaceModifier = Modifier
+                .trackBackdropBounds(pillBounds)
+                .shadow(if (liquidGlass || comic) 0.dp else 12.dp, CircleShape)
+                .background(containerColor, CircleShape)
+                .comicPanel(CircleShape, translucent = liquidGlass)
+                .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop)
+                .then(if (liquidGlass) Modifier.glassRim() else Modifier),
+        )
     }
 }
 

@@ -702,6 +702,22 @@ object SettingsSearchIndex {
             )
             add(
                 SettingsEntry(
+                    id = "appearance.home_hold_shortcut",
+                    title = "Home Hold 2nd Shortcut",
+                    subtitle = "Choose the 2nd shortcut revealed when holding the Home pill",
+                    keywords = listOf(
+                        "home", "hold", "shortcut", "2nd button", "second button", "dock", "quick jump", "swipe"
+                    ),
+                    icon = Icons.Filled.TouchApp,
+                    iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
+                    parentTab = SettingsTab.APPEARANCE,
+                    section = "Appearance",
+                    type = EntryType.ACTION,
+                )
+            )
+            add(
+                SettingsEntry(
                     id = "appearance.home_sections",
                     title = "Home Screen Sections",
                     subtitle = "Reorder, show, or hide sections displayed on your Home screen",

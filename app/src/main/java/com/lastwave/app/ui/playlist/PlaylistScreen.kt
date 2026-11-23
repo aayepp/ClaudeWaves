@@ -4,12 +4,17 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,23 +33,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -59,12 +72,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -81,7 +99,9 @@ import com.lastwave.app.ui.comic.IconButton
 import com.lastwave.app.ui.comic.Surface
 import com.lastwave.app.ui.comic.TextButton
 import com.lastwave.app.ui.comic.clipOnly
+import com.lastwave.app.ui.theme.ComicInk
 import com.lastwave.app.ui.theme.comicPanel
+import com.lastwave.app.ui.common.ArtworkImage
 import com.lastwave.app.ui.common.ConnectedButtonGroup
 import com.lastwave.app.ui.common.ConnectedButtonItem
 import com.lastwave.app.ui.common.ExpressiveHeader
@@ -168,6 +188,7 @@ fun PlaylistScreen(
     }
 
     var menuTarget by remember { mutableStateOf<Pair<Long, GeneratedTrack>?>(null) }
+    var quickPeekPlaylist by remember { mutableStateOf<SavedPlaylist?>(null) }
     var selectedPlaylists by remember { mutableStateOf(setOf<Long>()) }
     var showMultipleDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -518,10 +539,14 @@ fun PlaylistScreen(
                                                                     }
                                                                 },
                                                                 onLongClick = {
-                                                                    selectedPlaylists = if (selectedPlaylists.contains(pl.id)) {
-                                                                        selectedPlaylists - pl.id
+                                                                    if (selectedPlaylists.isNotEmpty()) {
+                                                                        selectedPlaylists = if (selectedPlaylists.contains(pl.id)) {
+                                                                            selectedPlaylists - pl.id
+                                                                        } else {
+                                                                            selectedPlaylists + pl.id
+                                                                        }
                                                                     } else {
-                                                                        selectedPlaylists + pl.id
+                                                                        quickPeekPlaylist = pl
                                                                     }
                                                                 },
                                                                 onPlay = {
@@ -846,6 +871,43 @@ fun PlaylistScreen(
         )
     }
 
+    // ── Playlist Quick-Peek translucent card ──
+    quickPeekPlaylist?.let { peekPl ->
+        PlaylistQuickPeekDialog(
+            playlist = peekPl,
+            onDismiss = { quickPeekPlaylist = null },
+            onOpen = {
+                quickPeekPlaylist = null
+                onOpenPlaylist(peekPl.id)
+            },
+            onPlayTrack = { trackIdx ->
+                quickPeekPlaylist = null
+                if (peekPl.tracks.isNotEmpty()) {
+                    musicPlayer.playQueue(
+                        peekPl.tracks.map(GeneratedTrack::toPlayableTrack),
+                        startIndex = trackIdx.coerceIn(0, peekPl.tracks.lastIndex),
+                        sourceLabel = peekPl.title,
+                    )
+                }
+            },
+            onShuffle = {
+                quickPeekPlaylist = null
+                if (peekPl.tracks.isNotEmpty()) {
+                    musicPlayer.playQueue(
+                        peekPl.tracks.map(GeneratedTrack::toPlayableTrack),
+                        startIndex = 0,
+                        sourceLabel = peekPl.title,
+                        startShuffled = true,
+                    )
+                }
+            },
+            onSelect = {
+                quickPeekPlaylist = null
+                selectedPlaylists = selectedPlaylists + peekPl.id
+            },
+        )
+    }
+
     // ── Shared track context menu (§1.7) ──
     menuTarget?.let { (playlistId, track) ->
         TrackContextMenuSheet(
@@ -856,6 +918,219 @@ fun PlaylistScreen(
             onDeleteScrobble = { name, artist -> viewModel.deleteScrobble(name, artist) },
             onRefreshArtwork = { viewModel.refreshArtwork(track.name, track.artist) },
         )
+    }
+}
+
+@Composable
+private fun PlaylistQuickPeekDialog(
+    playlist: SavedPlaylist,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit,
+    onPlayTrack: (Int) -> Unit,
+    onShuffle: () -> Unit,
+    onSelect: () -> Unit,
+) {
+    val comic = LocalComicTheme.current
+    val isDark = LocalIsDarkTheme.current
+    val scale = remember { Animatable(0.86f) }
+    LaunchedEffect(playlist.id) {
+        scale.snapTo(0.86f)
+        scale.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 440f))
+    }
+    val previewTracks = remember(playlist.id, playlist.tracks) { playlist.tracks.take(5) }
+    val trackCount = playlist.remoteTrackCount ?: playlist.tracks.size
+    val cardShape = RoundedCornerShape(26.dp)
+    val cardColor = when {
+        comic -> MaterialTheme.colorScheme.surface
+        isDark -> Color(0xEB151824)
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)
+    }
+    val cardBorder = if (comic) {
+        BorderStroke(2.dp, ComicInk)
+    } else {
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.30f else 0.48f))
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.56f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                shape = cardShape,
+                color = cardColor,
+                border = cardBorder,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .widthIn(max = 440.dp)
+                    .graphicsLayer {
+                        scaleX = scale.value
+                        scaleY = scale.value
+                        alpha = ((scale.value - 0.80f) / 0.20f).coerceIn(0f, 1f)
+                    }
+                    .comicPanel(cardShape, offset = 4.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        PlaylistCover(
+                            playlist = playlist,
+                            modifier = Modifier.size(68.dp),
+                            cornerRadius = 16.dp,
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            ) {
+                                Text(
+                                    text = "QUICK PEEK",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
+                            Text(
+                                text = playlist.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "$trackCount tracks",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = onSelect) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "Select playlist",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f))
+
+                    if (previewTracks.isEmpty()) {
+                        Text(
+                            text = "Open playlist to load its tracks.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            previewTracks.forEachIndexed { index, track ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { onPlayTrack(index) }
+                                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    ArtworkImage(
+                                        name = track.name,
+                                        artist = track.artist,
+                                        embeddedUrl = track.artworkUrl,
+                                        fallbackIcon = Icons.Filled.MusicNote,
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = track.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = track.artist,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    track.durationMs?.takeIf { it > 0L }?.let { ms ->
+                                        val totalSec = ms / 1000L
+                                        val mins = totalSec / 60L
+                                        val secs = totalSec % 60L
+                                        Text(
+                                            text = "%d:%02d".format(mins, secs),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Button(
+                            onClick = { onPlayTrack(0) },
+                            enabled = previewTracks.isNotEmpty(),
+                            shape = CircleShape,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Play All", maxLines = 1)
+                        }
+                        FilledTonalButton(
+                            onClick = onShuffle,
+                            enabled = previewTracks.isNotEmpty(),
+                            shape = CircleShape,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Shuffle", maxLines = 1)
+                        }
+                        TextButton(onClick = onOpen) {
+                            Text("Open")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

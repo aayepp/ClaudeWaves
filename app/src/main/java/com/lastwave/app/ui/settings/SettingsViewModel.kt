@@ -553,6 +553,7 @@ class SettingsViewModel @Inject constructor(
     fun setUseBoldFont(enabled: Boolean) = launchSettingsAction("update font weight") { settingsPreferences.setUseBoldFont(enabled) }
     fun setCollapsingNavBar(enabled: Boolean) = launchSettingsAction("update nav bar collapse") { settingsPreferences.setCollapsingNavBar(enabled) }
     fun setHomeButtonRight(enabled: Boolean) = launchSettingsAction("update home button side") { settingsPreferences.setHomeButtonRight(enabled) }
+    fun setHomeHoldShortcut(shortcutId: String) = launchSettingsAction("update home hold shortcut") { settingsPreferences.setHomeHoldShortcut(shortcutId) }
     fun setQualityFollowsOutput(enabled: Boolean) = launchSettingsAction("update output quality") { settingsPreferences.setQualityFollowsOutput(enabled) }
     fun setPreferLosslessStreaming(enabled: Boolean) = launchSettingsAction("update streaming preference") { settingsPreferences.setPreferLosslessStreaming(enabled) }
     fun setShowLosslessListBadges(enabled: Boolean) = launchSettingsAction("update lossless badge preference") { settingsPreferences.setShowLosslessListBadges(enabled) }

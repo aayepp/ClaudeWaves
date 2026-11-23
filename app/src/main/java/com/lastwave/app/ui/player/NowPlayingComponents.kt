@@ -32,6 +32,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -2689,6 +2692,36 @@ internal fun NowPlayingScreen(
                     }
                     val activePreviewLines = previewLines ?: retainedLines
                     val sleeveInset = if (nowPlayingMinimalStyle) 4.dp else 16.dp
+                    val isComic = LocalComicTheme.current
+                    val isDarkTheme = LocalIsDarkTheme.current
+                    val rippleProgress = remember { Animatable(1f) }
+                    val coverPopScale = remember { Animatable(1f) }
+                    var lastRippleTrackKey by remember { mutableStateOf(trackKey) }
+                    LaunchedEffect(trackKey) {
+                        if (trackKey != lastRippleTrackKey) {
+                            lastRippleTrackKey = trackKey
+                            launch {
+                                coverPopScale.snapTo(0.88f)
+                                coverPopScale.animateTo(1f, spring(dampingRatio = 0.56f, stiffness = 360f))
+                            }
+                            launch {
+                                rippleProgress.snapTo(0f)
+                                rippleProgress.animateTo(1f, tween(880, easing = FastOutSlowInEasing))
+                            }
+                        }
+                    }
+                    val prevTrack = remember(state.queue, state.currentIndex) {
+                        state.queue.getOrNull(state.currentIndex - 1)
+                    }
+                    val nextTrack = remember(state.queue, state.currentIndex) {
+                        state.queue.getOrNull(state.currentIndex + 1)
+                    }
+                    val comicAccent = ComicAccent
+                    val ringBaseColors = remember(primaryColor, secondaryColor, tertiaryColor, isComic, comicAccent) {
+                        if (isComic) listOf(ComicCyan, comicAccent, ComicPink)
+                        else listOf(primaryColor, secondaryColor, tertiaryColor)
+                    }
+
                     BoxWithConstraints(
                         Modifier.fillMaxSize(),
                         // With lyrics the block eases lower, so the lines read with the title below
@@ -2701,16 +2734,76 @@ internal fun NowPlayingScreen(
                         // One animated progress drives alignment, sleeve shrink, and preview reveal
                         // together so the cover eases down seamlessly when lyrics appear.
                         val previewHeight = (LYRIC_PREVIEW_HEIGHT * lyricsPresence).coerceAtLeast(0.dp)
-                        val sleeveSide = (minOf(maxWidth, maxHeight - previewHeight) - sleeveInset).coerceIn(0.dp, 520.dp)
+                        val reflectionAllowance = if (!isComic && !hasLyricsPreview) 24.dp * (1f - lyricsPresence) else 0.dp
+                        val sleeveSide = (minOf(maxWidth, maxHeight - previewHeight - reflectionAllowance) - sleeveInset).coerceIn(0.dp, 520.dp)
                         val sleeveShape = RoundedCornerShape(24.dp)
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(Modifier.size(sleeveSide), contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .size(sleeveSide)
+                                    .drawBehind {
+                                        val rp = rippleProgress.value
+                                        if (rp < 0.999f) {
+                                            val delays = floatArrayOf(0f, 0.14f, 0.28f)
+                                            val maxExpand = 44.dp.toPx()
+                                            val baseCorner = 24.dp.toPx()
+                                            val peakAlpha = if (isDarkTheme || isComic) 0.56f else 0.40f
+                                            delays.forEachIndexed { idx, delayFrac ->
+                                                val local = ((rp - delayFrac) / (1f - delayFrac)).coerceIn(0f, 1f)
+                                                if (local > 0f && local < 1f) {
+                                                    val expand = maxExpand * local
+                                                    val decay = (1f - local) * (1f - local)
+                                                    val alpha = peakAlpha * decay * (1f - idx * 0.18f)
+                                                    val c1 = ringBaseColors[idx % ringBaseColors.size].copy(alpha = alpha)
+                                                    val c2 = ringBaseColors[(idx + 1) % ringBaseColors.size].copy(alpha = alpha)
+                                                    val r = baseCorner + expand * 0.4f
+                                                    drawRoundRect(
+                                                        brush = Brush.linearGradient(listOf(c1, c2)),
+                                                        topLeft = Offset(-expand, -expand),
+                                                        size = Size(size.width + expand * 2f, size.height + expand * 2f),
+                                                        cornerRadius = CornerRadius(r, r),
+                                                        style = Stroke(width = (3.5.dp.toPx() * (1f - 0.6f * local))),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 BeatGlow(
                                     player = player,
                                     isPlaying = state.isPlaying,
                                     color = primaryColor,
                                     modifier = Modifier.requiredSize(sleeveSide * 1.7f),
                                 )
+                                val dragNow = artworkDrag.value
+                                val peekTrack = when {
+                                    dragNow > 2f -> prevTrack
+                                    dragNow < -2f -> nextTrack
+                                    else -> null
+                                }
+                                if (peekTrack != null) {
+                                    val sideSign = if (dragNow > 0f) -1f else 1f
+                                    PlayerArtwork(
+                                        track = peekTrack,
+                                        modifier = Modifier
+                                            .size(sleeveSide)
+                                            .graphicsLayer {
+                                                val wPx = size.width.coerceAtLeast(1f)
+                                                val frac = (abs(dragNow) / (swipeThreshold * 2.1f)).coerceIn(0f, 1f)
+                                                val sc = androidx.compose.ui.util.lerp(0.76f, 0.94f, frac)
+                                                scaleX = sc
+                                                scaleY = sc
+                                                cameraDistance = 14f * this.density
+                                                rotationY = -sideSign * androidx.compose.ui.util.lerp(24f, 6f, frac)
+                                                translationX = sideSign * wPx * 0.24f * (1f - frac * 0.65f) + dragNow * 0.28f
+                                                alpha = androidx.compose.ui.util.lerp(0.32f, 0.92f, frac)
+                                            },
+                                        corner = 24.dp,
+                                        isPlaying = false,
+                                        pausedForTransition = true,
+                                    )
+                                }
                                 DirectionalTrackContent(
                                     trackKey = trackKey,
                                     track = track,
@@ -2723,9 +2816,14 @@ internal fun NowPlayingScreen(
                                     modifier = Modifier.graphicsLayer {
                                         val drag = artworkDrag.value
                                         val width = size.width.coerceAtLeast(1f)
-                                        translationX = drag * 0.6f
-                                        rotationZ = drag / width * 5f
-                                        alpha = 1f - (kotlin.math.abs(drag) / width * 0.4f).coerceAtMost(0.4f)
+                                        cameraDistance = 14f * this.density
+                                        translationX = drag * 0.65f
+                                        rotationY = (-drag / width * 20f).coerceIn(-22f, 22f)
+                                        rotationZ = drag / width * 4f
+                                        val sc = coverPopScale.value * (1f - (abs(drag) / width * 0.10f).coerceAtMost(0.10f))
+                                        scaleX = sc
+                                        scaleY = sc
+                                        alpha = 1f - (abs(drag) / width * 0.35f).coerceAtMost(0.35f)
                                     },
                                 ) { activeTrack ->
                                     PlayerArtwork(
@@ -2738,6 +2836,49 @@ internal fun NowPlayingScreen(
                                         canvas = sleeveCanvas,
                                         isPlaying = state.isPlaying,
                                         pausedForTransition = pausedForTransition,
+                                    )
+                                }
+                            }
+                            if (!isComic && lyricsPresence <= 0.01f) {
+                                val flightFlying = LocalArtworkFlight.current?.flying == true
+                                val reflBaseAlpha = if (flightFlying) 0f else if (isDarkTheme) 0.26f else 0.16f
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 6.dp)
+                                        .width(sleeveSide)
+                                        .height(34.dp)
+                                        .clipToBounds()
+                                        .graphicsLayer {
+                                            val drag = artworkDrag.value
+                                            val wPx = size.width.coerceAtLeast(1f)
+                                            alpha = reflBaseAlpha * (1f - (abs(drag) / (swipeThreshold * 2.5f)).coerceAtMost(0.65f))
+                                            translationX = drag * 0.65f
+                                            cameraDistance = 14f * this.density
+                                            rotationY = (-drag / wPx * 20f).coerceIn(-22f, 22f)
+                                            compositingStrategy = CompositingStrategy.Offscreen
+                                        }
+                                        .drawWithContent {
+                                            drawContent()
+                                            drawRect(
+                                                brush = Brush.verticalGradient(
+                                                    0.0f to Color.White,
+                                                    0.72f to Color.White.copy(alpha = 0.20f),
+                                                    1.0f to Color.Transparent,
+                                                ),
+                                                blendMode = BlendMode.DstIn,
+                                            )
+                                        },
+                                    contentAlignment = Alignment.TopCenter,
+                                ) {
+                                    PlayerArtwork(
+                                        track = track,
+                                        corner = 24.dp,
+                                        modifier = Modifier
+                                            .requiredSize(sleeveSide)
+                                            .graphicsLayer { scaleY = -1f }
+                                            .blur(1.5.dp),
+                                        isPlaying = false,
+                                        pausedForTransition = true,
                                     )
                                 }
                             }
