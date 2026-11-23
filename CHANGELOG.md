@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.20] - 2026-11-23
+
+### Changed
+- **Stats Telemetry Strip redesign:** rebuilt the Stats tab around a compact live duration top bar, 4-column hairline metric grid, top genre link, 7-day listening activity chart, ranked horizontal tabs (`Tracks`, `Artists`, `Albums`, `History`), and frameless high-density ranked rows across Light, Dark, AMOLED, and Comic Pop themes.
+- **Library Segmented Category Hub redesign:** rebuilt the Library tab with a compact header (inline Search toggle, Generator pill, and `+`), a Liquid Glass 4-way segment switcher (`All`, `Playlists`, `Offline`, `Local`), a 2×2 Quick-Vault grid (`Liked Songs`, `Downloads`, `Local Songs`, `Smart Mix`), a frameless 3-column cover wall (4 columns on wide screens), and inline playable track lists for Offline and Local segments.
+- **Settings Duotone Custom & Brand-Mark Icons:** replaced loud pastel blocks and flat square icon badges with unified hairline glass tiles and frosted squircle medallions featuring custom duotone glyphs and minimalist YouTube, Spotify, Last.fm, and ClaudeWaves marks across the Settings hub, Audio & Playback, and sub-sections in every theme.
+
 ## [1.0.19] - 2026-11-23
 
 ### Added
