@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.28] - 2026-11-24
+
+### Changed
+- **Minimal Design Now Playing polish:** replaced plain stream quality text with a scaled `CompactStreamQualityBadge`, refreshed the Best part action into a frosted hairline pill (`CircleShape` border, press scale/ripple, trailing chevron, no timestamp digits), tightened Minimal vertical spacing, and compacted the Now Playing top header and `⋮` menu button across all styles.
+- **Compact Now Playing menu sheet:** redesigned the Now Playing `⋮` bottom sheet into a compact action layout with quick action tiles, streamlined track header, and compact cast row across all styles.
+- **Centered 3-line lyrics preview:** focused the Now Playing lyrics preview to 3 single lines (`prev`, `current`, `next`) centered between the artwork and track info/seek bar.
+
+### Fixed
+- **3D Cover-Flow swipe & lyrics transition glitch:** stabilized the lyrics slot during horizontal artwork drags, cleared stale lyric lines across track switches, layered the artwork container cleanly, and smoothly collapsed floor reflection spacing when lyrics are visible.
+
 ## [1.0.27] - 2026-11-23
 
 ### Fixed
