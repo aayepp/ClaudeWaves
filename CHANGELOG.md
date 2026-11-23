@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.24] - 2026-11-23
+
+### Added
+- **Discord Rich Presence with YouTube Music link:** sign in to Discord (or paste a token) in Settings → Discord Rich Presence to broadcast playing tracks, Hi-Res audio quality, album cover art, speed-adjusted timestamps, and a direct **Listen on YouTube Music** button live on your Discord profile. Includes a live card preview, activity label (`Listening`, `Playing`, `Watching`), and status (`Online`, `Idle`, `DND`) controls.
+- **Sonar-pulse detail loading reveal:** animated sonar-pulse loading transition on Artist and Album detail screens while tracklists load.
+
+### Changed
+- **Smoother 3D Cover-Flow swipe:** refined Now Playing artwork drag physics and perspective motion when swiping between tracks.
+
 ## [1.0.23] - 2026-11-23
 
 ### Added
