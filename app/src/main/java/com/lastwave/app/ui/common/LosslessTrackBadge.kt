@@ -142,6 +142,7 @@ fun QualityTierBadge(
     tier: LosslessListTier,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    medium: Boolean = false,
     large: Boolean = false,
     /** Outline only: a version that exists but isn't the one that plays. */
     outlined: Boolean = false,
@@ -188,16 +189,16 @@ fun QualityTierBadge(
         if (outlined) {
             // Comic colours read on the night page; ink reads on paper.
             val line = if (isDark) comicFill else ComicInk
-            QualityBadge(label, icon, line, Color.Transparent, modifier, compact, large, outline = line)
+            QualityBadge(label, icon, line, Color.Transparent, modifier, compact = compact, medium = medium, large = large, outline = line)
         } else {
-            QualityBadge(label, icon, ComicInk, comicFill, modifier, compact, large)
+            QualityBadge(label, icon, ComicInk, comicFill, modifier, compact = compact, medium = medium, large = large)
         }
         return
     }
     if (outlined) {
-        QualityBadge(label, icon, contentColor, Color.Transparent, modifier, compact, large, outline = contentColor.copy(alpha = 0.6f))
+        QualityBadge(label, icon, contentColor, Color.Transparent, modifier, compact = compact, medium = medium, large = large, outline = contentColor.copy(alpha = 0.6f))
     } else {
-        QualityBadge(label, icon, contentColor, containerColor, modifier, compact, large)
+        QualityBadge(label, icon, contentColor, containerColor, modifier, compact = compact, medium = medium, large = large)
     }
 }
 
@@ -213,6 +214,7 @@ fun QualityBadge(
     containerColor: Color,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    medium: Boolean = false,
     large: Boolean = false,
     outline: Color? = null,
 ) {
@@ -220,7 +222,13 @@ fun QualityBadge(
     val inked = LocalComicTheme.current && containerColor.alpha >= 0.99f
     val strokeWidth = if (large) 1.5.dp else 1.dp
     Surface(
-        shape = RoundedCornerShape(if (large) 6.dp else 4.dp),
+        shape = RoundedCornerShape(
+            when {
+                large -> 6.dp
+                medium -> 5.dp
+                else -> 4.dp
+            },
+        ),
         color = containerColor,
         border = when {
             outline != null -> BorderStroke(strokeWidth, outline)
@@ -234,6 +242,7 @@ fun QualityBadge(
             horizontalArrangement = Arrangement.spacedBy(
                 when {
                     large -> 4.dp
+                    medium -> 3.5.dp
                     compact -> 2.5.dp
                     else -> 3.dp
                 },
@@ -241,11 +250,13 @@ fun QualityBadge(
             modifier = Modifier.padding(
                 horizontal = when {
                     large -> 7.dp
+                    medium -> 6.dp
                     compact -> 4.dp
                     else -> 5.dp
                 },
                 vertical = when {
                     large -> 3.5.dp
+                    medium -> 2.dp
                     compact -> 1.dp
                     else -> 1.5.dp
                 },
@@ -258,6 +269,7 @@ fun QualityBadge(
                 modifier = Modifier.size(
                     when {
                         large -> 15.dp
+                        medium -> 12.dp
                         compact -> 10.dp
                         else -> 11.dp
                     },
@@ -268,11 +280,13 @@ fun QualityBadge(
                 color = contentColor,
                 fontSize = when {
                     large -> 12.sp
+                    medium -> 10.5.sp
                     compact -> 8.5.sp
                     else -> 9.sp
                 },
                 lineHeight = when {
                     large -> 14.sp
+                    medium -> 12.5.sp
                     compact -> 10.sp
                     else -> 11.sp
                 },

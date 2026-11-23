@@ -7,12 +7,21 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
@@ -84,6 +93,7 @@ internal fun NowPlayingLyricsPreview(
     onOpenLyrics: () -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    overArtwork: Boolean = false,
 ) {
     val progress by progressState.collectAsStateWithLifecycle()
     // Recompose on a new line, not on every ~60 ms position tick.
@@ -92,8 +102,26 @@ internal fun NowPlayingLyricsPreview(
     }
     val currentStyle = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall
     val otherStyle = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium
+    val veilColor = PlayerPalette.shade
+    val isDarkBackdrop = veilColor.luminance() < 0.5f
+    val containerModifier = if (overArtwork) {
+        modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.verticalGradient(
+                    0.00f to Color.Transparent,
+                    0.20f to veilColor.copy(alpha = if (isDarkBackdrop) 0.46f else 0.70f),
+                    0.78f to veilColor.copy(alpha = if (isDarkBackdrop) 0.62f else 0.78f),
+                    1.00f to Color.Transparent,
+                ),
+            )
+            .clickable(onClick = onOpenLyrics)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+    } else {
+        modifier.clickable(onClick = onOpenLyrics)
+    }
     Box(
-        modifier = modifier.clickable(onClick = onOpenLyrics),
+        modifier = containerModifier,
         contentAlignment = Alignment.Center,
     ) {
         AnimatedContent(
@@ -119,8 +147,19 @@ internal fun NowPlayingLyricsPreview(
                         text = line.text.ifBlank { "♪" },
                         style = base.copy(
                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                            color = PlayerPalette.ink.copy(alpha = if (isCurrent) 1f else 0.48f),
+                            color = PlayerPalette.ink.copy(
+                                alpha = if (isCurrent) 1f else if (overArtwork) 0.72f else 0.48f,
+                            ),
                             textAlign = TextAlign.Center,
+                            shadow = if (overArtwork) {
+                                Shadow(
+                                    color = veilColor.copy(alpha = if (isDarkBackdrop) 0.92f else 0.85f),
+                                    offset = Offset(0f, 1.5f),
+                                    blurRadius = 10f,
+                                )
+                            } else {
+                                null
+                            },
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

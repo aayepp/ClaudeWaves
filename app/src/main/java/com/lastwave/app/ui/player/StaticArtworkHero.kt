@@ -37,6 +37,7 @@ fun StaticArtworkHero(
     resolvedUrl: String?,
     modifier: Modifier = Modifier,
     alpha: Float = 1f,
+    topFade: Float = 0f,
     bottomFade: Float = 0.42f,
     contentScale: ContentScale = ContentScale.Crop,
     alignment: Alignment = Alignment.TopCenter,
@@ -71,14 +72,26 @@ fun StaticArtworkHero(
             .drawWithContent {
                 if (alpha <= 0.001f) return@drawWithContent
                 drawContent()
-                if (bottomFade > 0.001f) {
-                    val fadeFrac = bottomFade.coerceIn(0f, 1f)
-                    val fadeStartY = size.height * (1f - fadeFrac)
+                if (topFade > 0.001f || bottomFade > 0.001f) {
+                    val topFrac = topFade.coerceIn(0f, 0.45f)
+                    val bottomFrac = bottomFade.coerceIn(0f, 0.50f)
+                    val stops = buildList {
+                        if (topFrac > 0.001f) {
+                            add(0f to Color.Transparent)
+                            add(topFrac to Color.Black)
+                        } else {
+                            add(0f to Color.Black)
+                        }
+                        if (bottomFrac > 0.001f) {
+                            add((1f - bottomFrac).coerceAtLeast(topFrac) to Color.Black)
+                            add(1f to Color.Transparent)
+                        } else {
+                            add(1f to Color.Black)
+                        }
+                    }
                     drawRect(
                         brush = Brush.verticalGradient(
-                            0f to Color.Black,
-                            (fadeStartY / size.height) to Color.Black,
-                            1f to Color.Transparent,
+                            *stops.toTypedArray(),
                             startY = 0f,
                             endY = size.height,
                         ),

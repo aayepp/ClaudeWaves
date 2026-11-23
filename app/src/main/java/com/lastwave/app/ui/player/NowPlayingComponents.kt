@@ -83,6 +83,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -369,13 +370,19 @@ internal fun BoxScope.FullScreenArtworkBackground(
                 artist = track.artist,
                 embeddedUrl = track.artworkUrl,
                 resolvedUrl = resolvedAmbientUrl,
-                // Full width at its own square shape, fading into the blurred cover below:
-                // cropping a square to the tall screen cut off the sides of the artwork.
-                bottomFade = 0.32f,
+                // Balanced below the top controls with gentle top & bottom feathering
+                // so the focal artwork isn't pinned flush into the status bar or crushed by dark fade.
+                topFade = 0.14f,
+                bottomFade = 0.22f,
                 alpha = heroAlpha * heroCover,
                 contentScale = ContentScale.Crop,
-                alignment = Alignment.TopCenter,
-                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().aspectRatio(1f),
+                alignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 22.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(0.92f),
             )
             if (activeCanvas != null) {
                 CanvasArtworkPlayer(
@@ -402,21 +409,33 @@ internal fun BoxScope.FullScreenArtworkBackground(
             )
             val scrimStrength = readabilityAlpha.coerceIn(0f, 1f)
             if (scrimStrength > 0.01f && queueWash < 0.99f) {
+                val scrimBrush = if (showFullBleed && isNowPlaying) {
+                    Brush.verticalGradient(
+                        0.00f to PlayerPalette.shade.copy(alpha = 0.50f),
+                        0.14f to PlayerPalette.shade.copy(alpha = 0.18f),
+                        0.24f to Color.Transparent,
+                        0.48f to Color.Transparent,
+                        0.58f to PlayerPalette.shade.copy(alpha = 0.34f),
+                        0.70f to PlayerPalette.shade.copy(alpha = 0.78f),
+                        0.86f to PlayerPalette.shade.copy(alpha = 0.92f),
+                        1.00f to PlayerPalette.shade.copy(alpha = 0.96f),
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        0.00f to PlayerPalette.shade.copy(alpha = 0.62f),
+                        0.16f to PlayerPalette.shade.copy(alpha = 0.24f),
+                        0.32f to Color.Transparent,
+                        0.46f to PlayerPalette.shade.copy(alpha = 0.22f),
+                        0.60f to PlayerPalette.shade.copy(alpha = 0.68f),
+                        0.78f to PlayerPalette.shade.copy(alpha = 0.90f),
+                        1.00f to PlayerPalette.shade.copy(alpha = 0.96f),
+                    )
+                }
                 Box(
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer { alpha = scrimStrength * (1f - queueWash) }
-                        .background(
-                            Brush.verticalGradient(
-                                0.00f to PlayerPalette.shade.copy(alpha = 0.62f),
-                                0.16f to PlayerPalette.shade.copy(alpha = 0.24f),
-                                0.32f to Color.Transparent,
-                                0.46f to PlayerPalette.shade.copy(alpha = 0.22f),
-                                0.60f to PlayerPalette.shade.copy(alpha = 0.68f),
-                                0.78f to PlayerPalette.shade.copy(alpha = 0.90f),
-                                1.00f to PlayerPalette.shade.copy(alpha = 0.96f),
-                            ),
-                        ),
+                        .background(scrimBrush),
                 )
             }
             if (queueWash > 0.01f) {
@@ -2955,6 +2974,29 @@ internal fun NowPlayingScreen(
                     },
                 contentAlignment = Alignment.Center,
             ) {
+                val previewLines = (lyricsState as? LyricsUiState.Success)
+                    ?.takeIf { lyricsPreview && it.isSynced && !it.isInstrumental && it.lines.isNotEmpty() }
+                    ?.lines
+                val hasLyricsPreview = previewLines != null
+                val lyricsTextAlpha by animateFloatAsState(
+                    targetValue = if (hasLyricsPreview) 1f else 0f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    label = "nowPlayingLyricsTextAlpha",
+                )
+                var retainedLines by remember { mutableStateOf(previewLines) }
+                LaunchedEffect(trackKey, previewLines, lyricsTextAlpha <= 0.01f) {
+                    if (previewLines != null) {
+                        retainedLines = previewLines
+                    } else if (lyricsTextAlpha <= 0.01f) {
+                        retainedLines = null
+                    }
+                }
+                // Clear stale lyrics text immediately on track change so old lines never jump to index 0 mid-3D swipe.
+                LaunchedEffect(trackKey) {
+                    if (previewLines == null) retainedLines = null
+                }
+                val activePreviewLines = previewLines ?: retainedLines
+
                 if (isVideoActive) {
                     SyncedCoverVideoPlayer(
                         track = track,
@@ -2967,59 +3009,13 @@ internal fun NowPlayingScreen(
                             .clip(RoundedCornerShape(16.dp)),
                     )
                 } else if (showSleeve) {
-                    // Square sleeve, as in tablet landscape; the colour blend behind it
-                    // is the player background.
-                    // Synced lyrics only: four timed lines need timestamps to follow the song.
-                    val previewLines = (lyricsState as? LyricsUiState.Success)
-                        ?.takeIf { lyricsPreview && it.isSynced && !it.isInstrumental && it.lines.isNotEmpty() }
-                        ?.lines
-                    val hasLyricsPreview = previewLines != null
-                    val isLyricsPending = lyricsPreview && (lyricsState is LyricsUiState.Loading || lyricsState is LyricsUiState.Idle)
-                    // Hold the lyrics slot steady while the next track's lyrics load or
-                    // while a 3D swipe is in motion so sleeveSide never resizes/glitches mid-swipe.
-                    val isSwipingArtwork = committingSwipeDirection != 0 || abs(artworkDrag.value) > 1f
-                    var lastResolvedHadLyrics by remember { mutableStateOf(hasLyricsPreview) }
-                    LaunchedEffect(lyricsPreview, lyricsState) {
-                        if (!lyricsPreview) {
-                            lastResolvedHadLyrics = false
-                        } else if (!isLyricsPending) {
-                            lastResolvedHadLyrics = hasLyricsPreview
-                        }
-                    }
-                    var pendingHoldExpired by remember(trackKey) { mutableStateOf(false) }
-                    LaunchedEffect(trackKey, isLyricsPending, lastResolvedHadLyrics) {
-                        pendingHoldExpired = false
-                        if (isLyricsPending && lastResolvedHadLyrics) {
-                            delay(1_400L)
-                            pendingHoldExpired = true
-                        }
-                    }
-                    val keepLyricsSlot = hasLyricsPreview ||
-                        ((isLyricsPending || isSwipingArtwork) && lastResolvedHadLyrics && !pendingHoldExpired)
+                    // Lock sleeve size and vertical position whenever Lyrics Preview is enabled so
+                    // delayed lyrics fetches never push artwork down and back up (0% stutter).
                     val lyricsPresence by animateFloatAsState(
-                        targetValue = if (keepLyricsSlot) 1f else 0f,
+                        targetValue = if (lyricsPreview) 1f else 0f,
                         animationSpec = ExpressiveMotion.spatialSlow(),
                         label = "nowPlayingLyricsPresence",
                     )
-                    val lyricsTextAlpha by animateFloatAsState(
-                        targetValue = if (hasLyricsPreview) 1f else 0f,
-                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-                        label = "nowPlayingLyricsTextAlpha",
-                    )
-                    var retainedLines by remember { mutableStateOf(previewLines) }
-                    LaunchedEffect(trackKey, previewLines, lyricsTextAlpha <= 0.01f) {
-                        if (previewLines != null) {
-                            retainedLines = previewLines
-                        } else if (lyricsTextAlpha <= 0.01f) {
-                            retainedLines = null
-                        }
-                    }
-                    // Clear stale lyrics text immediately on track change while keeping the
-                    // height slot steady, so old lines never jump to index 0 mid-3D swipe.
-                    LaunchedEffect(trackKey) {
-                        if (previewLines == null) retainedLines = null
-                    }
-                    val activePreviewLines = previewLines ?: retainedLines
                     val sleeveInset = if (nowPlayingMinimalStyle) 6.dp else 16.dp
                     val isComic = LocalComicTheme.current
                     val isDarkTheme = LocalIsDarkTheme.current
@@ -3249,6 +3245,20 @@ internal fun NowPlayingScreen(
                             }
                         }
                     }
+                } else if (!isDistractionFree && lyricsPreview && activePreviewLines != null && lyricsTextAlpha > 0.01f) {
+                    NowPlayingLyricsPreview(
+                        lines = activePreviewLines,
+                        progressState = progressState,
+                        onOpenLyrics = onOpenLyrics,
+                        compact = compactHeight,
+                        overArtwork = true,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                            .height(LYRIC_PREVIEW_HEIGHT + 12.dp)
+                            .graphicsLayer { alpha = lyricsTextAlpha },
+                    )
                 }
 
                 SeekDirectionOverlay(
@@ -3794,27 +3804,28 @@ internal fun MinimalSongInfoRow(
     }
 }
 
-/** Shared compact song-list quality badge for a live [MusicPlayerState]. */
+/** Shared compact/medium quality badge for a live [MusicPlayerState]. */
 @Composable
 internal fun CompactStreamQualityBadge(
     state: MusicPlayerState,
     modifier: Modifier = Modifier,
     neutralContent: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     neutralContainer: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    medium: Boolean = false,
 ) {
     val qualityTier = remember(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth) {
         resolveAudioQualityTier(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth)
     }
     val mixing = state.deckBlendTelemetry.isBlendingActive || state.deckBlendTelemetry.phase == BlendPhase.MIX_COMPLETED
     when {
-        mixing -> QualityBadge("AUTOMIX", QualityGlyphs.AutoMix, neutralContent, neutralContainer, modifier, compact = true)
-        state.isCrossfading -> QualityBadge("CROSSFADE", QualityGlyphs.Crossfade, neutralContent, neutralContainer, modifier, compact = true)
-        isSpatialAudioCodec(state.audioCodec) -> QualityTierBadge(LosslessListTier.ATMOS, modifier, compact = true)
-        qualityTier == AudioQualityTier.HI_RES -> QualityTierBadge(LosslessListTier.HI_RES, modifier, compact = true)
-        qualityTier == AudioQualityTier.LOSSLESS -> QualityTierBadge(LosslessListTier.LOSSLESS, modifier, compact = true)
+        mixing -> QualityBadge("AUTOMIX", QualityGlyphs.AutoMix, neutralContent, neutralContainer, modifier, compact = !medium, medium = medium)
+        state.isCrossfading -> QualityBadge("CROSSFADE", QualityGlyphs.Crossfade, neutralContent, neutralContainer, modifier, compact = !medium, medium = medium)
+        isSpatialAudioCodec(state.audioCodec) -> QualityTierBadge(LosslessListTier.ATMOS, modifier, compact = !medium, medium = medium)
+        qualityTier == AudioQualityTier.HI_RES -> QualityTierBadge(LosslessListTier.HI_RES, modifier, compact = !medium, medium = medium)
+        qualityTier == AudioQualityTier.LOSSLESS -> QualityTierBadge(LosslessListTier.LOSSLESS, modifier, compact = !medium, medium = medium)
         else -> {
             val label = lossyCodecLabel(state) ?: return
-            QualityBadge(label, QualityGlyphs.Standard, neutralContent, neutralContainer, modifier, compact = true)
+            QualityBadge(label, QualityGlyphs.Standard, neutralContent, neutralContainer, modifier, compact = !medium, medium = medium)
         }
     }
 }
@@ -3866,11 +3877,8 @@ internal fun MinimalInlineQualityLabel(
                 state = state,
                 neutralContent = neutralContent,
                 neutralContainer = neutralContainer,
-                modifier = Modifier.graphicsLayer {
-                    scaleX = 0.90f
-                    scaleY = 0.90f
-                    alpha = pulse
-                },
+                medium = true,
+                modifier = Modifier.graphicsLayer { alpha = pulse },
             )
         }
     }
