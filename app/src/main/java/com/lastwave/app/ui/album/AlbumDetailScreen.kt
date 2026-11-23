@@ -96,7 +96,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lastwave.app.data.model.ArtistAlbumItem
 import com.lastwave.app.playback.PlayableTrack
 import com.lastwave.app.ui.common.ArtworkImage
-import com.lastwave.app.ui.common.ExpressiveLoadingIndicator
+import com.lastwave.app.ui.common.DetailSonarRevealOverlay
+import com.lastwave.app.ui.common.detailRevealContent
+import com.lastwave.app.ui.common.detailRevealHeroTitle
+import com.lastwave.app.ui.common.detailRevealRoot
+import com.lastwave.app.ui.common.rememberDetailRevealState
 import com.lastwave.app.ui.common.TrackContextMenuSheet
 import com.lastwave.app.ui.common.TrackMenuCapabilities
 import com.lastwave.app.ui.common.TrackMenuTarget
@@ -151,11 +155,17 @@ fun AlbumDetailScreen(
     val barBackdrop = com.lastwave.app.ui.common.rememberScreenBackdrop()
 
     val albumData = (uiState as? AlbumUiState.Success)?.data
+    val revealState = rememberDetailRevealState(
+        isLoading = uiState is AlbumUiState.Loading,
+        isReady = uiState is AlbumUiState.Success,
+        resetKey = "$albumTitle|$artistName|$browseId",
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pageBackground(),
+            .pageBackground()
+            .detailRevealRoot(revealState),
     ) {
         // 1. Full-Bleed Cover Art Background at Top with smooth parallax physics
         if (albumData != null) {
@@ -165,8 +175,8 @@ fun AlbumDetailScreen(
                     .height(440.dp)
                     .graphicsLayer {
                         translationY = -scrollOffset * 0.45f
-                        alpha = (1f - (scrollOffset / 520f)).coerceIn(0.1f, 1f)
-                        val zoom = 1f + (-scrollOffset.coerceAtMost(0f) / 600f)
+                        alpha = (1f - (scrollOffset / 520f)).coerceIn(0.1f, 1f) * revealState.heroArtworkAlpha
+                        val zoom = (1f + (-scrollOffset.coerceAtMost(0f) / 600f)) * revealState.heroArtworkScale
                         scaleX = zoom
                         scaleY = zoom
                     }
@@ -185,11 +195,7 @@ fun AlbumDetailScreen(
             }
         }
         when (val state = uiState) {
-            is AlbumUiState.Loading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    ExpressiveLoadingIndicator(message = "Loading $albumTitle...")
-                }
-            }
+            is AlbumUiState.Loading -> Unit
             is AlbumUiState.Error -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
@@ -264,6 +270,7 @@ fun AlbumDetailScreen(
                                         color = MaterialTheme.colorScheme.onBackground,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.detailRevealHeroTitle(revealState),
                                     )
 
                                     Spacer(Modifier.height(8.dp))
@@ -275,6 +282,7 @@ fun AlbumDetailScreen(
                                     androidx.compose.foundation.layout.FlowRow(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.detailRevealContent(revealState),
                                     ) {
                                         splitArtists.forEach { artName ->
                                             Surface(
@@ -309,6 +317,7 @@ fun AlbumDetailScreen(
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.detailRevealContent(revealState),
                                         )
                                     }
                                 }
@@ -317,7 +326,7 @@ fun AlbumDetailScreen(
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-                                        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
+                                        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp).detailRevealContent(revealState),
                                     ) {
                                         PlayingWaveBars(
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -332,7 +341,9 @@ fun AlbumDetailScreen(
 
                             // Hero Action Buttons (Shuffle • Save to Library • Large Play FAB)
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .detailRevealContent(revealState),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -411,7 +422,7 @@ fun AlbumDetailScreen(
                                     text = message,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().detailRevealContent(revealState),
                                 )
                             }
                         }
@@ -422,7 +433,8 @@ fun AlbumDetailScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 8.dp, bottom = 4.dp),
+                                .padding(top = 8.dp, bottom = 4.dp)
+                                .detailRevealContent(revealState),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -456,7 +468,7 @@ fun AlbumDetailScreen(
                                 text = stringResource(R.string.alb_empty),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 8.dp),
+                                modifier = Modifier.padding(vertical = 8.dp).detailRevealContent(revealState),
                             )
                         }
                     }
@@ -469,7 +481,11 @@ fun AlbumDetailScreen(
                             playbackState.current?.title.equals(track.title, ignoreCase = true) &&
                             (playbackState.current?.artist.isNullOrBlank() || playbackState.current?.artist.equals(track.artist, ignoreCase = true))
 
-                        SwipeToQueue({ track }, shape = RoundedCornerShape(16.dp)) {
+                        SwipeToQueue(
+                            { track },
+                            modifier = Modifier.detailRevealContent(revealState),
+                            shape = RoundedCornerShape(16.dp),
+                        ) {
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = if (isPlayingThis) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
@@ -575,7 +591,7 @@ fun AlbumDetailScreen(
                             Card(
                                 shape = RoundedCornerShape(20.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp).detailRevealContent(revealState),
                             ) {
                                 Column(Modifier.padding(16.dp)) {
                                     Text(
@@ -603,7 +619,7 @@ fun AlbumDetailScreen(
                                 text = "More by ${data.artist}",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 10.dp),
+                                modifier = Modifier.padding(top = 10.dp).detailRevealContent(revealState),
                             )
                         }
 
@@ -611,6 +627,7 @@ fun AlbumDetailScreen(
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 contentPadding = PaddingValues(horizontal = 4.dp),
+                                modifier = Modifier.detailRevealContent(revealState),
                             ) {
                                 items(
                                     data.otherAlbums,
@@ -630,6 +647,14 @@ fun AlbumDetailScreen(
                 }
             }
         }
+
+        DetailSonarRevealOverlay(
+            title = albumData?.title ?: albumTitle,
+            subtitle = (albumData?.artist ?: artistName).takeIf { it.isNotBlank() },
+            isLoading = uiState is AlbumUiState.Loading,
+            isReady = uiState is AlbumUiState.Success,
+            state = revealState,
+        )
 
         com.lastwave.app.ui.common.ScrolledTopBar(
             backdrop = barBackdrop,
@@ -656,14 +681,17 @@ fun AlbumDetailScreen(
                     modifier = Modifier
                         .size(42.dp)
                         .background(
-                            if (showScrolledHeader || uiState !is AlbumUiState.Success) Color.Transparent else Color.Black.copy(alpha = 0.38f),
+                            if (showScrolledHeader || uiState !is AlbumUiState.Success) Color.Transparent
+                            else Color.Black.copy(alpha = 0.38f * revealState.heroArtworkAlpha),
                             CircleShape,
                         ),
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.pd_back_cd),
-                        tint = if (showScrolledHeader || uiState !is AlbumUiState.Success) MaterialTheme.colorScheme.onSurface else Color.White,
+                        tint = if (showScrolledHeader || uiState !is AlbumUiState.Success || revealState.heroArtworkAlpha < 0.45f) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else Color.White,
                         modifier = Modifier.size(22.dp),
                     )
                 }

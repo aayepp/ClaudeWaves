@@ -2471,6 +2471,10 @@ internal fun NowPlayingScreen(
     // The sleeve follows the finger during a skip swipe; it only jumped once the
     // threshold was passed, so the gesture gave no feedback until it was over.
     val artworkDrag = remember { Animatable(0f) }
+    var sleeveWidthPx by remember { mutableFloatStateOf(0f) }
+    var committingSwipeDirection by remember { mutableIntStateOf(0) }
+    var suppressNextDirectionalSlide by remember { mutableStateOf(false) }
+    var swipeCommitJob by remember { mutableStateOf<Job?>(null) }
 
     var seekOverlayDirection by remember { mutableStateOf<SeekDirection?>(null) }
     var seekOverlaySeconds by remember { mutableIntStateOf(5) }
@@ -2487,6 +2491,22 @@ internal fun NowPlayingScreen(
     val trackKey = remember(track.videoId, track.title, track.artist) {
         track.videoId?.takeIf(String::isNotBlank) ?: "${track.title}|${track.artist}"
     }
+    var settledDragTrackKey by remember { mutableStateOf(trackKey) }
+    val prevTrack = remember(state.queue, state.currentIndex, state.repeatMode) {
+        state.queue.getOrNull(state.currentIndex - 1)
+            ?: if (state.repeatMode == Player.REPEAT_MODE_ALL && state.queue.size > 1) state.queue.lastOrNull() else null
+    }
+    val nextTrack = remember(state.queue, state.currentIndex, state.repeatMode) {
+        state.queue.getOrNull(state.currentIndex + 1)
+            ?: if (state.repeatMode == Player.REPEAT_MODE_ALL && state.queue.size > 1) state.queue.firstOrNull() else null
+    }
+    val currentPrevTrack by rememberUpdatedState(prevTrack)
+    val currentNextTrack by rememberUpdatedState(nextTrack)
+    val currentShowSleeve by rememberUpdatedState(showSleeve)
+    val currentTrackKey by rememberUpdatedState(trackKey)
+    val currentOnToggleDistractionFree by rememberUpdatedState(onToggleDistractionFree)
+    val currentOnDoubleTapLike by rememberUpdatedState(onDoubleTapLike)
+    val currentOnToggleFullArtwork by rememberUpdatedState(onToggleFullArtwork)
     val stepDirection = rememberTrackStepDirection(
         trackKey = trackKey,
         queueIndex = state.currentIndex,
@@ -2519,10 +2539,11 @@ internal fun NowPlayingScreen(
                             if (ultraCompactHeight) 4.dp else 8.dp
                         },
                     )
-                    .pointerInput(track.videoId, track.title, isVideoActive, isDistractionFree) {
+                    .pointerInput(isVideoActive, isDistractionFree) {
                         if (isVideoActive) return@pointerInput
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
+                            val dragBlocked = committingSwipeDirection != 0
                             var isDrag = false
                             var dragDeltaX = 0f
                             val touchSlop = viewConfiguration.touchSlop
@@ -2542,7 +2563,7 @@ internal fun NowPlayingScreen(
                                     lastTapRegion = -1
                                     lastTapTimestamp = 0L
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onToggleFullArtwork()
+                                    currentOnToggleFullArtwork()
                                     continue
                                 }
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -2553,12 +2574,60 @@ internal fun NowPlayingScreen(
                                 }
                                 if (!change.pressed) {
                                     if (isDrag) {
+                                        val wPx = (if (sleeveWidthPx > 1f) sleeveWidthPx else with(density) { 280.dp.toPx() }).coerceAtLeast(swipeThreshold * 2.6f)
                                         when {
-                                            dragDeltaX < -swipeThreshold -> player.next()
-                                            dragDeltaX > swipeThreshold -> player.previous()
+                                            dragDeltaX < -swipeThreshold && currentNextTrack != null -> {
+                                                if (currentShowSleeve) {
+                                                    val commitFromKey = currentTrackKey
+                                                    swipeCommitJob?.cancel()
+                                                    swipeCommitJob = coroutineScope.launch {
+                                                        committingSwipeDirection = 1
+                                                        artworkDrag.animateTo(-wPx, tween(durationMillis = 190, easing = FastOutSlowInEasing))
+                                                        suppressNextDirectionalSlide = true
+                                                        player.next()
+                                                        delay(420L)
+                                                        if (committingSwipeDirection != 0 && currentTrackKey == commitFromKey) {
+                                                            committingSwipeDirection = 0
+                                                            suppressNextDirectionalSlide = false
+                                                            settledDragTrackKey = currentTrackKey
+                                                            artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                        }
+                                                    }
+                                                } else {
+                                                    player.next()
+                                                    coroutineScope.launch { artworkDrag.snapTo(0f) }
+                                                }
+                                            }
+                                            dragDeltaX > swipeThreshold && currentPrevTrack != null -> {
+                                                if (currentShowSleeve) {
+                                                    val commitFromKey = currentTrackKey
+                                                    swipeCommitJob?.cancel()
+                                                    swipeCommitJob = coroutineScope.launch {
+                                                        committingSwipeDirection = -1
+                                                        artworkDrag.animateTo(wPx, tween(durationMillis = 190, easing = FastOutSlowInEasing))
+                                                        suppressNextDirectionalSlide = true
+                                                        player.previous()
+                                                        delay(420L)
+                                                        if (committingSwipeDirection != 0 && currentTrackKey == commitFromKey) {
+                                                            committingSwipeDirection = 0
+                                                            suppressNextDirectionalSlide = false
+                                                            settledDragTrackKey = currentTrackKey
+                                                            artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                        }
+                                                    }
+                                                } else {
+                                                    player.previous()
+                                                    coroutineScope.launch { artworkDrag.snapTo(0f) }
+                                                }
+                                            }
+                                            else -> {
+                                                coroutineScope.launch {
+                                                    artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                }
+                                            }
                                         }
                                     } else if (isDistractionFree) {
-                                        onToggleDistractionFree()
+                                        currentOnToggleDistractionFree()
                                     } else {
                                         val now = SystemClock.elapsedRealtime()
                                         val region = when {
@@ -2607,7 +2676,7 @@ internal fun NowPlayingScreen(
                                                     lastTapRegion = -1
                                                     lastTapTimestamp = 0L
                                                     haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                    onDoubleTapLike()
+                                                    currentOnDoubleTapLike()
                                                     heartBurstVisible = true
                                                     heartBurstJob?.cancel()
                                                     heartBurstJob = coroutineScope.launch {
@@ -2636,26 +2705,31 @@ internal fun NowPlayingScreen(
                                 val dx = change.position.x - initialX
                                 val dy = change.position.y - initialY
                                 if (!isDrag) {
-                                    if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                                    if (!dragBlocked && kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
                                         isDrag = true
                                         pendingSingleTapJob?.cancel()
                                         pendingSingleTapJob = null
-                                        dragDeltaX = dx
+                                        val blockedEdge = (dx > 0f && currentPrevTrack == null) || (dx < 0f && currentNextTrack == null)
+                                        val effectiveDx = if (blockedEdge) dx * 0.30f else dx
+                                        dragDeltaX = effectiveDx
                                         change.consume()
+                                        coroutineScope.launch { artworkDrag.snapTo(effectiveDx) }
                                     }
                                 } else {
                                     change.consume()
+                                    val blockedEdge = (dx > 0f && currentPrevTrack == null) || (dx < 0f && currentNextTrack == null)
+                                    val effectiveDx = if (blockedEdge) dx * 0.30f else dx
                                     // One tick as the swipe becomes a skip, either way.
-                                    if ((kotlin.math.abs(dx) > swipeThreshold) != (kotlin.math.abs(dragDeltaX) > swipeThreshold)) {
+                                    if (!blockedEdge && (kotlin.math.abs(effectiveDx) > swipeThreshold) != (kotlin.math.abs(dragDeltaX) > swipeThreshold)) {
                                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     }
-                                    dragDeltaX = dx
-                                    coroutineScope.launch { artworkDrag.snapTo(dx) }
+                                    dragDeltaX = effectiveDx
+                                    coroutineScope.launch { artworkDrag.snapTo(effectiveDx) }
                                 }
                             }
                             // Also on a cancelled gesture, so the sleeve never stays displaced.
-                            if (artworkDrag.value != 0f) {
-                                coroutineScope.launch { artworkDrag.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 420f)) }
+                            if (committingSwipeDirection == 0 && artworkDrag.value != 0f) {
+                                coroutineScope.launch { artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f)) }
                             }
                         }
                     },
@@ -2700,21 +2774,26 @@ internal fun NowPlayingScreen(
                     LaunchedEffect(trackKey) {
                         if (trackKey != lastRippleTrackKey) {
                             lastRippleTrackKey = trackKey
-                            launch {
-                                coverPopScale.snapTo(0.88f)
-                                coverPopScale.animateTo(1f, spring(dampingRatio = 0.56f, stiffness = 360f))
+                            val landedFromSwipe = committingSwipeDirection != 0 || suppressNextDirectionalSlide
+                            swipeCommitJob?.cancel()
+                            swipeCommitJob = null
+                            artworkDrag.snapTo(0f)
+                            committingSwipeDirection = 0
+                            suppressNextDirectionalSlide = false
+                            settledDragTrackKey = trackKey
+                            if (landedFromSwipe) {
+                                coverPopScale.snapTo(1f)
+                            } else {
+                                launch {
+                                    coverPopScale.snapTo(0.92f)
+                                    coverPopScale.animateTo(1f, spring(dampingRatio = 0.65f, stiffness = 380f))
+                                }
                             }
                             launch {
                                 rippleProgress.snapTo(0f)
-                                rippleProgress.animateTo(1f, tween(880, easing = FastOutSlowInEasing))
+                                rippleProgress.animateTo(1f, tween(860, easing = FastOutSlowInEasing))
                             }
                         }
-                    }
-                    val prevTrack = remember(state.queue, state.currentIndex) {
-                        state.queue.getOrNull(state.currentIndex - 1)
-                    }
-                    val nextTrack = remember(state.queue, state.currentIndex) {
-                        state.queue.getOrNull(state.currentIndex + 1)
                     }
                     val comicAccent = ComicAccent
                     val ringBaseColors = remember(primaryColor, secondaryColor, tertiaryColor, isComic, comicAccent) {
@@ -2741,6 +2820,7 @@ internal fun NowPlayingScreen(
                             Box(
                                 modifier = Modifier
                                     .size(sleeveSide)
+                                    .onSizeChanged { sleeveWidthPx = it.width.toFloat() }
                                     .drawBehind {
                                         val rp = rippleProgress.value
                                         if (rp < 0.999f) {
@@ -2776,33 +2856,41 @@ internal fun NowPlayingScreen(
                                     color = primaryColor,
                                     modifier = Modifier.requiredSize(sleeveSide * 1.7f),
                                 )
-                                val dragNow = artworkDrag.value
-                                val peekTrack = when {
-                                    dragNow > 2f -> prevTrack
-                                    dragNow < -2f -> nextTrack
-                                    else -> null
-                                }
-                                if (peekTrack != null) {
-                                    val sideSign = if (dragNow > 0f) -1f else 1f
-                                    PlayerArtwork(
-                                        track = peekTrack,
-                                        modifier = Modifier
-                                            .size(sleeveSide)
-                                            .graphicsLayer {
-                                                val wPx = size.width.coerceAtLeast(1f)
-                                                val frac = (abs(dragNow) / (swipeThreshold * 2.1f)).coerceIn(0f, 1f)
-                                                val sc = androidx.compose.ui.util.lerp(0.76f, 0.94f, frac)
-                                                scaleX = sc
-                                                scaleY = sc
-                                                cameraDistance = 14f * this.density
-                                                rotationY = -sideSign * androidx.compose.ui.util.lerp(24f, 6f, frac)
-                                                translationX = sideSign * wPx * 0.24f * (1f - frac * 0.65f) + dragNow * 0.28f
-                                                alpha = androidx.compose.ui.util.lerp(0.32f, 0.92f, frac)
-                                            },
-                                        corner = 24.dp,
-                                        isPlaying = false,
-                                        pausedForTransition = true,
-                                    )
+                                listOfNotNull(
+                                    prevTrack?.let { -1f to it },
+                                    nextTrack?.let { 1f to it },
+                                ).forEach { (sideSign, neighbor) ->
+                                    androidx.compose.runtime.key(sideSign) {
+                                        PlayerArtwork(
+                                            track = neighbor,
+                                            modifier = Modifier
+                                                .size(sleeveSide)
+                                                .graphicsLayer {
+                                                    if (trackKey != settledDragTrackKey) {
+                                                        alpha = 0f
+                                                        return@graphicsLayer
+                                                    }
+                                                    val drag = artworkDrag.value
+                                                    val wPx = size.width.coerceAtLeast(1f)
+                                                    val towardThis = if (sideSign > 0f) (-drag / wPx).coerceIn(0f, 1f) else (drag / wPx).coerceIn(0f, 1f)
+                                                    if (towardThis <= 0.002f) {
+                                                        alpha = 0f
+                                                        return@graphicsLayer
+                                                    }
+                                                    val ease = towardThis * (2f - towardThis)
+                                                    val sc = androidx.compose.ui.util.lerp(0.82f, 1f, ease)
+                                                    scaleX = sc
+                                                    scaleY = sc
+                                                    cameraDistance = 16f * this.density
+                                                    rotationY = -sideSign * androidx.compose.ui.util.lerp(24f, 0f, ease)
+                                                    translationX = sideSign * wPx * 0.56f * (1f - ease)
+                                                    alpha = (towardThis * 2.2f).coerceIn(0f, 1f)
+                                                },
+                                            corner = 24.dp,
+                                            isPlaying = false,
+                                            pausedForTransition = true,
+                                        )
+                                    }
                                 }
                                 DirectionalTrackContent(
                                     trackKey = trackKey,
@@ -2810,20 +2898,32 @@ internal fun NowPlayingScreen(
                                     stepDirection = stepDirection,
                                     clip = false,
                                     slideFraction = 0.35f,
+                                    animate = !suppressNextDirectionalSlide && committingSwipeDirection == 0,
                                     label = "nowPlayingArtworkSlide",
                                     // On the content, not the gesture box: moving that would
                                     // move the touch coordinates the drag is measured in.
                                     modifier = Modifier.graphicsLayer {
+                                        if (trackKey != settledDragTrackKey) {
+                                            translationX = 0f
+                                            rotationY = 0f
+                                            rotationZ = 0f
+                                            scaleX = 1f
+                                            scaleY = 1f
+                                            alpha = 1f
+                                            return@graphicsLayer
+                                        }
                                         val drag = artworkDrag.value
                                         val width = size.width.coerceAtLeast(1f)
-                                        cameraDistance = 14f * this.density
-                                        translationX = drag * 0.65f
-                                        rotationY = (-drag / width * 20f).coerceIn(-22f, 22f)
-                                        rotationZ = drag / width * 4f
-                                        val sc = coverPopScale.value * (1f - (abs(drag) / width * 0.10f).coerceAtMost(0.10f))
+                                        val progress = (drag / width).coerceIn(-1f, 1f)
+                                        val absP = abs(progress)
+                                        cameraDistance = 16f * this.density
+                                        translationX = drag * 0.96f
+                                        rotationY = (-progress * 26f).coerceIn(-28f, 28f)
+                                        rotationZ = progress * 3.5f
+                                        val sc = coverPopScale.value * (1f - absP * 0.14f)
                                         scaleX = sc
                                         scaleY = sc
-                                        alpha = 1f - (abs(drag) / width * 0.35f).coerceAtMost(0.35f)
+                                        alpha = 1f - ((absP - 0.55f) / 0.45f).coerceIn(0f, 1f)
                                     },
                                 ) { activeTrack ->
                                     PlayerArtwork(
@@ -2849,12 +2949,21 @@ internal fun NowPlayingScreen(
                                         .height(34.dp)
                                         .clipToBounds()
                                         .graphicsLayer {
+                                            if (trackKey != settledDragTrackKey) {
+                                                alpha = reflBaseAlpha
+                                                translationX = 0f
+                                                rotationY = 0f
+                                                compositingStrategy = CompositingStrategy.Offscreen
+                                                return@graphicsLayer
+                                            }
                                             val drag = artworkDrag.value
                                             val wPx = size.width.coerceAtLeast(1f)
-                                            alpha = reflBaseAlpha * (1f - (abs(drag) / (swipeThreshold * 2.5f)).coerceAtMost(0.65f))
-                                            translationX = drag * 0.65f
-                                            cameraDistance = 14f * this.density
-                                            rotationY = (-drag / wPx * 20f).coerceIn(-22f, 22f)
+                                            val progress = (drag / wPx).coerceIn(-1f, 1f)
+                                            val absP = abs(progress)
+                                            alpha = reflBaseAlpha * (1f - (absP * 1.4f).coerceIn(0f, 1f))
+                                            translationX = drag * 0.96f
+                                            cameraDistance = 16f * this.density
+                                            rotationY = (-progress * 26f).coerceIn(-28f, 28f)
                                             compositingStrategy = CompositingStrategy.Offscreen
                                         }
                                         .drawWithContent {

@@ -122,7 +122,11 @@ import com.lastwave.app.data.model.ArtistPageData
 import com.lastwave.app.data.model.ArtistSummaryItem
 import com.lastwave.app.playback.PlayableTrack
 import com.lastwave.app.ui.common.ArtworkImage
-import com.lastwave.app.ui.common.ExpressiveLoadingIndicator
+import com.lastwave.app.ui.common.DetailSonarRevealOverlay
+import com.lastwave.app.ui.common.detailRevealContent
+import com.lastwave.app.ui.common.detailRevealHeroTitle
+import com.lastwave.app.ui.common.detailRevealRoot
+import com.lastwave.app.ui.common.rememberDetailRevealState
 import com.lastwave.app.ui.common.TrackContextMenuSheet
 import com.lastwave.app.ui.common.TrackMenuCapabilities
 import com.lastwave.app.ui.common.TrackMenuTarget
@@ -199,11 +203,17 @@ fun ArtistDetailScreen(
     }
     var artworkIndex by remember(artistData) { mutableStateOf(0) }
     val artistArtwork = artworkCandidates.getOrNull(artworkIndex)
+    val revealState = rememberDetailRevealState(
+        isLoading = uiState is ArtistUiState.Loading,
+        isReady = uiState is ArtistUiState.Success,
+        resetKey = "$artistName|$browseId",
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pageBackground(),
+            .pageBackground()
+            .detailRevealRoot(revealState),
     ) {
         // 1. Full-Bleed Cover Art Background at Top with smooth parallax physics
         if (artistData != null) {
@@ -213,8 +223,8 @@ fun ArtistDetailScreen(
                     .height(440.dp)
                     .graphicsLayer {
                         translationY = -scrollOffset * 0.45f
-                        alpha = (1f - (scrollOffset / 520f)).coerceIn(0.1f, 1f)
-                        val zoom = 1f + (-scrollOffset.coerceAtMost(0f) / 600f)
+                        alpha = (1f - (scrollOffset / 520f)).coerceIn(0.1f, 1f) * revealState.heroArtworkAlpha
+                        val zoom = (1f + (-scrollOffset.coerceAtMost(0f) / 600f)) * revealState.heroArtworkScale
                         scaleX = zoom
                         scaleY = zoom
                     }
@@ -272,11 +282,7 @@ fun ArtistDetailScreen(
         }
 
         when (val state = uiState) {
-            is ArtistUiState.Loading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    ExpressiveLoadingIndicator(message = "Loading $artistName...")
-                }
-            }
+            is ArtistUiState.Loading -> Unit
             is ArtistUiState.Error -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
@@ -360,13 +366,14 @@ fun ArtistDetailScreen(
                                             color = MaterialTheme.colorScheme.onBackground,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.detailRevealHeroTitle(revealState),
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         Icon(
                                             Icons.Filled.Verified,
                                             contentDescription = stringResource(R.string.art_verified_cd),
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(26.dp),
+                                            modifier = Modifier.size(26.dp).detailRevealContent(revealState),
                                         )
                                     }
 
@@ -375,6 +382,7 @@ fun ArtistDetailScreen(
                                         Surface(
                                             shape = RoundedCornerShape(50),
                                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
+                                            modifier = Modifier.detailRevealContent(revealState),
                                         ) {
                                             Text(
                                                 text = data.subscribers ?: data.monthlyListeners.orEmpty(),
@@ -391,7 +399,7 @@ fun ArtistDetailScreen(
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-                                        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
+                                        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp).detailRevealContent(revealState),
                                     ) {
                                         PlayingWaveBars(
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -406,7 +414,9 @@ fun ArtistDetailScreen(
 
                             // Hero Action Buttons (Shuffle • Radio • Primary Play FAB)
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .detailRevealContent(revealState),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -488,7 +498,8 @@ fun ArtistDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .adaptiveContentWidth(maxWidth = 860.dp)
-                                    .padding(horizontal = 20.dp),
+                                    .padding(horizontal = 20.dp)
+                                    .detailRevealContent(revealState),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 if (data.tags.isNotEmpty()) {
@@ -562,7 +573,8 @@ fun ArtistDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .adaptiveContentWidth(maxWidth = 860.dp)
-                                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
+                                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp)
+                                    .detailRevealContent(revealState),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -641,7 +653,11 @@ fun ArtistDetailScreen(
 
                             SwipeToQueue(
                                 { track },
-                                modifier = Modifier.fillMaxWidth().adaptiveContentWidth(maxWidth = 860.dp).padding(horizontal = 20.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .adaptiveContentWidth(maxWidth = 860.dp)
+                                    .padding(horizontal = 20.dp)
+                                    .detailRevealContent(revealState),
                                 shape = RoundedCornerShape(16.dp),
                             ) {
                                 Surface(
@@ -745,7 +761,8 @@ fun ArtistDetailScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .adaptiveContentWidth(maxWidth = 860.dp)
-                                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                                        .detailRevealContent(revealState),
                                     horizontalArrangement = Arrangement.Center,
                                 ) {
                                     Surface(
@@ -790,7 +807,8 @@ fun ArtistDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .adaptiveContentWidth(maxWidth = 860.dp)
-                                    .padding(start = 20.dp, end = 20.dp, top = 10.dp),
+                                    .padding(start = 20.dp, end = 20.dp, top = 10.dp)
+                                    .detailRevealContent(revealState),
                             )
                         }
 
@@ -800,7 +818,8 @@ fun ArtistDetailScreen(
                                 contentPadding = PaddingValues(horizontal = 20.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .adaptiveContentWidth(maxWidth = 860.dp),
+                                    .adaptiveContentWidth(maxWidth = 860.dp)
+                                    .detailRevealContent(revealState),
                             ) {
                                 items(
                                     data.albums,
@@ -828,7 +847,8 @@ fun ArtistDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .adaptiveContentWidth(maxWidth = 860.dp)
-                                    .padding(start = 20.dp, end = 20.dp, top = 10.dp),
+                                    .padding(start = 20.dp, end = 20.dp, top = 10.dp)
+                                    .detailRevealContent(revealState),
                             )
                         }
 
@@ -838,7 +858,8 @@ fun ArtistDetailScreen(
                                 contentPadding = PaddingValues(horizontal = 20.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .adaptiveContentWidth(maxWidth = 860.dp),
+                                    .adaptiveContentWidth(maxWidth = 860.dp)
+                                    .detailRevealContent(revealState),
                             ) {
                                 items(
                                     data.singles,
@@ -866,7 +887,8 @@ fun ArtistDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .adaptiveContentWidth(maxWidth = 860.dp)
-                                    .padding(start = 20.dp, end = 20.dp, top = 10.dp),
+                                    .padding(start = 20.dp, end = 20.dp, top = 10.dp)
+                                    .detailRevealContent(revealState),
                             )
                         }
 
@@ -885,7 +907,8 @@ fun ArtistDetailScreen(
                                 contentPadding = PaddingValues(horizontal = 20.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .adaptiveContentWidth(maxWidth = 860.dp),
+                                    .adaptiveContentWidth(maxWidth = 860.dp)
+                                    .detailRevealContent(revealState),
                             ) {
                                 items(
                                     individualArtists,
@@ -905,6 +928,13 @@ fun ArtistDetailScreen(
                 }
             }
         }
+
+        DetailSonarRevealOverlay(
+            title = com.lastwave.app.util.ArtistHelper.primaryArtist(artistData?.name ?: artistName),
+            isLoading = uiState is ArtistUiState.Loading,
+            isReady = uiState is ArtistUiState.Success,
+            state = revealState,
+        )
 
         com.lastwave.app.ui.common.ScrolledTopBar(
             backdrop = barBackdrop,
@@ -931,14 +961,17 @@ fun ArtistDetailScreen(
                     modifier = Modifier
                         .size(42.dp)
                         .background(
-                            if (showScrolledHeader || uiState !is ArtistUiState.Success) Color.Transparent else Color.Black.copy(alpha = 0.38f),
+                            if (showScrolledHeader || uiState !is ArtistUiState.Success) Color.Transparent
+                            else Color.Black.copy(alpha = 0.38f * revealState.heroArtworkAlpha),
                             CircleShape,
                         ),
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.pd_back_cd),
-                        tint = if (showScrolledHeader || uiState !is ArtistUiState.Success) MaterialTheme.colorScheme.onSurface else Color.White,
+                        tint = if (showScrolledHeader || uiState !is ArtistUiState.Success || revealState.heroArtworkAlpha < 0.45f) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else Color.White,
                         modifier = Modifier.size(22.dp),
                     )
                 }

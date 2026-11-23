@@ -208,23 +208,28 @@ fun <T> DirectionalTrackContent(
     modifier: Modifier = Modifier,
     clip: Boolean = true,
     slideFraction: Float = 0.24f,
+    animate: Boolean = true,
     label: String = "directionalTrack",
     content: @Composable AnimatedContentScope.(T) -> Unit,
 ) {
     AnimatedContent(
         targetState = TrackFrame(trackKey, track),
         transitionSpec = {
-            val enter = when {
-                stepDirection > 0 -> slideInHorizontally(trackSlideSpring) { (it * slideFraction).roundToInt() } + fadeIn(tween(200))
-                stepDirection < 0 -> slideInHorizontally(trackSlideSpring) { -(it * slideFraction).roundToInt() } + fadeIn(tween(200))
-                else -> fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.96f)
+            if (!animate) {
+                (EnterTransition.None togetherWith ExitTransition.None) using SizeTransform(clip = false)
+            } else {
+                val enter = when {
+                    stepDirection > 0 -> slideInHorizontally(trackSlideSpring) { (it * slideFraction).roundToInt() } + fadeIn(tween(200))
+                    stepDirection < 0 -> slideInHorizontally(trackSlideSpring) { -(it * slideFraction).roundToInt() } + fadeIn(tween(200))
+                    else -> fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.96f)
+                }
+                val exit = when {
+                    stepDirection > 0 -> slideOutHorizontally(trackSlideSpring) { -(it * (slideFraction * 0.8f)).roundToInt() } + fadeOut(tween(150))
+                    stepDirection < 0 -> slideOutHorizontally(trackSlideSpring) { (it * (slideFraction * 0.8f)).roundToInt() } + fadeOut(tween(150))
+                    else -> fadeOut(tween(160))
+                }
+                (enter togetherWith exit) using SizeTransform(clip = clip)
             }
-            val exit = when {
-                stepDirection > 0 -> slideOutHorizontally(trackSlideSpring) { -(it * (slideFraction * 0.8f)).roundToInt() } + fadeOut(tween(150))
-                stepDirection < 0 -> slideOutHorizontally(trackSlideSpring) { (it * (slideFraction * 0.8f)).roundToInt() } + fadeOut(tween(150))
-                else -> fadeOut(tween(160))
-            }
-            (enter togetherWith exit) using SizeTransform(clip = clip)
         },
         contentKey = { it.key },
         label = label,
