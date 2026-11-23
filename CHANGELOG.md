@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.25] - 2026-11-23
+
+### Fixed
+- **3D Cover-Flow artwork swipe bounce-back & lock:** fixed a gesture release race where lifting a finger cancelled the swipe commit animation before advancing to the next/previous track and left horizontal artwork swiping locked until reopening Now Playing. Also fixed swipe handling under Shuffle and when restarting tracks past 5 seconds.
+
 ## [1.0.24] - 2026-11-23
 
 ### Added
