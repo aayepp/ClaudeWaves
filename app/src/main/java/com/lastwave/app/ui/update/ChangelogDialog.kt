@@ -3,7 +3,6 @@ package com.lastwave.app.ui.update
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
@@ -123,11 +122,11 @@ private fun WhatsNewDialog(
                     }
                 }
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(16f / 9f),
+                        .height(84.dp),
                 ) {
                     Image(
                         painter = painterResource(R.drawable.claudewaves_update_banner),
@@ -138,7 +137,7 @@ private fun WhatsNewDialog(
                 }
                 Column(
                     Modifier
-                        .heightIn(max = 260.dp)
+                        .heightIn(max = 340.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     Text(

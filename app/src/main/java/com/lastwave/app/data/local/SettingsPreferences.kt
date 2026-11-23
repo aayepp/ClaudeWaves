@@ -203,7 +203,7 @@ data class MiscSettings(
     val wavySeekbarEnabled: Boolean = true,
     /** Unified draggable Liquid Glass action dock on Now Playing; off = classic separate buttons. */
     val playerActionDockEnabled: Boolean = true,
-    /** Minimal frameless BitChord-inspired Now Playing UI; off = standard ClaudeWaves layout. */
+    /** Minimal frameless Now Playing UI; off = standard ClaudeWaves layout. */
     val nowPlayingMinimalStyle: Boolean = false,
     val rotatingBackgroundEnabled: Boolean = true,
     /** When true, animates fluid rotating artwork in the lyrics background.

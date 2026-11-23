@@ -788,10 +788,10 @@ object SettingsSearchIndex {
             add(
                 SettingsEntry(
                     id = "appearance.now_playing_minimal",
-                    title = "Minimal Now Playing (BitChord)",
-                    subtitle = "Switch between Standard and clean frameless BitChord-style Now Playing UI",
+                    title = "Minimal Design",
+                    subtitle = "Switch between Standard and clean frameless Minimal Design Now Playing UI",
                     keywords = listOf(
-                        "minimal", "bitchord", "simple", "clean", "now playing style",
+                        "minimal", "minimal design", "simple", "clean", "now playing style",
                         "uncrowded", "player ui", "frameless"
                     ),
                     icon = Icons.Filled.AutoAwesome,

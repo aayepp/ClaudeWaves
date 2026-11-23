@@ -538,19 +538,13 @@ internal fun FullPlayerLandscape(
                     Spacer(Modifier.height(gapLarge))
 
                     MinimalBottomActionRow(
-                        state = state,
-                        signalPath = signalPath,
-                        usbDac = usbDac,
-                        availability = availability,
-                        isTablet = true,
                         hasLyrics = hasLyrics,
                         onShowLyrics = { onTabChange(FullPlayerTab.LYRICS) },
-                        onOpenOutputPicker = onOpenOutput,
+                        onShowQueue = { onTabChange(FullPlayerTab.QUEUE) },
                         onToggleVideo = onToggleVideo.takeIf { musicVideoEnabled },
                         isVideoActive = isVideoActive,
                         downloadState = downloadState,
                         onDownload = onDownload,
-                        onShowQueue = { onTabChange(FullPlayerTab.QUEUE) },
                     )
                 } else {
                     NowPlayingSongInfo(

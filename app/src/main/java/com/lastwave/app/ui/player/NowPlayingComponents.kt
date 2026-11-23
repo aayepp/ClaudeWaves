@@ -2509,7 +2509,13 @@ internal fun NowPlayingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(vertical = if (ultraCompactHeight) 4.dp else 8.dp)
+                    .padding(
+                        vertical = if (nowPlayingMinimalStyle) {
+                            if (ultraCompactHeight) 2.dp else 4.dp
+                        } else {
+                            if (ultraCompactHeight) 4.dp else 8.dp
+                        },
+                    )
                     .pointerInput(track.videoId, track.title, isVideoActive, isDistractionFree) {
                         if (isVideoActive) return@pointerInput
                         awaitEachGesture {
@@ -2682,16 +2688,20 @@ internal fun NowPlayingScreen(
                         else if (lyricsPresence <= 0.01f) retainedLines = null
                     }
                     val activePreviewLines = previewLines ?: retainedLines
+                    val sleeveInset = if (nowPlayingMinimalStyle) 4.dp else 16.dp
                     BoxWithConstraints(
                         Modifier.fillMaxSize(),
                         // With lyrics the block eases lower, so the lines read with the title below
                         // instead of floating up and leaving an empty band above the title.
-                        contentAlignment = BiasAlignment(0f, 0.6f * lyricsPresence),
+                        contentAlignment = BiasAlignment(
+                            0f,
+                            if (nowPlayingMinimalStyle) (-0.12f + 0.30f * lyricsPresence) else (0.6f * lyricsPresence),
+                        ),
                     ) {
                         // One animated progress drives alignment, sleeve shrink, and preview reveal
                         // together so the cover eases down seamlessly when lyrics appear.
                         val previewHeight = (LYRIC_PREVIEW_HEIGHT * lyricsPresence).coerceAtLeast(0.dp)
-                        val sleeveSide = (minOf(maxWidth, maxHeight - previewHeight) - 16.dp).coerceIn(0.dp, 520.dp)
+                        val sleeveSide = (minOf(maxWidth, maxHeight - previewHeight) - sleeveInset).coerceIn(0.dp, 520.dp)
                         val sleeveShape = RoundedCornerShape(24.dp)
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(Modifier.size(sleeveSide), contentAlignment = Alignment.Center) {
@@ -2800,7 +2810,13 @@ internal fun NowPlayingScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp),
+                        .padding(
+                            bottom = if (nowPlayingMinimalStyle) {
+                                if (ultraCompactHeight) 8.dp else if (compactHeight) 14.dp else 20.dp
+                            } else {
+                                if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp
+                            },
+                        ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     if (nowPlayingMinimalStyle) {
@@ -2816,7 +2832,7 @@ internal fun NowPlayingScreen(
                             stepDirection = stepDirection,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 10.dp else if (compactHeight) 16.dp else 22.dp))
 
                         PlaybackSeekBar(
                             progressState = progressState,
@@ -2845,7 +2861,7 @@ internal fun NowPlayingScreen(
                             },
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 16.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 10.dp else if (compactHeight) 16.dp else 24.dp))
 
                         MinimalPlaybackControls(
                             state = state,
@@ -2853,22 +2869,16 @@ internal fun NowPlayingScreen(
                             compact = compactHeight,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 16.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 10.dp else if (compactHeight) 16.dp else 22.dp))
 
                         MinimalBottomActionRow(
-                            state = state,
-                            signalPath = signalPath,
-                            usbDac = usbDac,
-                            availability = availability,
-                            isTablet = isTablet,
                             hasLyrics = hasLyrics,
                             onShowLyrics = onOpenLyrics,
-                            onOpenOutputPicker = onOpenOutputPicker,
+                            onShowQueue = onOpenQueue,
                             onToggleVideo = onToggleVideo,
                             isVideoActive = isVideoActive,
                             downloadState = downloadState,
                             onDownload = onDownload,
-                            onShowQueue = onOpenQueue,
                         )
                     } else {
                         NowPlayingSongInfo(
@@ -3605,49 +3615,18 @@ internal fun MinimalPlaybackControls(
 
 @Composable
 internal fun MinimalBottomActionRow(
-    state: MusicPlayerState,
-    signalPath: SignalPathReport,
-    usbDac: UsbDacMonitor.State,
-    availability: InternalDirectAvailability,
-    isTablet: Boolean,
     hasLyrics: Boolean,
     onShowLyrics: () -> Unit,
-    onOpenOutputPicker: () -> Unit,
+    onShowQueue: () -> Unit,
+    modifier: Modifier = Modifier,
     onToggleVideo: (() -> Unit)? = null,
     isVideoActive: Boolean = false,
     downloadState: NowPlayingDownloadState = NowPlayingDownloadState(),
     onDownload: (() -> Unit)? = null,
-    onShowQueue: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    val outputDisplay = remember(state.isCasting, signalPath, usbDac.dac, availability, isTablet) {
-        resolveAudioOutputDisplay(state.isCasting, signalPath, usbDac, availability, isTablet)
-    }
     val isDownloaded = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADED
     val isDownloading = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADING
     val items = buildList {
-        add(
-            DockActionItem(
-                key = "lyrics",
-                icon = Icons.Filled.FormatQuote,
-                label = stringResource(R.string.player_lyrics),
-                showBadgeDot = hasLyrics,
-                comicAccent = ComicMint,
-                isHighlighted = false,
-                onClick = onShowLyrics,
-            ),
-        )
-        add(
-            DockActionItem(
-                key = "output",
-                icon = outputDisplay.icon,
-                label = "Audio output: ${outputDisplay.label}",
-                showBadgeDot = signalPath.usbExclusiveActive || state.isCasting,
-                comicAccent = outputDisplay.comicColor,
-                isHighlighted = signalPath.usbExclusiveActive || state.isCasting,
-                onClick = onOpenOutputPicker,
-            ),
-        )
         if (onToggleVideo != null) {
             add(
                 DockActionItem(
@@ -3661,6 +3640,28 @@ internal fun MinimalBottomActionRow(
                 ),
             )
         }
+        add(
+            DockActionItem(
+                key = "queue",
+                icon = Icons.AutoMirrored.Filled.QueueMusic,
+                label = stringResource(R.string.player_queue),
+                showBadgeDot = false,
+                comicAccent = ComicCyan,
+                isHighlighted = false,
+                onClick = onShowQueue,
+            ),
+        )
+        add(
+            DockActionItem(
+                key = "lyrics",
+                icon = Icons.Filled.FormatQuote,
+                label = stringResource(R.string.player_lyrics),
+                showBadgeDot = hasLyrics,
+                comicAccent = ComicMint,
+                isHighlighted = false,
+                onClick = onShowLyrics,
+            ),
+        )
         if (onDownload != null && (!isDownloaded || downloadState.openInLibrary)) {
             add(
                 DockActionItem(
@@ -3677,21 +3678,12 @@ internal fun MinimalBottomActionRow(
                 ),
             )
         }
-        add(
-            DockActionItem(
-                key = "queue",
-                icon = Icons.AutoMirrored.Filled.QueueMusic,
-                label = stringResource(R.string.player_queue),
-                showBadgeDot = false,
-                comicAccent = ComicCyan,
-                isHighlighted = false,
-                onClick = onShowQueue,
-            ),
-        )
     }
 
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
