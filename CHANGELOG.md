@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.22] - 2026-11-23
+
+### Changed
+- **Minimal Design Now Playing realignment:** renamed the setting cleanly to **Minimal Design**, balanced top artwork sizing and vertical control spacing so controls no longer feel crowded at the bottom, and restored the original bottom button order (`Video` left, `Queue` center, `Lyrics` right, plus `Download` when enabled).
+- **Compact Update & What's New banner:** slimmed the top update banner to a compact panorama strip (`84dp`) and expanded the scrollable release notes area (`340dp`) so longer changelogs are much easier to read with less scrolling.
+
 ## [1.0.21] - 2026-11-23
 
 ### Added
