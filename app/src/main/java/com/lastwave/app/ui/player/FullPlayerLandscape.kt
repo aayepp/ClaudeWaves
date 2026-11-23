@@ -352,6 +352,7 @@ internal fun FullPlayerLandscape(
     progressState: StateFlow<PlaybackProgressState>?,
     wavySeekbarEnabled: Boolean,
     playerActionDockEnabled: Boolean = true,
+    nowPlayingMinimalStyle: Boolean = false,
     showSleeveCanvas: Boolean,
     canvas: com.lastwave.app.data.canvas.CanvasArtwork?,
     ambientColor: Color,
@@ -484,80 +485,149 @@ internal fun FullPlayerLandscape(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                NowPlayingSongInfo(
-                    track = track,
-                    isPlaying = state.isPlaying,
-                    windowActive = windowActive,
-                    isLiked = isLiked,
-                    isCustomAudio = isCustomAudio,
-                    stepDirection = stepDirection,
-                    onToggleLiked = onToggleLiked,
-                    onOpenAudioControls = onOpenAudioControls,
-                    onOpenArtist = onOpenArtist,
-                )
+                if (nowPlayingMinimalStyle) {
+                    MinimalSongInfoRow(
+                        track = track,
+                        isPlaying = state.isPlaying,
+                        windowActive = windowActive,
+                        isLiked = isLiked,
+                        isCustomAudio = isCustomAudio,
+                        stepDirection = stepDirection,
+                        onToggleLiked = onToggleLiked,
+                        onOpenAudioControls = onOpenAudioControls,
+                        onOpenArtist = onOpenArtist,
+                    )
 
-                Spacer(Modifier.height(gapSmall))
+                    Spacer(Modifier.height(gapMedium))
 
-                AudioInformationRow(
-                    state = state,
-                    signalPath = signalPath,
-                    usbDac = usbDac,
-                    availability = availability,
-                    isTablet = true,
-                    onOpenSignalPath = onOpenSignalPath,
-                    onOpenOutputPicker = onOpenOutput,
-                )
+                    PlaybackSeekBar(
+                        progressState = progressState ?: player.progressState,
+                        isPlaying = state.isPlaying,
+                        trackKey = track.videoId ?: "${track.artist}|${track.title}",
+                        wavyEnabled = wavySeekbarEnabled,
+                        onSeek = player::seekTo,
+                        isTranslucent = LocalLiquidGlass.current,
+                        fallbackDurationMs = track.durationMs ?: state.durationMs,
+                        primaryColor = ambientColor,
+                        secondaryColor = ambientCompanion,
+                        tertiaryColor = ambientDeep,
+                        telemetry = state.deckBlendTelemetry,
+                        bestPartMs = rememberBestPartMs(player, track),
+                        abLoopStartMs = state.abLoopStartMs,
+                        abLoopEndMs = state.abLoopEndMs,
+                        onCycleAbLoop = player::cycleAbLoop,
+                        onClearAbLoop = player::clearAbLoop,
+                        minimalStyle = true,
+                        centerLabel = {
+                            MinimalInlineQualityLabel(
+                                state = state,
+                                onOpenSignalPath = onOpenSignalPath,
+                                onCycleAbLoop = player::cycleAbLoop,
+                            )
+                        },
+                    )
 
-                Spacer(Modifier.height(gapMedium))
+                    Spacer(Modifier.height(gapMedium))
 
-                PlaybackSeekBar(
-                    progressState = progressState ?: player.progressState,
-                    isPlaying = state.isPlaying,
-                    trackKey = track.videoId ?: "${track.artist}|${track.title}",
-                    wavyEnabled = wavySeekbarEnabled,
-                    onSeek = player::seekTo,
-                    isTranslucent = LocalLiquidGlass.current,
-                    fallbackDurationMs = track.durationMs ?: state.durationMs,
-                    primaryColor = ambientColor,
-                    secondaryColor = ambientCompanion,
-                    tertiaryColor = ambientDeep,
-                    telemetry = state.deckBlendTelemetry,
-                    bestPartMs = rememberBestPartMs(player, track),
-                    abLoopStartMs = state.abLoopStartMs,
-                    abLoopEndMs = state.abLoopEndMs,
-                    onCycleAbLoop = player::cycleAbLoop,
-                    onClearAbLoop = player::clearAbLoop,
-                )
+                    MinimalPlaybackControls(
+                        state = state,
+                        player = player,
+                        compact = true,
+                    )
 
-                if (!isUltraShortPane) {
-                    AudioVisualizer(
-                        levels = emptyList(),
-                        modifier = Modifier.padding(top = 6.dp),
+                    Spacer(Modifier.height(gapLarge))
+
+                    MinimalBottomActionRow(
+                        state = state,
+                        signalPath = signalPath,
+                        usbDac = usbDac,
+                        availability = availability,
+                        isTablet = true,
+                        hasLyrics = hasLyrics,
+                        onShowLyrics = { onTabChange(FullPlayerTab.LYRICS) },
+                        onOpenOutputPicker = onOpenOutput,
+                        onToggleVideo = onToggleVideo.takeIf { musicVideoEnabled },
+                        isVideoActive = isVideoActive,
+                        downloadState = downloadState,
+                        onDownload = onDownload,
+                        onShowQueue = { onTabChange(FullPlayerTab.QUEUE) },
+                    )
+                } else {
+                    NowPlayingSongInfo(
+                        track = track,
+                        isPlaying = state.isPlaying,
+                        windowActive = windowActive,
+                        isLiked = isLiked,
+                        isCustomAudio = isCustomAudio,
+                        stepDirection = stepDirection,
+                        onToggleLiked = onToggleLiked,
+                        onOpenAudioControls = onOpenAudioControls,
+                        onOpenArtist = onOpenArtist,
+                    )
+
+                    Spacer(Modifier.height(gapSmall))
+
+                    AudioInformationRow(
+                        state = state,
+                        signalPath = signalPath,
+                        usbDac = usbDac,
+                        availability = availability,
+                        isTablet = true,
+                        onOpenSignalPath = onOpenSignalPath,
+                        onOpenOutputPicker = onOpenOutput,
+                    )
+
+                    Spacer(Modifier.height(gapMedium))
+
+                    PlaybackSeekBar(
+                        progressState = progressState ?: player.progressState,
+                        isPlaying = state.isPlaying,
+                        trackKey = track.videoId ?: "${track.artist}|${track.title}",
+                        wavyEnabled = wavySeekbarEnabled,
+                        onSeek = player::seekTo,
+                        isTranslucent = LocalLiquidGlass.current,
+                        fallbackDurationMs = track.durationMs ?: state.durationMs,
+                        primaryColor = ambientColor,
+                        secondaryColor = ambientCompanion,
+                        tertiaryColor = ambientDeep,
+                        telemetry = state.deckBlendTelemetry,
+                        bestPartMs = rememberBestPartMs(player, track),
+                        abLoopStartMs = state.abLoopStartMs,
+                        abLoopEndMs = state.abLoopEndMs,
+                        onCycleAbLoop = player::cycleAbLoop,
+                        onClearAbLoop = player::clearAbLoop,
+                    )
+
+                    if (!isUltraShortPane) {
+                        AudioVisualizer(
+                            levels = emptyList(),
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+
+                    Spacer(Modifier.height(gapSmall))
+
+                    MainPlaybackControls(
+                        state = state,
+                        player = player,
+                        isTranslucent = LocalLiquidGlass.current,
+                        compact = true,
+                    )
+
+                    Spacer(Modifier.height(gapLarge))
+
+                    SecondaryActionRow(
+                        hasLyrics = hasLyrics,
+                        compact = true,
+                        useDraggableDock = playerActionDockEnabled,
+                        onShowLyrics = { onTabChange(FullPlayerTab.LYRICS) },
+                        onShowQueue = { onTabChange(FullPlayerTab.QUEUE) },
+                        onToggleVideo = onToggleVideo.takeIf { musicVideoEnabled },
+                        isVideoActive = isVideoActive,
+                        downloadState = downloadState,
+                        onDownload = onDownload,
                     )
                 }
-
-                Spacer(Modifier.height(gapSmall))
-
-                MainPlaybackControls(
-                    state = state,
-                    player = player,
-                    isTranslucent = LocalLiquidGlass.current,
-                    compact = true,
-                )
-
-                Spacer(Modifier.height(gapLarge))
-
-                SecondaryActionRow(
-                    hasLyrics = hasLyrics,
-                    compact = true,
-                    useDraggableDock = playerActionDockEnabled,
-                    onShowLyrics = { onTabChange(FullPlayerTab.LYRICS) },
-                    onShowQueue = { onTabChange(FullPlayerTab.QUEUE) },
-                    onToggleVideo = onToggleVideo.takeIf { musicVideoEnabled },
-                    isVideoActive = isVideoActive,
-                    downloadState = downloadState,
-                    onDownload = onDownload,
-                )
             }
         }
     }

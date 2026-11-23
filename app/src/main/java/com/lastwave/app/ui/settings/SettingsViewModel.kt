@@ -799,6 +799,9 @@ class SettingsViewModel @Inject constructor(
     fun setPlayerActionDockEnabled(enabled: Boolean) = launchSettingsAction("update Now Playing dock style") {
         settingsPreferences.setPlayerActionDockEnabled(enabled)
     }
+    fun setNowPlayingMinimalStyle(enabled: Boolean) = launchSettingsAction("update Now Playing style") {
+        settingsPreferences.setNowPlayingMinimalStyle(enabled)
+    }
     fun setRotatingBackgroundEnabled(enabled: Boolean) = launchSettingsAction("update rotating background") {
         settingsPreferences.setRotatingBackgroundEnabled(enabled)
     }

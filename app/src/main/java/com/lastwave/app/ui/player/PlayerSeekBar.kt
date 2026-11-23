@@ -311,6 +311,8 @@ import com.lastwave.app.ui.common.GroupGap
 import com.lastwave.app.ui.common.TopCurvedSectionClipShape
 import com.lastwave.app.ui.common.groupPositionFor
 import com.lastwave.app.ui.common.groupShape
+import com.lastwave.app.ui.theme.ComicInk
+import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalLiquidGlass
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
 import com.lastwave.app.ui.theme.LiquidGlassSurface
@@ -625,6 +627,8 @@ internal fun SeekBar(
     abLoopEndMs: Long? = null,
     onCycleAbLoop: (() -> Unit)? = null,
     onClearAbLoop: (() -> Unit)? = null,
+    minimalStyle: Boolean = false,
+    centerLabel: (@Composable () -> Unit)? = null,
 ) {
     // The 60 ms ticker is read in the draw phase (bar) and at 1 s (labels +
     // invisible slider semantics). Collecting it from composition recomposed
@@ -733,16 +737,24 @@ internal fun SeekBar(
         else -> PlayerPalette.ink.copy(alpha = 0.82f)
     }
 
+    val isComic = LocalComicTheme.current
+    val comicPrimary = MaterialTheme.colorScheme.primary
+    val minimalBarHeightDp by animateDpAsState(
+        targetValue = if (isInteracting || dragFraction != null) 7.5.dp else 4.5.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "minimalSeekBarHeight",
+    )
+
     // Same RTL pin as above: custom Canvas draws LTR, invisible Slider must match it.
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp),
+                .height(if (minimalStyle) 32.dp else 44.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (wavyEnabled) WavyProgressTrack(
+            if (wavyEnabled && !minimalStyle) WavyProgressTrack(
                 fraction = { dragFraction ?: progressFraction.floatValue },
                 isPlaying = isPlaying,
                 dragging = isInteracting || dragFraction != null,
@@ -751,7 +763,44 @@ internal fun SeekBar(
                 secondaryColor = secondaryColor,
                 tertiaryColor = tertiaryColor,
                 modifier = Modifier.fillMaxWidth().height(44.dp),
-            ) else Canvas(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+            ) else if (minimalStyle) Canvas(modifier = Modifier.fillMaxWidth().height(32.dp)) {
+                val fraction = (dragFraction ?: progressFraction.floatValue).coerceIn(0f, 1f)
+                val width = size.width
+                val centerY = size.height / 2f
+                val barH = minimalBarHeightDp.toPx()
+                val barRadius = CornerRadius(barH / 2f, barH / 2f)
+                val activeColor = if (isComic) comicPrimary else effectivePrimary
+
+                drawRoundRect(
+                    color = inactiveColor,
+                    topLeft = Offset(0f, centerY - barH / 2f),
+                    size = Size(width, barH),
+                    cornerRadius = barRadius,
+                )
+                val activeW = (fraction * width).coerceIn(0f, width)
+                if (activeW > 0f) {
+                    drawRoundRect(
+                        color = activeColor,
+                        topLeft = Offset(0f, centerY - barH / 2f),
+                        size = Size(activeW, barH),
+                        cornerRadius = barRadius,
+                    )
+                }
+                val dotRadius = if (isInteracting || dragFraction != null) 6.dp.toPx() else 3.8.dp.toPx()
+                val dotX = (fraction * width).coerceIn(dotRadius, (width - dotRadius).coerceAtLeast(dotRadius))
+                if (isComic) {
+                    drawCircle(
+                        color = ComicInk,
+                        radius = dotRadius + 1.5.dp.toPx(),
+                        center = Offset(dotX, centerY),
+                    )
+                }
+                drawCircle(
+                    color = activeColor,
+                    radius = dotRadius,
+                    center = Offset(dotX, centerY),
+                )
+            } else Canvas(modifier = Modifier.fillMaxWidth().height(44.dp)) {
                 // Draw-phase read: the 60 ms tick invalidates draw without a recomposition.
                 val fraction = (dragFraction ?: progressFraction.floatValue).coerceIn(0f, 1f)
                 val width = size.width
@@ -941,27 +990,21 @@ internal fun SeekBar(
                 style = if (isTranslucent) MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium) else MaterialTheme.typography.labelMedium,
                 color = textColor,
             )
-            if (onCycleAbLoop != null && boundedDurationMs > 0L) {
-                val loopActive = abLoopStartMs != null
-                val loopLabel = when {
-                    abLoopStartMs != null && abLoopEndMs != null ->
-                        "A–B ${formatTime(abLoopStartMs)}–${formatTime(abLoopEndMs)}"
-                    abLoopStartMs != null ->
-                        "A ${formatTime(abLoopStartMs)} · Set B"
-                    else -> "A–B"
+            if (abLoopStartMs != null && onCycleAbLoop != null && boundedDurationMs > 0L) {
+                val loopLabel = if (abLoopEndMs != null) {
+                    "A–B ${formatTime(abLoopStartMs)}–${formatTime(abLoopEndMs)}"
+                } else {
+                    "A ${formatTime(abLoopStartMs)} · Set B"
                 }
                 val pillAccent = remember(tertiaryColor, darkBackdrop) {
                     tertiaryColor.ensureVisibleOnBackdrop(darkBackdrop, 0.42f)
                 }
-                val pillBg = if (loopActive) pillAccent.copy(alpha = 0.22f) else Color.Transparent
-                val pillBorder = if (loopActive) pillAccent.copy(alpha = 0.65f) else Color.Transparent
-                val pillTextColor = if (loopActive) PlayerPalette.ink.copy(alpha = 0.96f) else textColor.copy(alpha = 0.56f)
                 val pillShape = androidx.compose.foundation.shape.RoundedCornerShape(50)
                 Box(
                     modifier = Modifier
-                        .let { if (loopActive) it.clip(pillShape) else it.clipOnly(pillShape) }
-                        .background(pillBg, pillShape)
-                        .then(if (loopActive) Modifier.border(1.dp, pillBorder, pillShape) else Modifier)
+                        .clip(pillShape)
+                        .background(pillAccent.copy(alpha = 0.22f), pillShape)
+                        .border(1.dp, pillAccent.copy(alpha = 0.65f), pillShape)
                         .combinedClickable(
                             onClick = {
                                 haptics.performHapticFeedback(
@@ -970,7 +1013,7 @@ internal fun SeekBar(
                                 onCycleAbLoop()
                             },
                             onLongClick = {
-                                if (loopActive && onClearAbLoop != null) {
+                                if (onClearAbLoop != null) {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onClearAbLoop()
                                 }
@@ -982,10 +1025,41 @@ internal fun SeekBar(
                     Text(
                         text = loopLabel,
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (loopActive) FontWeight.SemiBold else FontWeight.Medium,
+                            fontWeight = FontWeight.SemiBold,
                             fontFeatureSettings = "tnum",
                         ),
-                        color = pillTextColor,
+                        color = PlayerPalette.ink.copy(alpha = 0.96f),
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            } else if (centerLabel != null) {
+                Box(contentAlignment = Alignment.Center) {
+                    centerLabel()
+                }
+            } else if (onCycleAbLoop != null && boundedDurationMs > 0L) {
+                val loopLabel = "A–B"
+                val pillShape = androidx.compose.foundation.shape.RoundedCornerShape(50)
+                Box(
+                    modifier = Modifier
+                        .clipOnly(pillShape)
+                        .combinedClickable(
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.ToggleOn)
+                                onCycleAbLoop()
+                            },
+                            onLongClick = null,
+                        )
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = loopLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontFeatureSettings = "tnum",
+                        ),
+                        color = textColor.copy(alpha = 0.56f),
                         maxLines = 1,
                         softWrap = false,
                     )

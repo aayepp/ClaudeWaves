@@ -111,6 +111,8 @@ import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -580,7 +582,56 @@ internal fun NowPlayingHeader(
     onOpenLyricsOffset: () -> Unit,
     onOpenTrackMenu: () -> Unit,
     modifier: Modifier = Modifier,
+    minimalStyle: Boolean = false,
 ) {
+    if (minimalStyle && currentTab == FullPlayerTab.NOW_PLAYING) {
+        val origin = sourceLabel.takeIf { it.isNotBlank() } ?: "ClaudeWaves"
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .padding(horizontal = horizontalPadding),
+        ) {
+            IconButton(
+                onClick = hapticClick(action = onBackOrCollapse),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .size(48.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ExpandMore,
+                    contentDescription = "Minimize player",
+                    tint = PlayerPalette.ink.copy(alpha = 0.90f),
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            Text(
+                text = "Playing from $origin",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = PlayerPalette.ink.copy(alpha = 0.72f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 52.dp),
+            )
+            IconButton(
+                onClick = hapticClick(action = onOpenTrackMenu),
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .size(48.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "Song options",
+                    tint = PlayerPalette.ink.copy(alpha = 0.90f),
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        return
+    }
     val isComic = LocalComicTheme.current
     Box(
         modifier = modifier
@@ -1088,6 +1139,8 @@ internal fun PlaybackSeekBar(
     abLoopEndMs: Long? = null,
     onCycleAbLoop: (() -> Unit)? = null,
     onClearAbLoop: (() -> Unit)? = null,
+    minimalStyle: Boolean = false,
+    centerLabel: (@Composable () -> Unit)? = null,
 ) {
     // Duration only: collecting progress itself would recompose on every 60 ms tick.
     val durationMs by remember(progressState) {
@@ -1128,6 +1181,8 @@ internal fun PlaybackSeekBar(
             abLoopEndMs = abLoopEndMs,
             onCycleAbLoop = onCycleAbLoop,
             onClearAbLoop = onClearAbLoop,
+            minimalStyle = minimalStyle,
+            centerLabel = centerLabel,
         )
         if (showBestPart) {
             BestPartPill(
@@ -2374,6 +2429,7 @@ internal fun NowPlayingScreen(
     isEqEnabled: Boolean,
     wavySeekbarEnabled: Boolean,
     playerActionDockEnabled: Boolean = true,
+    nowPlayingMinimalStyle: Boolean = false,
     windowActive: Boolean,
     isDistractionFree: Boolean,
     primaryColor: Color,
@@ -2747,80 +2803,149 @@ internal fun NowPlayingScreen(
                         .padding(bottom = if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    NowPlayingSongInfo(
-                        track = track,
-                        isPlaying = state.isPlaying,
-                        windowActive = windowActive,
-                        isLiked = isLiked,
-                        isCustomAudio = isCustomAudio,
-                        onToggleLiked = onToggleLiked,
-                        onOpenAudioControls = onOpenAudioControls,
-                        onOpenArtist = onOpenArtist,
-                        stepDirection = stepDirection,
-                    )
+                    if (nowPlayingMinimalStyle) {
+                        MinimalSongInfoRow(
+                            track = track,
+                            isPlaying = state.isPlaying,
+                            windowActive = windowActive,
+                            isLiked = isLiked,
+                            isCustomAudio = isCustomAudio,
+                            onToggleLiked = onToggleLiked,
+                            onOpenAudioControls = onOpenAudioControls,
+                            onOpenArtist = onOpenArtist,
+                            stepDirection = stepDirection,
+                        )
 
-                    Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 8.dp else 12.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp))
 
-                    AudioInformationRow(
-                        state = state,
-                        signalPath = signalPath,
-                        usbDac = usbDac,
-                        availability = availability,
-                        isTablet = isTablet,
-                        onOpenSignalPath = onOpenSignalPath,
-                        onOpenOutputPicker = onOpenOutputPicker,
-                    )
+                        PlaybackSeekBar(
+                            progressState = progressState,
+                            isPlaying = state.isPlaying,
+                            trackKey = track.videoId ?: "${track.artist}|${track.title}",
+                            wavyEnabled = wavySeekbarEnabled,
+                            onSeek = player::seekTo,
+                            isTranslucent = true,
+                            fallbackDurationMs = track.durationMs ?: state.durationMs,
+                            primaryColor = primaryColor,
+                            secondaryColor = secondaryColor,
+                            tertiaryColor = tertiaryColor,
+                            telemetry = state.deckBlendTelemetry,
+                            bestPartMs = rememberBestPartMs(player, track),
+                            abLoopStartMs = state.abLoopStartMs,
+                            abLoopEndMs = state.abLoopEndMs,
+                            onCycleAbLoop = player::cycleAbLoop,
+                            onClearAbLoop = player::clearAbLoop,
+                            minimalStyle = true,
+                            centerLabel = {
+                                MinimalInlineQualityLabel(
+                                    state = state,
+                                    onOpenSignalPath = onOpenSignalPath,
+                                    onCycleAbLoop = player::cycleAbLoop,
+                                )
+                            },
+                        )
 
-                    Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 16.dp))
 
-                    PlaybackSeekBar(
-                        progressState = progressState,
-                        isPlaying = state.isPlaying,
-                        trackKey = track.videoId ?: "${track.artist}|${track.title}",
-                        wavyEnabled = wavySeekbarEnabled,
-                        onSeek = player::seekTo,
-                        isTranslucent = true,
-                        fallbackDurationMs = track.durationMs ?: state.durationMs,
-                        primaryColor = primaryColor,
-                        secondaryColor = secondaryColor,
-                        tertiaryColor = tertiaryColor,
-                        telemetry = state.deckBlendTelemetry,
-                        bestPartMs = rememberBestPartMs(player, track),
-                        abLoopStartMs = state.abLoopStartMs,
-                        abLoopEndMs = state.abLoopEndMs,
-                        onCycleAbLoop = player::cycleAbLoop,
-                        onClearAbLoop = player::clearAbLoop,
-                    )
+                        MinimalPlaybackControls(
+                            state = state,
+                            player = player,
+                            compact = compactHeight,
+                        )
 
-                    if (!ultraCompactHeight) {
-                        AudioVisualizer(
-                            levels = visualizerLevels,
-                            modifier = Modifier.padding(top = 6.dp),
+                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 16.dp))
+
+                        MinimalBottomActionRow(
+                            state = state,
+                            signalPath = signalPath,
+                            usbDac = usbDac,
+                            availability = availability,
+                            isTablet = isTablet,
+                            hasLyrics = hasLyrics,
+                            onShowLyrics = onOpenLyrics,
+                            onOpenOutputPicker = onOpenOutputPicker,
+                            onToggleVideo = onToggleVideo,
+                            isVideoActive = isVideoActive,
+                            downloadState = downloadState,
+                            onDownload = onDownload,
+                            onShowQueue = onOpenQueue,
+                        )
+                    } else {
+                        NowPlayingSongInfo(
+                            track = track,
+                            isPlaying = state.isPlaying,
+                            windowActive = windowActive,
+                            isLiked = isLiked,
+                            isCustomAudio = isCustomAudio,
+                            onToggleLiked = onToggleLiked,
+                            onOpenAudioControls = onOpenAudioControls,
+                            onOpenArtist = onOpenArtist,
+                            stepDirection = stepDirection,
+                        )
+
+                        Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 8.dp else 12.dp))
+
+                        AudioInformationRow(
+                            state = state,
+                            signalPath = signalPath,
+                            usbDac = usbDac,
+                            availability = availability,
+                            isTablet = isTablet,
+                            onOpenSignalPath = onOpenSignalPath,
+                            onOpenOutputPicker = onOpenOutputPicker,
+                        )
+
+                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp))
+
+                        PlaybackSeekBar(
+                            progressState = progressState,
+                            isPlaying = state.isPlaying,
+                            trackKey = track.videoId ?: "${track.artist}|${track.title}",
+                            wavyEnabled = wavySeekbarEnabled,
+                            onSeek = player::seekTo,
+                            isTranslucent = true,
+                            fallbackDurationMs = track.durationMs ?: state.durationMs,
+                            primaryColor = primaryColor,
+                            secondaryColor = secondaryColor,
+                            tertiaryColor = tertiaryColor,
+                            telemetry = state.deckBlendTelemetry,
+                            bestPartMs = rememberBestPartMs(player, track),
+                            abLoopStartMs = state.abLoopStartMs,
+                            abLoopEndMs = state.abLoopEndMs,
+                            onCycleAbLoop = player::cycleAbLoop,
+                            onClearAbLoop = player::clearAbLoop,
+                        )
+
+                        if (!ultraCompactHeight) {
+                            AudioVisualizer(
+                                levels = visualizerLevels,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+
+                        Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 6.dp else 10.dp))
+
+                        MainPlaybackControls(
+                            state = state,
+                            player = player,
+                            isTranslucent = true,
+                            compact = compactHeight,
+                        )
+
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 12.dp else 18.dp))
+
+                        SecondaryActionRow(
+                            hasLyrics = hasLyrics,
+                            compact = compactHeight,
+                            useDraggableDock = playerActionDockEnabled,
+                            onShowLyrics = onOpenLyrics,
+                            onShowQueue = onOpenQueue,
+                            onToggleVideo = onToggleVideo,
+                            isVideoActive = isVideoActive,
+                            downloadState = downloadState,
+                            onDownload = onDownload,
                         )
                     }
-
-                    Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 6.dp else 10.dp))
-
-                    MainPlaybackControls(
-                        state = state,
-                        player = player,
-                        isTranslucent = true,
-                        compact = compactHeight,
-                    )
-
-                    Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 12.dp else 18.dp))
-
-                    SecondaryActionRow(
-                        hasLyrics = hasLyrics,
-                        compact = compactHeight,
-                        useDraggableDock = playerActionDockEnabled,
-                        onShowLyrics = onOpenLyrics,
-                        onShowQueue = onOpenQueue,
-                        onToggleVideo = onToggleVideo,
-                        isVideoActive = isVideoActive,
-                        downloadState = downloadState,
-                        onDownload = onDownload,
-                    )
                 }
             }
         }
@@ -3002,6 +3127,651 @@ private fun SeekStepButton(
                 color = PlayerPalette.ink.copy(alpha = 0.85f),
                 // Replay's ring sits 1/24 below the icon's centre.
                 modifier = Modifier.offset(y = 1.2.dp),
+            )
+        }
+    }
+}
+
+@Composable
+internal fun MinimalSongInfoRow(
+    track: PlayableTrack,
+    isPlaying: Boolean,
+    windowActive: Boolean,
+    isLiked: Boolean,
+    isCustomAudio: Boolean,
+    onToggleLiked: () -> Unit,
+    onOpenAudioControls: () -> Unit,
+    onOpenArtist: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    stepDirection: Int = 0,
+) {
+    val infoTrackKey = remember(track.videoId, track.title, track.artist) {
+        track.videoId?.takeIf(String::isNotBlank) ?: "${track.title}|${track.artist}"
+    }
+    val heartTint = if (isLiked) {
+        if (PlayerPalette.shade.luminance() < 0.5f) LikedHeartRedOnDark else LikedHeartRed
+    } else {
+        PlayerPalette.ink.copy(alpha = 0.80f)
+    }
+    val volumeInteraction = remember { MutableInteractionSource() }
+    val volumePressed by volumeInteraction.collectIsPressedAsState()
+    val volumeScale by animateFloatAsState(
+        targetValue = if (volumePressed) 0.88f else 1f,
+        animationSpec = ExpressiveMotion.spatialFast(),
+        label = "minimalVolScale",
+    )
+    val likeInteraction = remember { MutableInteractionSource() }
+    val likePressed by likeInteraction.collectIsPressedAsState()
+    val likeScale by animateFloatAsState(
+        targetValue = if (likePressed) 0.88f else 1f,
+        animationSpec = ExpressiveMotion.spatialFast(),
+        label = "minimalLikeScale",
+    )
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DirectionalTrackContent(
+            trackKey = infoTrackKey,
+            track = track,
+            stepDirection = stepDirection,
+            slideFraction = 0.3f,
+            modifier = Modifier.weight(1f),
+            label = "minimalSongInfoSlide",
+        ) { activeTrack ->
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    text = activeTrack.title,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        letterSpacing = (-0.35).sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = PlayerPalette.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .playingMarquee(isPlaying && windowActive),
+                )
+                Spacer(Modifier.height(3.dp))
+                val splitArtists = remember(activeTrack.artist) { ArtistHelper.splitArtists(activeTrack.artist) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .playingMarquee(isPlaying && windowActive),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    splitArtists.forEachIndexed { index, artName ->
+                        Text(
+                            text = artName,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = PlayerPalette.ink.copy(alpha = 0.78f),
+                            maxLines = 1,
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = hapticClick { onOpenArtist(artName) },
+                            ),
+                        )
+                        if (index < splitArtists.lastIndex) {
+                            Text(
+                                text = ", ",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Normal,
+                                ),
+                                color = PlayerPalette.ink.copy(alpha = 0.52f),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .graphicsLayer {
+                        scaleX = likeScale
+                        scaleY = likeScale
+                    }
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = likeInteraction,
+                        indication = null,
+                        onClick = hapticClick(if (isLiked) HapticFeedbackType.ToggleOff else HapticFeedbackType.Confirm, onToggleLiked),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (isLiked) "Remove from liked songs" else "Like song",
+                    tint = heartTint,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .graphicsLayer {
+                        scaleX = volumeScale
+                        scaleY = volumeScale
+                    }
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = volumeInteraction,
+                        indication = null,
+                        onClick = hapticClick(HapticFeedbackType.ContextClick, onOpenAudioControls),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                val volTint = if (isCustomAudio) MaterialTheme.colorScheme.primary else PlayerPalette.ink.copy(alpha = 0.82f)
+                Icon(
+                    imageVector = if (isCustomAudio) Icons.Filled.Tune else Icons.Filled.VolumeUp,
+                    contentDescription = "Volume and audio controls",
+                    tint = volTint,
+                    modifier = Modifier.size(22.dp),
+                )
+                if (isCustomAudio) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 5.dp)
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(volTint),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MinimalInlineQualityLabel(
+    state: MusicPlayerState,
+    onOpenSignalPath: () -> Unit,
+    onCycleAbLoop: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = LocalHapticFeedback.current
+    val qualityTier = remember(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth) {
+        resolveAudioQualityTier(state.audioCodec, state.isLossless, state.samplingRateKHz, state.bitDepth)
+    }
+    val mixing = state.deckBlendTelemetry.isBlendingActive || state.deckBlendTelemetry.phase == BlendPhase.MIX_COMPLETED
+    val label = remember(
+        mixing,
+        state.isCrossfading,
+        state.audioCodec,
+        qualityTier,
+        state.bitDepth,
+        state.samplingRateKHz,
+        state.bitrateKbps,
+    ) {
+        when {
+            mixing -> "AUTOMIX"
+            state.isCrossfading -> "CROSSFADE"
+            isSpatialAudioCodec(state.audioCodec) -> "Dolby Atmos"
+            qualityTier == AudioQualityTier.HI_RES -> buildString {
+                append("Hi-Res")
+                state.samplingRateKHz?.takeIf { it > 0.0 }?.let { append(" \u00b7 ${formatSampleRateKHz(it)}kHz") }
+            }
+            qualityTier == AudioQualityTier.LOSSLESS -> buildString {
+                state.bitDepth?.takeIf { it > 0 }?.let { append("${it}-bit \u00b7 ") }
+                val codec = state.audioCodec?.uppercase()?.takeIf { it.isNotBlank() && it != "AUDIO" }
+                append(codec ?: "Lossless")
+            }
+            else -> lossyCodecLabel(state)
+        }
+    } ?: return
+    val switching = state.qualitySwitch != null
+    val pulse = if (switching) {
+        rememberInfiniteTransition(label = "minQualityPulse").animateFloat(
+            initialValue = 1f,
+            targetValue = 0.45f,
+            animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+            label = "minQualityAlpha",
+        ).value
+    } else {
+        1f
+    }
+
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.2.sp,
+        ),
+        color = PlayerPalette.ink.copy(alpha = 0.72f * pulse),
+        maxLines = 1,
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .combinedClickable(
+                onClickLabel = "Signal path",
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onOpenSignalPath()
+                },
+                onLongClick = onCycleAbLoop?.let { cycle ->
+                    {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        cycle()
+                    }
+                },
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+internal fun MinimalPlaybackControls(
+    state: MusicPlayerState,
+    player: MusicPlayer,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val prevInteraction = remember { MutableInteractionSource() }
+    val playInteraction = remember { MutableInteractionSource() }
+    val nextInteraction = remember { MutableInteractionSource() }
+    val isPrevPressed by prevInteraction.collectIsPressedAsState()
+    val isPlayPressed by playInteraction.collectIsPressedAsState()
+    val isNextPressed by nextInteraction.collectIsPressedAsState()
+    val prevScale by animateFloatAsState(if (isPrevPressed) 0.86f else 1f, ExpressiveMotion.spatialSpring(), label = "minPrevScale")
+    val playScale by animateFloatAsState(
+        targetValue = if (isPlayPressed) 0.88f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "minPlayScale",
+    )
+    val nextScale by animateFloatAsState(if (isNextPressed) 0.86f else 1f, ExpressiveMotion.spatialSpring(), label = "minNextScale")
+
+    val motionScope = rememberCoroutineScope()
+    val prevNudge = remember { Animatable(0f) }
+    val nextNudge = remember { Animatable(0f) }
+    val shuffleFlip = remember { Animatable(1f) }
+    var lastShuffle by remember { mutableStateOf(state.shuffleEnabled) }
+    LaunchedEffect(state.shuffleEnabled) {
+        if (state.shuffleEnabled == lastShuffle) return@LaunchedEffect
+        lastShuffle = state.shuffleEnabled
+        shuffleFlip.snapTo(0f)
+        shuffleFlip.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+    }
+    var repeatSpins by remember { mutableIntStateOf(0) }
+    var lastRepeat by remember { mutableIntStateOf(state.repeatMode) }
+    val repeatPop = remember { Animatable(0f) }
+    LaunchedEffect(state.repeatMode) {
+        if (state.repeatMode == lastRepeat) return@LaunchedEffect
+        lastRepeat = state.repeatMode
+        repeatSpins++
+        if (state.repeatMode == Player.REPEAT_MODE_ONE) repeatPop.kick()
+    }
+    val repeatRotation by animateFloatAsState(
+        repeatSpins * 360f,
+        spring(dampingRatio = 0.6f, stiffness = 180f),
+        label = "minRepeatSpin",
+    )
+
+    val shuffleTint by animateColorAsState(
+        targetValue = if (state.shuffleEnabled) MaterialTheme.colorScheme.primary else PlayerPalette.ink.copy(alpha = 0.66f),
+        animationSpec = tween(180),
+        label = "minShuffleTint",
+    )
+    val repeatActive = state.repeatMode != Player.REPEAT_MODE_OFF
+    val repeatTint by animateColorAsState(
+        targetValue = if (repeatActive) MaterialTheme.colorScheme.primary else PlayerPalette.ink.copy(alpha = 0.66f),
+        animationSpec = tween(180),
+        label = "minRepeatTint",
+    )
+    val bareInk = PlayerPalette.ink.copy(alpha = 0.96f)
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = hapticClick(if (state.shuffleEnabled) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn, player::toggleShuffle),
+            modifier = Modifier
+                .size(44.dp)
+                .semantics {
+                    selected = state.shuffleEnabled
+                    stateDescription = if (state.shuffleEnabled) "Shuffle on" else "Shuffle off"
+                },
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Shuffle,
+                    contentDescription = if (state.shuffleEnabled) "Shuffle on" else "Shuffle off",
+                    tint = shuffleTint,
+                    modifier = Modifier.size(21.dp).graphicsLayer {
+                        val v = shuffleFlip.value
+                        scaleX = kotlin.math.cos(2.0 * Math.PI * v).toFloat()
+                        translationY = -3.dp.toPx() * kotlin.math.sin(Math.PI * v).toFloat()
+                    },
+                )
+                if (state.shuffleEnabled) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 5.dp)
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(shuffleTint),
+                    )
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .size(50.dp)
+                .graphicsLayer {
+                    scaleX = prevScale
+                    scaleY = prevScale
+                }
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = prevInteraction,
+                    indication = null,
+                    onClick = hapticClick(action = { player.previous(); motionScope.launch { prevNudge.kick() } }),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SkipPrevious,
+                contentDescription = "Previous",
+                tint = bareInk,
+                modifier = Modifier.size(if (compact) 30.dp else 34.dp).graphicsLayer {
+                    translationX = -7.dp.toPx() * prevNudge.value
+                },
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(if (compact) 54.dp else 62.dp)
+                .graphicsLayer {
+                    scaleX = playScale
+                    scaleY = playScale
+                }
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = playInteraction,
+                    indication = null,
+                    onClick = hapticClick(if (state.isPlaying) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn, player::togglePlayPause),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (state.isBuffering) {
+                ExpressiveInlineLoadingIndicator(
+                    size = if (compact) 30.dp else 34.dp,
+                    color = bareInk,
+                    strokeWidth = 3.dp,
+                )
+            } else {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.material3.LocalContentColor provides bareInk,
+                ) {
+                    AnimatedPlayPauseIcon(
+                        isPlaying = state.isPlaying,
+                        modifier = Modifier.size(if (compact) 36.dp else 44.dp),
+                    )
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .size(50.dp)
+                .graphicsLayer {
+                    scaleX = nextScale
+                    scaleY = nextScale
+                }
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = nextInteraction,
+                    indication = null,
+                    onClick = hapticClick(action = { player.next(); motionScope.launch { nextNudge.kick() } }),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SkipNext,
+                contentDescription = "Next",
+                tint = bareInk,
+                modifier = Modifier.size(if (compact) 30.dp else 34.dp).graphicsLayer {
+                    translationX = 7.dp.toPx() * nextNudge.value
+                },
+            )
+        }
+
+        IconButton(
+            onClick = hapticClick(
+                if (state.repeatMode == Player.REPEAT_MODE_ONE) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn,
+                player::cycleRepeatMode,
+            ),
+            modifier = Modifier
+                .size(44.dp)
+                .semantics {
+                    selected = repeatActive
+                    stateDescription = when (state.repeatMode) {
+                        Player.REPEAT_MODE_ONE -> "Repeat one"
+                        Player.REPEAT_MODE_ALL -> "Repeat all"
+                        else -> "Repeat off"
+                    }
+                },
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (state.repeatMode == Player.REPEAT_MODE_ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                    contentDescription = when (state.repeatMode) {
+                        Player.REPEAT_MODE_ONE -> "Repeat one"
+                        Player.REPEAT_MODE_ALL -> "Repeat all"
+                        else -> "Repeat off"
+                    },
+                    tint = repeatTint,
+                    modifier = Modifier.size(21.dp).graphicsLayer {
+                        rotationZ = repeatRotation
+                        val s = 1f + 0.25f * repeatPop.value
+                        scaleX = s
+                        scaleY = s
+                    },
+                )
+                if (repeatActive) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 5.dp)
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(repeatTint),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MinimalBottomActionRow(
+    state: MusicPlayerState,
+    signalPath: SignalPathReport,
+    usbDac: UsbDacMonitor.State,
+    availability: InternalDirectAvailability,
+    isTablet: Boolean,
+    hasLyrics: Boolean,
+    onShowLyrics: () -> Unit,
+    onOpenOutputPicker: () -> Unit,
+    onToggleVideo: (() -> Unit)? = null,
+    isVideoActive: Boolean = false,
+    downloadState: NowPlayingDownloadState = NowPlayingDownloadState(),
+    onDownload: (() -> Unit)? = null,
+    onShowQueue: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val outputDisplay = remember(state.isCasting, signalPath, usbDac.dac, availability, isTablet) {
+        resolveAudioOutputDisplay(state.isCasting, signalPath, usbDac, availability, isTablet)
+    }
+    val isDownloaded = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADED
+    val isDownloading = downloadState.status == com.lastwave.app.ui.common.TrackDownloadStatus.DOWNLOADING
+    val items = buildList {
+        add(
+            DockActionItem(
+                key = "lyrics",
+                icon = Icons.Filled.FormatQuote,
+                label = stringResource(R.string.player_lyrics),
+                showBadgeDot = hasLyrics,
+                comicAccent = ComicMint,
+                isHighlighted = false,
+                onClick = onShowLyrics,
+            ),
+        )
+        add(
+            DockActionItem(
+                key = "output",
+                icon = outputDisplay.icon,
+                label = "Audio output: ${outputDisplay.label}",
+                showBadgeDot = signalPath.usbExclusiveActive || state.isCasting,
+                comicAccent = outputDisplay.comicColor,
+                isHighlighted = signalPath.usbExclusiveActive || state.isCasting,
+                onClick = onOpenOutputPicker,
+            ),
+        )
+        if (onToggleVideo != null) {
+            add(
+                DockActionItem(
+                    key = "video",
+                    icon = Icons.Filled.SmartDisplay,
+                    label = if (isVideoActive) "Switch to album art" else "Watch music video",
+                    showBadgeDot = isVideoActive,
+                    comicAccent = ComicPink,
+                    isHighlighted = isVideoActive,
+                    onClick = onToggleVideo,
+                ),
+            )
+        }
+        if (onDownload != null && (!isDownloaded || downloadState.openInLibrary)) {
+            add(
+                DockActionItem(
+                    key = "download",
+                    icon = if (isDownloaded) Icons.Filled.LibraryMusic else Icons.Filled.Download,
+                    label = if (isDownloaded) stringResource(R.string.player_download_library) else stringResource(R.string.player_download),
+                    showBadgeDot = isDownloaded,
+                    comicAccent = ComicAccent,
+                    isHighlighted = isDownloading || isDownloaded,
+                    isLoading = isDownloading,
+                    progressPercent = downloadState.progressPercent,
+                    succeeded = isDownloaded,
+                    onClick = onDownload,
+                ),
+            )
+        }
+        add(
+            DockActionItem(
+                key = "queue",
+                icon = Icons.AutoMirrored.Filled.QueueMusic,
+                label = stringResource(R.string.player_queue),
+                showBadgeDot = false,
+                comicAccent = ComicCyan,
+                isHighlighted = false,
+                onClick = onShowQueue,
+            ),
+        )
+    }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEach { item ->
+            MinimalBottomGlyph(item = item)
+        }
+    }
+}
+
+@Composable
+private fun MinimalBottomGlyph(item: DockActionItem) {
+    val shownProgress by animateFloatAsState(item.progressPercent / 100f, tween(300), label = "minDlProgress")
+    val tick = remember { Animatable(0f) }
+    var showTick by remember { mutableStateOf(false) }
+    var wasLoading by remember { mutableStateOf(item.isLoading) }
+    LaunchedEffect(item.isLoading) {
+        val finished = wasLoading && !item.isLoading && item.succeeded
+        wasLoading = item.isLoading
+        if (finished) {
+            showTick = true
+            tick.snapTo(0f)
+            tick.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+            delay(700L)
+            showTick = false
+        }
+    }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.86f else 1f, ExpressiveMotion.spatialFast(), label = "minBottomScale")
+    val tint = if (item.isHighlighted) MaterialTheme.colorScheme.primary else PlayerPalette.ink.copy(alpha = 0.80f)
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = hapticClick(action = item.onClick),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (showTick) {
+            DrawInTick(progress = { tick.value }, color = tint, modifier = Modifier.size(20.dp))
+        } else if (item.isLoading) {
+            if (item.progressPercent in 1..99) {
+                CircularProgressIndicator(
+                    progress = { shownProgress },
+                    modifier = Modifier.size(19.dp),
+                    color = tint,
+                    trackColor = tint.copy(alpha = 0.22f),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(19.dp),
+                    color = tint,
+                    strokeWidth = 2.dp,
+                )
+            }
+        } else {
+            Icon(
+                imageVector = item.icon,
+                contentDescription = item.label,
+                tint = tint,
+                modifier = Modifier.size(21.dp),
+            )
+        }
+        if (item.showBadgeDot) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 5.dp)
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(if (item.isHighlighted) tint else MaterialTheme.colorScheme.primary),
             )
         }
     }

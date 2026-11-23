@@ -787,6 +787,23 @@ object SettingsSearchIndex {
             )
             add(
                 SettingsEntry(
+                    id = "appearance.now_playing_minimal",
+                    title = "Minimal Now Playing (BitChord)",
+                    subtitle = "Switch between Standard and clean frameless BitChord-style Now Playing UI",
+                    keywords = listOf(
+                        "minimal", "bitchord", "simple", "clean", "now playing style",
+                        "uncrowded", "player ui", "frameless"
+                    ),
+                    icon = Icons.Filled.AutoAwesome,
+                    iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
+                    parentTab = SettingsTab.APPEARANCE,
+                    section = "Experimental & Features",
+                    type = EntryType.TOGGLE,
+                )
+            )
+            add(
+                SettingsEntry(
                     id = "appearance.music_video",
                     title = "Music Video",
                     subtitle = "Watch exact-sync music video of currently playing song in player menu",

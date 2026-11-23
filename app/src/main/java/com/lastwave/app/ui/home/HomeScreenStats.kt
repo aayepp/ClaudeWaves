@@ -25,9 +25,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -251,14 +255,22 @@ internal fun TelemetryGenreRow(
 @Composable
 internal fun TelemetryActivityChart(
     bins: List<DailyActivityBin>,
+    selectedDayKey: String? = null,
+    onSelectDay: (String?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val haptics = LocalHapticFeedback.current
     val isDark = LocalIsDarkTheme.current
     val isComic = LocalComicTheme.current
     val displayBins = if (bins.size == 7) {
         bins
     } else {
-        listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").map { DailyActivityBin(it, 0, false) }
+        listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").map {
+            DailyActivityBin(dayKey = "", dayLabel = it, fullDateLabel = it, plays = 0, isPeak = false)
+        }
+    }
+    val selectedBin = remember(displayBins, selectedDayKey) {
+        selectedDayKey?.let { key -> displayBins.firstOrNull { it.dayKey == key } }
     }
     val maxPlays = displayBins.maxOfOrNull { it.plays }?.coerceAtLeast(1) ?: 1
     val hasActivity = displayBins.any { it.plays > 0 }
@@ -271,79 +283,185 @@ internal fun TelemetryActivityChart(
     val peakBarColor = MaterialTheme.colorScheme.primary
     val barShape = RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp)
 
-    Column(modifier = modifier.fillMaxWidth().padding(top = 12.dp, bottom = 6.dp)) {
+    Column(modifier = modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            if (selectedBin != null) {
+                val playsWord = if (selectedBin.plays == 1) "play" else "plays"
+                Text(
+                    text = "${selectedBin.fullDateLabel} · ${selectedBin.plays} $playsWord · ~${formatDayEstimate(selectedBin.plays)}",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                val clearShape = RoundedCornerShape(50)
+                Box(
+                    modifier = Modifier
+                        .heightIn(min = 28.dp)
+                        .clip(clearShape)
+                        .background(
+                            if (isComic) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.16f else 0.12f)
+                            },
+                        )
+                        .border(
+                            width = if (isComic) 1.5.dp else 0.75.dp,
+                            color = if (isComic) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary.copy(alpha = 0.36f),
+                            shape = clearShape,
+                        )
+                        .clickable {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            onSelectDay(null)
+                        }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Clear",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isComic) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.primary,
+                    )
+                }
+            } else {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = if (hasActivity) "Last 7 days · tap bar" else "Last 7 days",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                    maxLines = 1,
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(84.dp),
+                .height(114.dp),
         ) {
             Column(
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(top = 16.dp, bottom = 22.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 repeat(3) {
                     HorizontalDivider(thickness = 0.6.dp, color = gridColor)
                 }
             }
-            if (!hasActivity) {
-                Text(
-                    text = "Last 7 days",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp),
-                )
-            }
             Row(
-                modifier = Modifier.matchParentSize().padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.matchParentSize().padding(horizontal = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 displayBins.forEach { bin ->
+                    val isSelected = selectedBin != null && bin.dayKey == selectedBin.dayKey
+                    val hasAnySelection = selectedBin != null
                     val fraction = if (hasActivity && bin.plays > 0) {
                         (bin.plays.toFloat() / maxPlays.toFloat()).coerceIn(0.14f, 1f)
                     } else {
                         0.06f
                     }
-                    val fillColor = if (bin.isPeak) peakBarColor else mutedBarColor
-                    Box(
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                        contentAlignment = Alignment.BottomCenter,
+                    val fillColor = when {
+                        isSelected -> peakBarColor
+                        hasAnySelection -> mutedBarColor.copy(alpha = if (isDark) 0.40f else 0.34f)
+                        bin.isPeak -> peakBarColor
+                        else -> mutedBarColor
+                    }
+                    val canTap = bin.dayKey.isNotBlank()
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = canTap) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                onSelectDay(bin.dayKey)
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
+                            modifier = Modifier.height(16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (isSelected) {
+                                Text(
+                                    text = bin.plays.toString(),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontFeatureSettings = "tnum",
+                                    ),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.76f)
-                                .fillMaxHeight(fraction)
-                                .clip(barShape)
-                                .background(fillColor)
-                                .then(
-                                    if (isComic && bin.plays > 0) {
-                                        Modifier.border(1.2.dp, MaterialTheme.colorScheme.outline, barShape)
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.BottomCenter,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.76f)
+                                    .fillMaxHeight(fraction)
+                                    .clip(barShape)
+                                    .background(fillColor)
+                                    .then(
+                                        if (isComic && (isSelected || (!hasAnySelection && bin.plays > 0))) {
+                                            Modifier.border(
+                                                width = if (isSelected) 1.8.dp else 1.2.dp,
+                                                color = MaterialTheme.colorScheme.outline,
+                                                shape = barShape,
+                                            )
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
+                            )
+                        }
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            text = bin.dayLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected || (!hasAnySelection && bin.isPeak)) FontWeight.Bold else FontWeight.Normal,
+                            color = when {
+                                isSelected -> MaterialTheme.colorScheme.primary
+                                hasAnySelection -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f)
+                                bin.isPeak -> MaterialTheme.colorScheme.onSurface
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 1,
                         )
                     }
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            displayBins.forEach { bin ->
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = bin.dayLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (bin.isPeak) FontWeight.Bold else FontWeight.Normal,
-                        color = if (bin.isPeak) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
+    }
+}
+
+private fun formatDayEstimate(plays: Int): String {
+    val minutes = (plays * 210) / 60
+    return when {
+        minutes <= 0 -> "0m"
+        minutes >= 60 -> "${minutes / 60}h ${minutes % 60}m"
+        else -> "${minutes}m"
     }
 }
 

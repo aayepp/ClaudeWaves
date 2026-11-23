@@ -113,10 +113,22 @@ class LocalStatsRepository @Inject constructor(
                 )
             }
 
+        val albumByKey = HashMap<String, String>(allTracks.size + downloaded.size)
+        allTracks.forEach { t ->
+            val album = t.album?.trim()?.takeIf(String::isNotBlank) ?: return@forEach
+            albumByKey.putIfAbsent(t.key, album)
+        }
+        downloaded.forEach { d ->
+            val album = d.album.trim().takeIf(String::isNotBlank) ?: return@forEach
+            val key = "${d.title.lowercase()}|${d.artist.lowercase()}"
+            albumByKey.putIfAbsent(key, album)
+        }
+
         val recentPlays = recentEntities.mapNotNull { e ->
             if (e.title.isBlank() || e.artist.isBlank() || e.lastPlayedAtMillis <= 0L ||
                 com.lastwave.app.util.ArtistHelper.isPlayCountOrStat(e.artist)
             ) return@mapNotNull null
+            val key = "${e.title.lowercase()}|${e.artist.lowercase()}"
             HomeTrack(
                 name = e.title,
                 artist = e.artist,
@@ -124,6 +136,7 @@ class LocalStatsRepository @Inject constructor(
                 timestampMillis = e.lastPlayedAtMillis,
                 playCount = e.playCount.coerceAtLeast(1),
                 videoId = e.videoId,
+                album = albumByKey[key],
             )
         }
 

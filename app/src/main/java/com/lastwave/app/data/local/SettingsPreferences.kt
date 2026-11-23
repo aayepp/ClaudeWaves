@@ -203,6 +203,8 @@ data class MiscSettings(
     val wavySeekbarEnabled: Boolean = true,
     /** Unified draggable Liquid Glass action dock on Now Playing; off = classic separate buttons. */
     val playerActionDockEnabled: Boolean = true,
+    /** Minimal frameless BitChord-inspired Now Playing UI; off = standard ClaudeWaves layout. */
+    val nowPlayingMinimalStyle: Boolean = false,
     val rotatingBackgroundEnabled: Boolean = true,
     /** When true, animates fluid rotating artwork in the lyrics background.
      *  When false (default), uses static blurred artwork background in the lyrics view. */
@@ -485,6 +487,7 @@ class SettingsPreferences @Inject constructor(
         val CROSSFADE_SECONDS = intPreferencesKey("lw_crossfade_seconds")
         val WAVY_SEEKBAR_ENABLED = booleanPreferencesKey("lw_wavy_seekbar_enabled")
         val PLAYER_ACTION_DOCK_ENABLED = booleanPreferencesKey("lw_player_action_dock_enabled")
+        val NOW_PLAYING_MINIMAL_STYLE = booleanPreferencesKey("lw_now_playing_minimal_style")
         val ROTATING_BACKGROUND_ENABLED = booleanPreferencesKey("lw_rotating_background_enabled")
         val LYRICS_ROTATING_BACKGROUND_ENABLED = booleanPreferencesKey("lw_lyrics_rotating_background_enabled")
         val KEEP_LYRICS_SCREEN_AWAKE = booleanPreferencesKey("lw_keep_lyrics_screen_awake")
@@ -617,6 +620,7 @@ class SettingsPreferences @Inject constructor(
                 crossfadeSeconds = (p.readSafely(Keys.CROSSFADE_SECONDS) ?: 5).coerceIn(1, 12),
                 wavySeekbarEnabled = p.readSafely(Keys.WAVY_SEEKBAR_ENABLED) ?: true,
                 playerActionDockEnabled = p.readSafely(Keys.PLAYER_ACTION_DOCK_ENABLED) ?: true,
+                nowPlayingMinimalStyle = p.readSafely(Keys.NOW_PLAYING_MINIMAL_STYLE) ?: false,
                 rotatingBackgroundEnabled = p.readSafely(Keys.ROTATING_BACKGROUND_ENABLED) ?: true,
                 lyricsRotatingBackgroundEnabled = p.readSafely(Keys.LYRICS_ROTATING_BACKGROUND_ENABLED) ?: false,
                 keepLyricsScreenAwake = p.readSafely(Keys.KEEP_LYRICS_SCREEN_AWAKE) ?: false,
@@ -1170,6 +1174,10 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setPlayerActionDockEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.PLAYER_ACTION_DOCK_ENABLED] = enabled }
+    }
+
+    suspend fun setNowPlayingMinimalStyle(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOW_PLAYING_MINIMAL_STYLE] = enabled }
     }
 
     suspend fun setRotatingBackgroundEnabled(enabled: Boolean) {

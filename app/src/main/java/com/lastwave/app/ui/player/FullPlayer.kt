@@ -350,6 +350,7 @@ internal fun FullPlayer(
     lyricsState: LyricsUiState,
     wavySeekbarEnabled: Boolean = false,
     playerActionDockEnabled: Boolean = true,
+    nowPlayingMinimalStyle: Boolean = false,
     rotatingBackgroundEnabled: Boolean = true,
     lyricsRotatingBackgroundEnabled: Boolean = false,
     lyricsOffsetMs: Long = 0L,
@@ -805,6 +806,7 @@ internal fun FullPlayer(
                             },
                             onOpenLyricsOffset = { showLyricsOffsetDialog = true },
                             onOpenTrackMenu = { showTrackMenu = true },
+                            minimalStyle = nowPlayingMinimalStyle && currentTab == FullPlayerTab.NOW_PLAYING,
                             modifier = Modifier.playerVerticalSwipe(enabled = currentTab == FullPlayerTab.QUEUE),
                         )
                         Spacer(Modifier.height(6.dp))
@@ -927,6 +929,7 @@ internal fun FullPlayer(
                                     progressState = progressState,
                                     wavySeekbarEnabled = wavySeekbarEnabled,
                                     playerActionDockEnabled = playerActionDockEnabled,
+                                    nowPlayingMinimalStyle = nowPlayingMinimalStyle,
                                     showSleeveCanvas = showSleeveCanvas,
                                     canvas = activeCanvas ?: canvas,
                                     ambientColor = ambientColor,
@@ -979,6 +982,7 @@ internal fun FullPlayer(
                                     isEqEnabled = equalizerSettings.enabled,
                                     wavySeekbarEnabled = wavySeekbarEnabled,
                                     playerActionDockEnabled = playerActionDockEnabled,
+                                    nowPlayingMinimalStyle = nowPlayingMinimalStyle,
                                     windowActive = windowActive,
                                     isDistractionFree = isDistractionFree,
                                     primaryColor = ambientColor,

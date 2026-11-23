@@ -34,9 +34,13 @@ import javax.inject.Inject
 import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.Dispatchers
 
+enum class DayTrackSort { MOST_PLAYED, TIMELINE }
+
 @Immutable
 data class DailyActivityBin(
+    val dayKey: String,
     val dayLabel: String,
+    val fullDateLabel: String,
     val plays: Int,
     val isPeak: Boolean,
 )
@@ -65,6 +69,8 @@ data class HomeUiState(
     val topAlbums: List<com.lastwave.app.data.repository.HomeAlbum> = emptyList(),
     val topTags: List<String> = emptyList(),
     val dailyActivity7d: List<DailyActivityBin> = emptyList(),
+    val selectedDayKey: String? = null,
+    val dayTrackSort: DayTrackSort = DayTrackSort.MOST_PLAYED,
     val page: Int = 1,
     val totalPages: Int = 1,
     val error: String? = null,
@@ -105,6 +111,76 @@ sealed interface HomeRow {
 
 /** Derives the display list for the current tab — instant, smooth, and accurate. */
 fun HomeUiState.visibleRows(): List<HomeRow> {
+    val activeDayKey = selectedDayKey
+    if (activeDayKey != null) {
+        val dayTracks = allTracks
+            .filter { !it.isNowPlaying && it.timestampMillis != null && dateKeyOf(it.timestampMillis) == activeDayKey }
+            .sortedByDescending { it.timestampMillis }
+        return when (sortMode) {
+            HomeSortMode.RECENT -> dayTracks.map { t ->
+                HomeRow.Track(t, badge = formatClockTime(t.timestampMillis))
+            }
+            HomeSortMode.MOST_PLAYED, HomeSortMode.LAST_7_DAYS, HomeSortMode.LAST_30_DAYS -> {
+                if (dayTrackSort == DayTrackSort.TIMELINE) {
+                    dayTracks.map { t ->
+                        HomeRow.Track(t, badge = formatClockTime(t.timestampMillis))
+                    }
+                } else {
+                    dayTracks
+                        .groupBy { it.key }
+                        .values
+                        .sortedWith(
+                            compareByDescending<List<HomeTrack>> { it.size }
+                                .thenByDescending { it.first().timestampMillis ?: 0L },
+                        )
+                        .map { group ->
+                            val first = group.first()
+                            HomeRow.Track(
+                                first.copy(playCount = group.size),
+                                badge = "${group.size}\u00d7",
+                            )
+                        }
+                }
+            }
+            HomeSortMode.TOP_ARTISTS -> {
+                dayTracks
+                    .groupBy { it.artist.trim().lowercase() }
+                    .filterKeys { it.isNotBlank() }
+                    .values
+                    .sortedByDescending { it.size }
+                    .map { group ->
+                        val first = group.first()
+                        HomeRow.Artist(
+                            HomeArtistItem(
+                                name = first.artist.trim(),
+                                playCount = group.size.toLong(),
+                                artworkUrl = group.firstOrNull { !it.artworkUrl.isNullOrBlank() }?.artworkUrl,
+                            ),
+                            badge = playCountBadge(group.size),
+                        )
+                    }
+            }
+            HomeSortMode.TOP_ALBUMS -> {
+                dayTracks
+                    .filter { !it.album.isNullOrBlank() }
+                    .groupBy { "${it.artist.trim().lowercase()}|${it.album!!.trim().lowercase()}" }
+                    .values
+                    .sortedByDescending { it.size }
+                    .map { group ->
+                        val first = group.first()
+                        HomeRow.Album(
+                            HomeAlbum(
+                                name = first.album!!.trim(),
+                                artist = first.artist.trim(),
+                                artworkUrl = group.firstOrNull { !it.artworkUrl.isNullOrBlank() }?.artworkUrl,
+                                playCount = group.size.toLong(),
+                            ),
+                            badge = playCountBadge(group.size),
+                        )
+                    }
+            }
+        }
+    }
     return when (sortMode) {
         HomeSortMode.RECENT -> {
             val dated = allTracks.filter { it.timestampMillis != null }.sortedByDescending { it.timestampMillis }
@@ -191,6 +267,8 @@ internal fun computeDailyActivity7d(
         countsByDay[key] = (countsByDay[key] ?: 0) + 1
     }
     val dayNames = arrayOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+    val months = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    data class RawBin(val key: String, val label: String, val fullLabel: String, val count: Int)
     val raw = (6 downTo 0).map { daysAgo ->
         val c = Calendar.getInstance().apply {
             timeInMillis = nowMillis
@@ -198,16 +276,29 @@ internal fun computeDailyActivity7d(
         }
         val key = "${c.get(Calendar.YEAR)}-${c.get(Calendar.DAY_OF_YEAR)}"
         val label = dayNames[(c.get(Calendar.DAY_OF_WEEK) - 1).coerceIn(0, 6)]
-        label to (countsByDay[key] ?: 0)
+        val fullLabel = when (daysAgo) {
+            0 -> "Today"
+            1 -> "Yesterday"
+            else -> "$label, ${c.get(Calendar.DAY_OF_MONTH)} ${months[c.get(Calendar.MONTH)]}"
+        }
+        RawBin(key, label, fullLabel, countsByDay[key] ?: 0)
     }
-    val maxPlays = raw.maxOfOrNull { it.second } ?: 0
-    return raw.map { (label, count) ->
+    val maxPlays = raw.maxOfOrNull { it.count } ?: 0
+    return raw.map { bin ->
         DailyActivityBin(
-            dayLabel = label,
-            plays = count,
-            isPeak = maxPlays > 0 && count == maxPlays,
+            dayKey = bin.key,
+            dayLabel = bin.label,
+            fullDateLabel = bin.fullLabel,
+            plays = bin.count,
+            isPeak = maxPlays > 0 && bin.count == maxPlays,
         )
     }
+}
+
+private fun formatClockTime(millis: Long?): String? {
+    if (millis == null || millis <= 0L) return null
+    val cal = Calendar.getInstance().apply { timeInMillis = millis }
+    return "%02d:%02d".format(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
 }
 
 private fun playCountBadge(count: Int): String? {
@@ -260,6 +351,8 @@ private data class RowsKey(
     val topTracks30Days: List<HomeTrack>,
     val topArtists: List<com.lastwave.app.data.repository.HomeArtistItem>,
     val topAlbums: List<com.lastwave.app.data.repository.HomeAlbum>,
+    val selectedDayKey: String?,
+    val dayTrackSort: DayTrackSort,
 )
 
 
@@ -358,6 +451,8 @@ class HomeViewModel @Inject constructor(
                         topTracks30Days = it.topTracks30Days,
                         topArtists = it.topArtists,
                         topAlbums = it.topAlbums,
+                        selectedDayKey = it.selectedDayKey,
+                        dayTrackSort = it.dayTrackSort,
                     )
                 }
                 .distinctUntilChanged()
@@ -372,6 +467,8 @@ class HomeViewModel @Inject constructor(
                             topTracks30Days = key.topTracks30Days,
                             topArtists = key.topArtists,
                             topAlbums = key.topAlbums,
+                            selectedDayKey = key.selectedDayKey,
+                            dayTrackSort = key.dayTrackSort,
                         ).visibleRows()
                     }
                     _rows.value = computed
@@ -406,6 +503,7 @@ class HomeViewModel @Inject constructor(
                 artworkUrl = t.artworkUrl,
                 timestampMillis = t.date?.uts?.toLongOrNull()?.times(1000),
                 playCount = topCountByKey[key] ?: 0,
+                album = t.album.displayName.takeIf { it.isNotBlank() && !com.lastwave.app.util.ArtistHelper.isPlayCountOrStat(it) },
             )
         }
         val recentKeys = recentAsHome.map { it.key }.toSet()
@@ -731,6 +829,17 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun selectActivityDay(dayKey: String?) {
+        _uiState.update { state ->
+            val next = if (dayKey == null || dayKey == state.selectedDayKey) null else dayKey
+            state.copy(selectedDayKey = next)
+        }
+    }
+
+    fun setDayTrackSort(sort: DayTrackSort) {
+        _uiState.update { it.copy(dayTrackSort = sort) }
+    }
+
     /** Opens the friend-switcher sheet — lazily loads the signed-in user's
      *  own friends list (user.getfriends) the first time it's opened. */
     fun openFriendsSheet() {
@@ -758,13 +867,14 @@ class HomeViewModel @Inject constructor(
      *  fetch (recent tracks, stats, top tracks for every period) re-runs
      *  for [friend]'s username instead of the signed-in one. */
     fun viewFriend(friend: FriendEntry) {
-        _uiState.update { it.copy(showFriendsSheet = false) }
+        _uiState.update { it.copy(showFriendsSheet = false, selectedDayKey = null) }
         viewingProfileState.set(friend.name)
         loadForUsername(friend.name)
     }
 
     /** Switches back to the signed-in user's own data. */
     fun returnToOwnProfile() {
+        _uiState.update { it.copy(selectedDayKey = null) }
         viewingProfileState.set(null)
         loadForUsername(_uiState.value.username)
     }

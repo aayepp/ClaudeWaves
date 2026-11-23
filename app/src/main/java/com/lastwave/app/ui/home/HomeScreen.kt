@@ -155,7 +155,11 @@ fun HomeScreen(
                         if (rows[rowIndex] is HomeRow.Track) nextPlaybackIndex++ else -1
                     }
                 }
-                val isRankedMode = uiState.sortMode != HomeSortMode.RECENT
+                val isRankedMode = uiState.sortMode != HomeSortMode.RECENT &&
+                    !(uiState.selectedDayKey != null && uiState.dayTrackSort == DayTrackSort.TIMELINE)
+                val selectedDayBin = remember(uiState.dailyActivity7d, uiState.selectedDayKey) {
+                    uiState.selectedDayKey?.let { key -> uiState.dailyActivity7d.firstOrNull { it.dayKey == key } }
+                }
                 val rankByRow = remember(rows, isRankedMode) {
                     var nextRank = 1
                     IntArray(rows.size) { rowIndex ->
@@ -245,13 +249,21 @@ fun HomeScreen(
                     }
 
                     item(key = "telemetry_activity", contentType = "telemetry_activity") {
-                        TelemetryActivityChart(bins = uiState.dailyActivity7d)
+                        TelemetryActivityChart(
+                            bins = uiState.dailyActivity7d,
+                            selectedDayKey = uiState.selectedDayKey,
+                            onSelectDay = viewModel::selectActivityDay,
+                        )
                     }
 
                     item(key = "telemetry_tabs", contentType = "telemetry_tabs") {
                         TelemetryTabStrip(
                             sortMode = uiState.sortMode,
                             onSortModeChange = viewModel::setSortMode,
+                            selectedDayBin = selectedDayBin,
+                            dayTrackSort = uiState.dayTrackSort,
+                            onDayTrackSortChange = viewModel::setDayTrackSort,
+                            onClearDayFilter = { viewModel.selectActivityDay(null) },
                         )
                     }
 
@@ -322,7 +334,14 @@ fun HomeScreen(
                                 Modifier.fillMaxWidth().padding(vertical = 48.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(stringResource(R.string.home_no_tracks), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = if (selectedDayBin != null) {
+                                        "No plays recorded on ${selectedDayBin.fullDateLabel}"
+                                    } else {
+                                        stringResource(R.string.home_no_tracks)
+                                    },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }

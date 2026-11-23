@@ -21,9 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
@@ -236,6 +239,10 @@ fun ProfileAvatar(avatarUrl: String?, modifier: Modifier = Modifier) {
 internal fun TelemetryTabStrip(
     sortMode: HomeSortMode,
     onSortModeChange: (HomeSortMode) -> Unit,
+    selectedDayBin: DailyActivityBin? = null,
+    dayTrackSort: DayTrackSort = DayTrackSort.MOST_PLAYED,
+    onDayTrackSortChange: (DayTrackSort) -> Unit = {},
+    onClearDayFilter: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -305,56 +312,104 @@ internal fun TelemetryTabStrip(
             }
 
             if (activeTab == TelemetryPrimaryTab.TRACKS) {
-                Box {
+                if (selectedDayBin != null) {
+                    val isTimeline = dayTrackSort == DayTrackSort.TIMELINE
+                    val sortShape = RoundedCornerShape(10.dp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .heightIn(min = 40.dp)
-                            .uiClip(RoundedCornerShape(10.dp))
-                            .clickable { periodMenuOpen = true }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .heightIn(min = 36.dp)
+                            .uiClip(sortShape)
+                            .background(
+                                if (isComic) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isDark) 0.55f else 0.75f)
+                                },
+                            )
+                            .then(
+                                if (isComic) {
+                                    Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, sortShape)
+                                } else {
+                                    Modifier.border(
+                                        0.75.dp,
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.35f else 0.55f),
+                                        sortShape,
+                                    )
+                                },
+                            )
+                            .clickable {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                onDayTrackSortChange(if (isTimeline) DayTrackSort.MOST_PLAYED else DayTrackSort.TIMELINE)
+                            }
+                            .padding(horizontal = 9.dp, vertical = 5.dp),
                     ) {
-                        Text(
-                            text = when (lastTrackMode) {
-                                HomeSortMode.LAST_7_DAYS -> "7d"
-                                HomeSortMode.LAST_30_DAYS -> "30d"
-                                else -> "All"
-                            },
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontFeatureSettings = "tnum",
-                            ),
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(2.dp))
                         Icon(
-                            Icons.Filled.ExpandMore,
-                            contentDescription = "Timeframe",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp),
+                            imageVector = if (isTimeline) Icons.Filled.Schedule else Icons.Filled.BarChart,
+                            contentDescription = "Sort day tracks",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = if (isTimeline) "Time" else "Top",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                    DropdownMenu(
-                        expanded = periodMenuOpen,
-                        onDismissRequest = { periodMenuOpen = false },
-                        shape = RoundedCornerShape(18.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ) {
-                        PeriodOption("All Time", lastTrackMode == HomeSortMode.MOST_PLAYED) {
-                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            onSortModeChange(HomeSortMode.MOST_PLAYED)
-                            periodMenuOpen = false
+                } else {
+                    Box {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .heightIn(min = 40.dp)
+                                .uiClip(RoundedCornerShape(10.dp))
+                                .clickable { periodMenuOpen = true }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = when (lastTrackMode) {
+                                    HomeSortMode.LAST_7_DAYS -> "7d"
+                                    HomeSortMode.LAST_30_DAYS -> "30d"
+                                    else -> "All"
+                                },
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontFeatureSettings = "tnum",
+                                ),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Icon(
+                                Icons.Filled.ExpandMore,
+                                contentDescription = "Timeframe",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
                         }
-                        PeriodOption("Last 30 Days", lastTrackMode == HomeSortMode.LAST_30_DAYS) {
-                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            onSortModeChange(HomeSortMode.LAST_30_DAYS)
-                            periodMenuOpen = false
-                        }
-                        PeriodOption("Last 7 Days", lastTrackMode == HomeSortMode.LAST_7_DAYS) {
-                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            onSortModeChange(HomeSortMode.LAST_7_DAYS)
-                            periodMenuOpen = false
+                        DropdownMenu(
+                            expanded = periodMenuOpen,
+                            onDismissRequest = { periodMenuOpen = false },
+                            shape = RoundedCornerShape(18.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            PeriodOption("All Time", lastTrackMode == HomeSortMode.MOST_PLAYED) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                onSortModeChange(HomeSortMode.MOST_PLAYED)
+                                periodMenuOpen = false
+                            }
+                            PeriodOption("Last 30 Days", lastTrackMode == HomeSortMode.LAST_30_DAYS) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                onSortModeChange(HomeSortMode.LAST_30_DAYS)
+                                periodMenuOpen = false
+                            }
+                            PeriodOption("Last 7 Days", lastTrackMode == HomeSortMode.LAST_7_DAYS) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                onSortModeChange(HomeSortMode.LAST_7_DAYS)
+                                periodMenuOpen = false
+                            }
                         }
                     }
                 }
@@ -364,6 +419,54 @@ internal fun TelemetryTabStrip(
             thickness = if (isComic) 1.5.dp else 0.75.dp,
             color = if (isComic) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.35f else 0.5f),
         )
+        if (selectedDayBin != null) {
+            val pillShape = RoundedCornerShape(50)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                Surface(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        onClearDayFilter()
+                    },
+                    shape = pillShape,
+                    color = if (isComic) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.14f else 0.10f)
+                    },
+                    border = if (isComic) null else BorderStroke(
+                        0.75.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.32f),
+                    ),
+                    modifier = Modifier.comicPanel(pillShape, offset = 2.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            text = "${selectedDayBin.fullDateLabel} (${selectedDayBin.plays})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isComic) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Clear day filter",
+                            tint = if (isComic) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
