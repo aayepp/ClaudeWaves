@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.23] - 2026-11-23
+
+### Added
+- **Expandable Hold-Home shortcut pill:** press and hold the docked Home pill to slide open a customizable second shortcut (`Library`, `Stats`, `Downloads`, `Search`, `Discover`, `Listen Together`, `Playlist Generator`, or `Settings`) configured in Settings → Appearance.
+- **Now Playing & Library motion upgrades:** chromatic Liquid Ripple shockwave and cover pop on track changes, 3D Cover-Flow perspective tilt with neighbor peek and subtle floor reflection while dragging artwork, smooth horizontal `Lyrics ↔ Queue` transitions, polished curved-arc artwork flight, and long-press **Playlist Quick-Peek** cards in Library.
+- **Interactive animated onboarding tutorial:** 3 dedicated mini-phone gesture tutorial pages demonstrating player gestures, hold-home dock & stats filter, and Quick-Peek / Listen Together / audio tools, plus a `Minimal Design` style toggle in setup.
+
+### Changed
+- **Integrated Update & What's New hero banner:** replaced the cropped strip with an uncropped `16:9` top hero header that fades seamlessly into the dialog surface with overlaid version info, keeping release notes spacious and readable.
+- **Onboarding copy & spacing polish:** updated remaining LastWave onboarding copy to ClaudeWaves and refined page spacing and step progression (`10` steps).
+
 ## [1.0.22] - 2026-11-23
 
 ### Changed
