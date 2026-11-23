@@ -169,7 +169,7 @@ class DiscordGatewayTransport(
                 putJsonObject("properties") {
                     put("os", "Android")
                     put("browser", "Discord Android")
-                    put("device", Build.DEVICE.ifBlank { "Android" })
+                    put("device", Build.DEVICE.orEmpty().ifBlank { "Android" })
                 }
                 putJsonObject("presence") {
                     put("status", currentStatusRef.get())
@@ -262,8 +262,8 @@ class DiscordGatewayTransport(
             val json = buildJsonObject {
                 put("os", "Android")
                 put("browser", "Discord Android")
-                put("device", Build.MODEL.ifBlank { "Android" })
-                put("os_version", Build.VERSION.RELEASE.ifBlank { "14" })
+                put("device", Build.MODEL.orEmpty().ifBlank { "Android" })
+                put("os_version", Build.VERSION.RELEASE.orEmpty().ifBlank { "14" })
                 put("client_build_number", 314013)
                 put("release_channel", "googleRelease")
             }.toString()

@@ -1,9 +1,13 @@
 package com.lastwave.app.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +20,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -24,19 +29,27 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.SmartButton
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -46,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,8 +67,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,6 +90,7 @@ import com.lastwave.app.presence.DiscordSettings
 import com.lastwave.app.ui.comic.AlertDialog
 import com.lastwave.app.ui.comic.Button
 import com.lastwave.app.ui.comic.FilledTonalButton
+import com.lastwave.app.ui.comic.IconButton
 import com.lastwave.app.ui.comic.OutlinedButton
 import com.lastwave.app.ui.comic.Surface
 import com.lastwave.app.ui.comic.TextButton
@@ -199,6 +216,7 @@ fun DiscordSettingsScreen(
     viewModel: DiscordSettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val appContext = remember(context) { context.applicationContext }
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val connectionStatus by viewModel.connectionStatus.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
@@ -206,6 +224,7 @@ fun DiscordSettingsScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
 
     var showTokenDialog by rememberSaveable { mutableStateOf(false) }
+    var openGuideInitially by rememberSaveable { mutableStateOf(false) }
     var showSignOutConfirm by rememberSaveable { mutableStateOf(false) }
 
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -254,6 +273,12 @@ fun DiscordSettingsScreen(
                         onSignIn = onOpenLogin,
                         onPasteToken = {
                             viewModel.clearError()
+                            openGuideInitially = false
+                            showTokenDialog = true
+                        },
+                        onShowTokenGuide = {
+                            viewModel.clearError()
+                            openGuideInitially = true
                             showTokenDialog = true
                         },
                         onSignOut = { showSignOutConfirm = true },
@@ -386,54 +411,17 @@ fun DiscordSettingsScreen(
     }
 
     if (showTokenDialog) {
-        var tokenInput by rememberSaveable { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { if (!signingIn) showTokenDialog = false },
-            title = { Text("Paste Discord Token") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Your token stays on this device and connects directly to Discord's gateway.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedTextField(
-                        value = tokenInput,
-                        onValueChange = {
-                            tokenInput = it
-                            viewModel.clearError()
-                        },
-                        label = { Text("Discord user token") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        isError = error != null,
-                        supportingText = error?.let { msg -> { Text(msg) } },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+        DiscordTokenDialog(
+            signingIn = signingIn,
+            error = error,
+            initialGuideExpanded = openGuideInitially,
+            onClearError = viewModel::clearError,
+            onDismiss = { if (!signingIn) showTokenDialog = false },
+            onSubmit = { token ->
+                viewModel.signInWithToken(token) {
+                    showTokenDialog = false
+                    Toast.makeText(appContext, "Connected to Discord", Toast.LENGTH_SHORT).show()
                 }
-            },
-            confirmButton = {
-                Button(
-                    enabled = tokenInput.isNotBlank() && !signingIn,
-                    onClick = {
-                        viewModel.signInWithToken(tokenInput) {
-                            showTokenDialog = false
-                            Toast.makeText(context, "Connected to Discord", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                ) {
-                    if (signingIn) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("Connect")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !signingIn,
-                    onClick = { showTokenDialog = false },
-                ) { Text("Cancel") }
             },
         )
     }
@@ -448,13 +436,246 @@ fun DiscordSettingsScreen(
                     onClick = {
                         showSignOutConfirm = false
                         viewModel.signOut()
-                        Toast.makeText(context, "Disconnected from Discord", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(appContext, "Disconnected from Discord", Toast.LENGTH_SHORT).show()
                     },
                 ) { Text("Disconnect") }
             },
             dismissButton = {
                 TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
             },
+        )
+    }
+}
+
+private const val DISCORD_CONSOLE_SNIPPET =
+    "document.body.appendChild(document.createElement('iframe')).contentWindow.localStorage.token.replace(/\"/g,'')"
+
+@Composable
+internal fun DiscordTokenDialog(
+    signingIn: Boolean,
+    error: String?,
+    initialGuideExpanded: Boolean = true,
+    onClearError: () -> Unit,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val appContext = remember(context) { context.applicationContext }
+    var tokenInput by rememberSaveable { mutableStateOf("") }
+    var tokenVisible by rememberSaveable { mutableStateOf(false) }
+    var guideExpanded by rememberSaveable(initialGuideExpanded) { mutableStateOf(initialGuideExpanded) }
+
+    AlertDialog(
+        onDismissRequest = { if (!signingIn) onDismiss() },
+        title = { Text("Connect with Discord Token") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Your token stays strictly on this device and connects only to Discord's gateway. Never share your token with anyone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                OutlinedTextField(
+                    value = tokenInput,
+                    onValueChange = {
+                        tokenInput = it
+                        onClearError()
+                    },
+                    label = { Text("Discord user token") },
+                    placeholder = { Text("Paste token here (without quotes)") },
+                    singleLine = true,
+                    visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { tokenVisible = !tokenVisible },
+                            ) {
+                                Icon(
+                                    imageVector = if (tokenVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = if (tokenVisible) "Hide token" else "Show token",
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    val pasted = cm?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+                                    if (!pasted.isNullOrBlank()) {
+                                        tokenInput = pasted.removeSurrounding("\"")
+                                        onClearError()
+                                    } else {
+                                        Toast.makeText(appContext, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ContentPaste,
+                                    contentDescription = "Paste from clipboard",
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                    isError = error != null,
+                    supportingText = error?.let { msg -> { Text(msg) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // Expandable step-by-step guide on how to obtain the Discord user token
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { guideExpanded = !guideExpanded },
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text(
+                                text = "How to get your Discord token",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                imageVector = if (guideExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+
+                        AnimatedVisibility(visible = guideExpanded) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Method 1 — Browser DevTools (PC / Laptop)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                TokenGuideStep(1, "Open discord.com/channels/@me in Chrome, Edge, Brave, or Firefox and sign in.")
+                                TokenGuideStep(2, "Press F12 (or Ctrl+Shift+I / Cmd+Option+I) and open the Network tab.")
+                                TokenGuideStep(3, "Type /api in the filter box, then click any DM or server.")
+                                TokenGuideStep(4, "Click a request (like @me, science, or messages) → Headers → Request Headers.")
+                                TokenGuideStep(5, "Copy the value next to authorization (no quotes) and tap Paste above.")
+
+                                Spacer(Modifier.height(2.dp))
+
+                                Text(
+                                    text = "Method 2 — Console One-Liner (PC or Kiwi / Mises Browser)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                TokenGuideStep(1, "Sign in to discord.com/channels/@me and open the DevTools Console tab.")
+                                TokenGuideStep(2, "Run the snippet below, then copy the printed token into the box above.")
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            text = DISCORD_CONSOLE_SNIPPET,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = FontFamily.Monospace,
+                                                lineHeight = 15.sp,
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        OutlinedButton(
+                                            onClick = {
+                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                                cm?.setPrimaryClip(ClipData.newPlainText("Discord Token Command", DISCORD_CONSOLE_SNIPPET))
+                                                Toast.makeText(appContext, "Console snippet copied", Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Copy console snippet", style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = tokenInput.isNotBlank() && !signingIn,
+                onClick = { onSubmit(tokenInput) },
+            ) {
+                if (signingIn) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Connect")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !signingIn,
+                onClick = onDismiss,
+            ) { Text("Cancel") }
+        },
+    )
+}
+
+@Composable
+private fun TokenGuideStep(number: Int, text: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = number.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 17.sp,
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -466,6 +687,7 @@ private fun DiscordAccountCard(
     signingIn: Boolean,
     onSignIn: () -> Unit,
     onPasteToken: () -> Unit,
+    onShowTokenGuide: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Surface(
@@ -558,7 +780,7 @@ private fun DiscordAccountCard(
                 ) {
                     if (status == DiscordConnectionStatus.AUTH_FAILED) {
                         Button(onClick = onSignIn, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Sign in again")
                         }
@@ -616,7 +838,7 @@ private fun DiscordAccountCard(
                         enabled = !signingIn,
                         modifier = Modifier.weight(1.3f),
                     ) {
-                        Icon(Icons.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Sign in", maxLines = 1)
                     }
@@ -629,6 +851,19 @@ private fun DiscordAccountCard(
                         Spacer(Modifier.width(6.dp))
                         Text("Token", maxLines = 1)
                     }
+                }
+                TextButton(
+                    onClick = onShowTokenGuide,
+                    enabled = !signingIn,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("How to get your Discord token?")
                 }
             }
         }
