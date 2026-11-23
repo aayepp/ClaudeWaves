@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.27] - 2026-11-23
+
+### Fixed
+- **Discord login native Vulkan WebView crash (Android 17 / WebView 157):** switched the Discord login WebView to software layer rendering (`LAYER_TYPE_SOFTWARE`) and removed offscreen transition/predictive-back layers on the Discord login route, eliminating the `WebViewFunctor::drawVk` `SIGTRAP` crash on RenderThread.
+- **ClaudeWaves diagnostics branding:** renamed exported diagnostics filenames (`claudewaves-diagnostics-*.txt`), crash report headers, and operational log headers from `LastWave` to `ClaudeWaves`.
+
 ## [1.0.26] - 2026-11-23
 
 ### Added
