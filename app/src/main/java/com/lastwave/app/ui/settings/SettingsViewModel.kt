@@ -1073,7 +1073,7 @@ class SettingsViewModel @Inject constructor(
     fun exportDiagnostics() {
         launchSettingsAction("export diagnostics") {
             val report = withContext(Dispatchers.IO) { buildDiagnosticsReport() }
-            val filename = "lastwave-diagnostics-${System.currentTimeMillis()}.txt"
+            val filename = "claudewaves-diagnostics-${System.currentTimeMillis()}.txt"
             fileExportHelper.shareFile(filename, report, "text/plain")
             _uiState.update { it.copy(toastMessage = appContext.getString(com.lastwave.app.R.string.toast_diag_ready)) }
         }

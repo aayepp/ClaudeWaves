@@ -322,6 +322,10 @@ fun DiscordLoginScreen(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                 )
+                                // Software layer bypasses Chromium's Vulkan WebViewFunctor::drawVk path,
+                                // which hits SIGTRAP in libwebviewchromium.so inside Compose offscreen
+                                // layers on Android 17 / WebView 157 (e.g. vivo X300 Pro / Dimensity).
+                                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                                 overScrollMode = View.OVER_SCROLL_NEVER
                                 settings.apply {
                                     javaScriptEnabled = true

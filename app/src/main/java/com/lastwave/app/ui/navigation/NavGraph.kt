@@ -1,5 +1,7 @@
 package com.lastwave.app.ui.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -533,13 +535,20 @@ fun LastWaveNavHost(
             }
         }
 
-        composable(Screen.DiscordLogin.route) { backStackEntry ->
-            PredictiveBackScreen(onBack = { navController.safePopBackStack(backStackEntry) }) {
-                com.lastwave.app.ui.settings.DiscordLoginScreen(
-                    onBack = { navController.safePopBackStack(backStackEntry) },
-                    onConnected = { navController.safePopBackStack(backStackEntry) },
-                )
-            }
+        // No fade/slide offscreen layer or PredictiveBackScreen wrapper around the
+        // Discord WebView: Compose offscreen Vulkan layers trigger WebViewFunctor::drawVk
+        // SIGTRAP in libwebviewchromium.so on Android 17 / WebView 157 devices.
+        composable(
+            route = Screen.DiscordLogin.route,
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None },
+        ) { backStackEntry ->
+            com.lastwave.app.ui.settings.DiscordLoginScreen(
+                onBack = { navController.safePopBackStack(backStackEntry) },
+                onConnected = { navController.safePopBackStack(backStackEntry) },
+            )
         }
 
       composable(Screen.SpotifyLogin.route) { backStackEntry ->
