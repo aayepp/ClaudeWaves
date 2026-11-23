@@ -2471,10 +2471,13 @@ internal fun NowPlayingScreen(
     // The sleeve follows the finger during a skip swipe; it only jumped once the
     // threshold was passed, so the gesture gave no feedback until it was over.
     val artworkDrag = remember { Animatable(0f) }
+    val rippleProgress = remember { Animatable(1f) }
+    val coverPopScale = remember { Animatable(1f) }
     var sleeveWidthPx by remember { mutableFloatStateOf(0f) }
     var committingSwipeDirection by remember { mutableIntStateOf(0) }
     var suppressNextDirectionalSlide by remember { mutableStateOf(false) }
     var swipeCommitJob by remember { mutableStateOf<Job?>(null) }
+    var dragAnimJob by remember { mutableStateOf<Job?>(null) }
 
     var seekOverlayDirection by remember { mutableStateOf<SeekDirection?>(null) }
     var seekOverlaySeconds by remember { mutableIntStateOf(5) }
@@ -2492,12 +2495,15 @@ internal fun NowPlayingScreen(
         track.videoId?.takeIf(String::isNotBlank) ?: "${track.title}|${track.artist}"
     }
     var settledDragTrackKey by remember { mutableStateOf(trackKey) }
-    val prevTrack = remember(state.queue, state.currentIndex, state.repeatMode) {
-        state.queue.getOrNull(state.currentIndex - 1)
+    var lastRippleTrackKey by remember { mutableStateOf(trackKey) }
+    val prevTrack = remember(state.queue, state.currentIndex, state.repeatMode, state.shuffleEnabled) {
+        if (state.shuffleEnabled) null
+        else state.queue.getOrNull(state.currentIndex - 1)
             ?: if (state.repeatMode == Player.REPEAT_MODE_ALL && state.queue.size > 1) state.queue.lastOrNull() else null
     }
-    val nextTrack = remember(state.queue, state.currentIndex, state.repeatMode) {
-        state.queue.getOrNull(state.currentIndex + 1)
+    val nextTrack = remember(state.queue, state.currentIndex, state.repeatMode, state.shuffleEnabled) {
+        if (state.shuffleEnabled) null
+        else state.queue.getOrNull(state.currentIndex + 1)
             ?: if (state.repeatMode == Player.REPEAT_MODE_ALL && state.queue.size > 1) state.queue.firstOrNull() else null
     }
     val currentPrevTrack by rememberUpdatedState(prevTrack)
@@ -2512,6 +2518,48 @@ internal fun NowPlayingScreen(
         queueIndex = state.currentIndex,
         queueSize = state.queue.size,
     )
+
+    // Kept at NowPlayingScreen level (not inside `if (showSleeve)`) so toggling
+    // Full Artwork / Video or skipping tracks never leaves settledDragTrackKey
+    // or committingSwipeDirection stale.
+    LaunchedEffect(trackKey) {
+        if (trackKey != lastRippleTrackKey) {
+            lastRippleTrackKey = trackKey
+            val landedFromSwipe = committingSwipeDirection != 0 || suppressNextDirectionalSlide
+            swipeCommitJob?.cancel()
+            swipeCommitJob = null
+            dragAnimJob?.cancel()
+            dragAnimJob = null
+            artworkDrag.snapTo(0f)
+            committingSwipeDirection = 0
+            suppressNextDirectionalSlide = false
+            settledDragTrackKey = trackKey
+            if (landedFromSwipe) {
+                coverPopScale.snapTo(1f)
+            } else {
+                launch {
+                    coverPopScale.snapTo(0.92f)
+                    coverPopScale.animateTo(1f, spring(dampingRatio = 0.65f, stiffness = 380f))
+                }
+            }
+            launch {
+                rippleProgress.snapTo(0f)
+                rippleProgress.animateTo(1f, tween(860, easing = FastOutSlowInEasing))
+            }
+        }
+    }
+    LaunchedEffect(showSleeve, isVideoActive) {
+        swipeCommitJob?.cancel()
+        swipeCommitJob = null
+        dragAnimJob?.cancel()
+        dragAnimJob = null
+        committingSwipeDirection = 0
+        suppressNextDirectionalSlide = false
+        settledDragTrackKey = currentTrackKey
+        if (artworkDrag.value != 0f) {
+            artworkDrag.snapTo(0f)
+        }
+    }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize(),
@@ -2545,6 +2593,7 @@ internal fun NowPlayingScreen(
                             val down = awaitFirstDown(requireUnconsumed = false)
                             val dragBlocked = committingSwipeDirection != 0
                             var isDrag = false
+                            var releaseHandled = false
                             var dragDeltaX = 0f
                             val touchSlop = viewConfiguration.touchSlop
                             val initialX = down.position.x
@@ -2573,55 +2622,95 @@ internal fun NowPlayingScreen(
                                     continue
                                 }
                                 if (!change.pressed) {
+                                    releaseHandled = true
                                     if (isDrag) {
                                         val wPx = (if (sleeveWidthPx > 1f) sleeveWidthPx else with(density) { 280.dp.toPx() }).coerceAtLeast(swipeThreshold * 2.6f)
+                                        val pState = player.state.value
+                                        val hasShuffledMulti = pState.shuffleEnabled && pState.queue.size > 1
+                                        val canGoNext = currentNextTrack != null || hasShuffledMulti
+                                        val willRestartCurrent = pState.positionMs > 5_000L
+                                        val canGoPrev = currentPrevTrack != null || hasShuffledMulti || willRestartCurrent
+                                        dragAnimJob?.cancel()
+                                        dragAnimJob = null
                                         when {
-                                            dragDeltaX < -swipeThreshold && currentNextTrack != null -> {
-                                                if (currentShowSleeve) {
+                                            dragDeltaX < -swipeThreshold && canGoNext -> {
+                                                if (currentShowSleeve && currentNextTrack != null) {
                                                     val commitFromKey = currentTrackKey
+                                                    // Set synchronously BEFORE launching so the post-loop cancel
+                                                    // guard never competes with or cancels the commit animation.
+                                                    committingSwipeDirection = 1
                                                     swipeCommitJob?.cancel()
-                                                    swipeCommitJob = coroutineScope.launch {
-                                                        committingSwipeDirection = 1
-                                                        artworkDrag.animateTo(-wPx, tween(durationMillis = 190, easing = FastOutSlowInEasing))
-                                                        suppressNextDirectionalSlide = true
-                                                        player.next()
-                                                        delay(420L)
-                                                        if (committingSwipeDirection != 0 && currentTrackKey == commitFromKey) {
-                                                            committingSwipeDirection = 0
-                                                            suppressNextDirectionalSlide = false
-                                                            settledDragTrackKey = currentTrackKey
-                                                            artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                    var jobRef: Job? = null
+                                                    jobRef = coroutineScope.launch {
+                                                        try {
+                                                            artworkDrag.animateTo(-wPx, tween(durationMillis = 190, easing = FastOutSlowInEasing))
+                                                            suppressNextDirectionalSlide = true
+                                                            player.next()
+                                                            delay(420L)
+                                                            if (committingSwipeDirection != 0 && currentTrackKey == commitFromKey) {
+                                                                committingSwipeDirection = 0
+                                                                suppressNextDirectionalSlide = false
+                                                                settledDragTrackKey = currentTrackKey
+                                                                artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                            }
+                                                        } finally {
+                                                            if (swipeCommitJob === jobRef) {
+                                                                swipeCommitJob = null
+                                                                if (committingSwipeDirection != 0) {
+                                                                    committingSwipeDirection = 0
+                                                                    suppressNextDirectionalSlide = false
+                                                                    settledDragTrackKey = currentTrackKey
+                                                                }
+                                                            }
                                                         }
                                                     }
+                                                    swipeCommitJob = jobRef
                                                 } else {
                                                     player.next()
-                                                    coroutineScope.launch { artworkDrag.snapTo(0f) }
+                                                    dragAnimJob = coroutineScope.launch {
+                                                        artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                    }
                                                 }
                                             }
-                                            dragDeltaX > swipeThreshold && currentPrevTrack != null -> {
-                                                if (currentShowSleeve) {
+                                            dragDeltaX > swipeThreshold && canGoPrev -> {
+                                                if (currentShowSleeve && !willRestartCurrent && currentPrevTrack != null) {
                                                     val commitFromKey = currentTrackKey
+                                                    committingSwipeDirection = -1
                                                     swipeCommitJob?.cancel()
-                                                    swipeCommitJob = coroutineScope.launch {
-                                                        committingSwipeDirection = -1
-                                                        artworkDrag.animateTo(wPx, tween(durationMillis = 190, easing = FastOutSlowInEasing))
-                                                        suppressNextDirectionalSlide = true
-                                                        player.previous()
-                                                        delay(420L)
-                                                        if (committingSwipeDirection != 0 && currentTrackKey == commitFromKey) {
-                                                            committingSwipeDirection = 0
-                                                            suppressNextDirectionalSlide = false
-                                                            settledDragTrackKey = currentTrackKey
-                                                            artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                    var jobRef: Job? = null
+                                                    jobRef = coroutineScope.launch {
+                                                        try {
+                                                            artworkDrag.animateTo(wPx, tween(durationMillis = 190, easing = FastOutSlowInEasing))
+                                                            suppressNextDirectionalSlide = true
+                                                            player.previous()
+                                                            delay(420L)
+                                                            if (committingSwipeDirection != 0 && currentTrackKey == commitFromKey) {
+                                                                committingSwipeDirection = 0
+                                                                suppressNextDirectionalSlide = false
+                                                                settledDragTrackKey = currentTrackKey
+                                                                artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                            }
+                                                        } finally {
+                                                            if (swipeCommitJob === jobRef) {
+                                                                swipeCommitJob = null
+                                                                if (committingSwipeDirection != 0) {
+                                                                    committingSwipeDirection = 0
+                                                                    suppressNextDirectionalSlide = false
+                                                                    settledDragTrackKey = currentTrackKey
+                                                                }
+                                                            }
                                                         }
                                                     }
+                                                    swipeCommitJob = jobRef
                                                 } else {
                                                     player.previous()
-                                                    coroutineScope.launch { artworkDrag.snapTo(0f) }
+                                                    dragAnimJob = coroutineScope.launch {
+                                                        artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                                    }
                                                 }
                                             }
                                             else -> {
-                                                coroutineScope.launch {
+                                                dragAnimJob = coroutineScope.launch {
                                                     artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
                                                 }
                                             }
@@ -2709,27 +2798,41 @@ internal fun NowPlayingScreen(
                                         isDrag = true
                                         pendingSingleTapJob?.cancel()
                                         pendingSingleTapJob = null
-                                        val blockedEdge = (dx > 0f && currentPrevTrack == null) || (dx < 0f && currentNextTrack == null)
+                                        val pState = player.state.value
+                                        val hasShuffledMulti = pState.shuffleEnabled && pState.queue.size > 1
+                                        val canGoNext = currentNextTrack != null || hasShuffledMulti
+                                        val canGoPrev = currentPrevTrack != null || hasShuffledMulti || pState.positionMs > 5_000L
+                                        val blockedEdge = (dx > 0f && !canGoPrev) || (dx < 0f && !canGoNext)
                                         val effectiveDx = if (blockedEdge) dx * 0.30f else dx
                                         dragDeltaX = effectiveDx
                                         change.consume()
-                                        coroutineScope.launch { artworkDrag.snapTo(effectiveDx) }
+                                        dragAnimJob?.cancel()
+                                        dragAnimJob = coroutineScope.launch { artworkDrag.snapTo(effectiveDx) }
                                     }
                                 } else {
                                     change.consume()
-                                    val blockedEdge = (dx > 0f && currentPrevTrack == null) || (dx < 0f && currentNextTrack == null)
+                                    val pState = player.state.value
+                                    val hasShuffledMulti = pState.shuffleEnabled && pState.queue.size > 1
+                                    val canGoNext = currentNextTrack != null || hasShuffledMulti
+                                    val canGoPrev = currentPrevTrack != null || hasShuffledMulti || pState.positionMs > 5_000L
+                                    val blockedEdge = (dx > 0f && !canGoPrev) || (dx < 0f && !canGoNext)
                                     val effectiveDx = if (blockedEdge) dx * 0.30f else dx
                                     // One tick as the swipe becomes a skip, either way.
                                     if (!blockedEdge && (kotlin.math.abs(effectiveDx) > swipeThreshold) != (kotlin.math.abs(dragDeltaX) > swipeThreshold)) {
                                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     }
                                     dragDeltaX = effectiveDx
-                                    coroutineScope.launch { artworkDrag.snapTo(effectiveDx) }
+                                    dragAnimJob?.cancel()
+                                    dragAnimJob = coroutineScope.launch { artworkDrag.snapTo(effectiveDx) }
                                 }
                             }
-                            // Also on a cancelled gesture, so the sleeve never stays displaced.
-                            if (committingSwipeDirection == 0 && artworkDrag.value != 0f) {
-                                coroutineScope.launch { artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f)) }
+                            // Only on a cancelled gesture (not normal finger-up release), so
+                            // this never competes with a newly launched swipeCommitJob.
+                            if (!releaseHandled && committingSwipeDirection == 0 && artworkDrag.value != 0f) {
+                                dragAnimJob?.cancel()
+                                dragAnimJob = coroutineScope.launch {
+                                    artworkDrag.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
+                                }
                             }
                         }
                     },
@@ -2768,33 +2871,6 @@ internal fun NowPlayingScreen(
                     val sleeveInset = if (nowPlayingMinimalStyle) 4.dp else 16.dp
                     val isComic = LocalComicTheme.current
                     val isDarkTheme = LocalIsDarkTheme.current
-                    val rippleProgress = remember { Animatable(1f) }
-                    val coverPopScale = remember { Animatable(1f) }
-                    var lastRippleTrackKey by remember { mutableStateOf(trackKey) }
-                    LaunchedEffect(trackKey) {
-                        if (trackKey != lastRippleTrackKey) {
-                            lastRippleTrackKey = trackKey
-                            val landedFromSwipe = committingSwipeDirection != 0 || suppressNextDirectionalSlide
-                            swipeCommitJob?.cancel()
-                            swipeCommitJob = null
-                            artworkDrag.snapTo(0f)
-                            committingSwipeDirection = 0
-                            suppressNextDirectionalSlide = false
-                            settledDragTrackKey = trackKey
-                            if (landedFromSwipe) {
-                                coverPopScale.snapTo(1f)
-                            } else {
-                                launch {
-                                    coverPopScale.snapTo(0.92f)
-                                    coverPopScale.animateTo(1f, spring(dampingRatio = 0.65f, stiffness = 380f))
-                                }
-                            }
-                            launch {
-                                rippleProgress.snapTo(0f)
-                                rippleProgress.animateTo(1f, tween(860, easing = FastOutSlowInEasing))
-                            }
-                        }
-                    }
                     val comicAccent = ComicAccent
                     val ringBaseColors = remember(primaryColor, secondaryColor, tertiaryColor, isComic, comicAccent) {
                         if (isComic) listOf(ComicCyan, comicAccent, ComicPink)
