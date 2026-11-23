@@ -1,174 +1,55 @@
 package com.lastwave.app.ui.home
 
-import androidx.compose.foundation.border
-import androidx.compose.ui.draw.clip as uiClip
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
-import com.lastwave.app.data.lossless.LosslessProbeTarget
-import com.lastwave.app.ui.common.ObserveVisibleLosslessProbes
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringResource
-import com.lastwave.app.R
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material3.DropdownMenu
-import com.lastwave.app.ui.comic.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import com.lastwave.app.ui.comic.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.lastwave.app.ui.comic.Surface
-import androidx.compose.material3.Text
-import com.lastwave.app.ui.comic.TextButton
-import com.lastwave.app.playback.toPlayableTrack
-import com.lastwave.app.ui.comic.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.ui.text.style.TextOverflow
-import com.lastwave.app.ui.common.ArtworkImage
-import com.lastwave.app.ui.common.ExpressiveHeader
-import com.lastwave.app.ui.common.HeaderActionIcon
-import com.lastwave.app.ui.common.safeHorizontalContentPadding
-import com.lastwave.app.ui.common.adaptiveContentWidth
-import com.lastwave.app.ui.common.TrackContextMenuSheet
-import com.lastwave.app.ui.common.TrackMenuCapabilities
-import com.lastwave.app.ui.common.TrackMenuTarget
-import com.lastwave.app.ui.common.TrackMiniTrayData
-import com.lastwave.app.ui.common.TrackMiniTraySheet
-import com.lastwave.app.ui.theme.ArtworkShape
-import com.lastwave.app.ui.theme.BadgePillShape
-import com.lastwave.app.ui.theme.ExpressiveHeroShape
-import com.lastwave.app.ui.theme.ExpressivePillShape
-import com.lastwave.app.ui.theme.HeroInnerShape
-import com.lastwave.app.ui.theme.ListContainerShape
-import com.lastwave.app.ui.theme.NowPlayingCardShape
-import com.lastwave.app.ui.theme.StatPillShape
-import com.lastwave.app.ui.theme.TrackRowShape
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Scaffold
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.AutoAwesome
-import com.lastwave.app.ui.comic.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
-
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.lastwave.app.ui.comic.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.text.font.FontWeight
-import com.lastwave.app.ui.shell.FloatingNavDefaults
-import coil.compose.SubcomposeAsyncImage
-import com.lastwave.app.data.repository.HomeAlbum
-import com.lastwave.app.data.repository.HomeArtistItem
+import com.lastwave.app.R
+import com.lastwave.app.data.lossless.LosslessProbeTarget
 import com.lastwave.app.data.repository.HomeSortMode
 import com.lastwave.app.data.repository.HomeTrack
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
-
-// Immutable shapes hoisted out of composition: previously each of these was
-// constructed inline inside row/card composables, i.e. re-allocated for every
-// row on every recomposition. Rows are the hottest path while scrolling, so
-// they must not allocate.
-
-internal val ListContainerShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-internal val TrackRowShape = RoundedCornerShape(18.dp)
-internal val NowPlayingCardShape = RoundedCornerShape(22.dp)
-internal val ArtworkShape = RoundedCornerShape(14.dp)
-internal val BadgePillShape = RoundedCornerShape(50)
-internal val StatPillShape = RoundedCornerShape(20.dp)
-internal val HeroInnerShape = RoundedCornerShape(24.dp)
+import com.lastwave.app.ui.common.ObserveVisibleLosslessProbes
+import com.lastwave.app.ui.common.TrackMiniTrayData
+import com.lastwave.app.ui.common.TrackMiniTraySheet
+import com.lastwave.app.ui.common.adaptiveContentWidth
+import com.lastwave.app.ui.common.safeHorizontalContentPadding
+import com.lastwave.app.ui.shell.FloatingNavDefaults
 
 /**
- * Faithful port of home.html/home.js's layout, top to bottom:
- *  1. Header row — username pill (left) + live listen timer (right)
- *  2. Stats card — big "Scrobbles" number + arrow-to-Genres, then a
- *     Tracks / Artists / Albums row
- *  3. Mix card — "List" title + sort dropdown (Recent / Most Played /
- *     Last 7 Days / Last 30 Days), then the track list itself, with the
- *     Now Playing row always pinned first when present.
- * There's no separate "Now Playing card" — that was an earlier, simplified
- * substitute; the real app renders it as the first row of the same list.
+ * Audiophile Telemetry Strip Stats screen (Stats 3):
+ *  1. Compact telemetry top bar — "Stats", live monospace duration pill, Share, Friends, Settings avatar.
+ *  2. Swiss 4-column hairline metric grid (Plays/Scrobbles, Tracks, Artists, Albums) + genre link row.
+ *  3. 7-day listening activity bar chart.
+ *  4. Tab strip (Tracks / Artists / Albums / History + timeframe selector) and ranked/history list.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -196,29 +77,34 @@ fun HomeScreen(
     var menuTrack by remember { mutableStateOf<HomeTrack?>(null) }
     var showRecapShare by rememberSaveable { mutableStateOf(false) }
 
+    val customProfile = com.lastwave.app.ui.theme.LocalUserProfile.current
+    val displayUsername = when {
+        uiState.isViewingFriend -> uiState.viewingUsername
+        customProfile.name.isNotBlank() -> customProfile.name
+        uiState.username.isNotBlank() -> uiState.username
+        uiState.isLocalStatsMode -> "Guest"
+        else -> uiState.username
+    }
+    val hasRecapData = !uiState.isLoading && (
+        uiState.allTracks.isNotEmpty() || uiState.topTracksOverall.isNotEmpty() || uiState.topArtists.isNotEmpty()
+    )
+
     Scaffold(
         // Transparent so the page wash / background image shows; Scaffold's own fill hid it.
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                ExpressiveHeader(
-                    title = "Statistics",
-                    // Stacked above the content (Scaffold topBar): nothing scrolls under it.
-                    containerColor = Color.Transparent,
-                    // Same width and side insets as the content below (which fills the
-                    // width), so the title and actions line up with the cards' edges.
-                    modifier = Modifier.fillMaxWidth().safeHorizontalContentPadding(),
-                    actions = {
-                        if (!uiState.isLoading && (uiState.allTracks.isNotEmpty() || uiState.topTracksOverall.isNotEmpty() || uiState.topArtists.isNotEmpty())) {
-                            HeaderActionIcon(Icons.Filled.Share, "Share Recap") { showRecapShare = true }
-                        }
-                        HeaderActionIcon(Icons.Filled.Search, "Search", onOpenSearch)
-                        val customProfile = com.lastwave.app.ui.theme.LocalUserProfile.current
-                        IconButton(onClick = onOpenSettings) {
-                            ProfileAvatar(avatarUrl = customProfile.avatarUri ?: uiState.stats?.avatarUrl, modifier = Modifier.size(38.dp))
-                        }
-                    },
+                StatsTelemetryTopBar(
+                    displayUsername = displayUsername,
+                    isViewingFriend = uiState.isViewingFriend,
+                    showShare = hasRecapData,
+                    avatarUrl = customProfile.avatarUri ?: uiState.stats?.avatarUrl,
+                    onShare = { showRecapShare = true },
+                    onOpenFriends = onOpenFriends,
+                    onOpenSettings = onOpenSettings,
+                    viewModel = viewModel,
+                    modifier = Modifier.adaptiveContentWidth(maxWidth = 860.dp),
                 )
             }
         },
@@ -237,63 +123,19 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize().padding(scaffoldPadding),
             contentAlignment = Alignment.TopCenter,
         ) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .adaptiveContentWidth(maxWidth = 860.dp)
-                    .safeHorizontalContentPadding(),
-            ) {
-            val customProfile = com.lastwave.app.ui.theme.LocalUserProfile.current
-            HeaderRow(
-                displayUsername = when {
-                    uiState.isViewingFriend -> uiState.viewingUsername
-                    customProfile.name.isNotBlank() -> customProfile.name
-                    uiState.username.isNotBlank() -> uiState.username
-                    uiState.isLocalStatsMode -> "Guest"
-                    else -> uiState.username
-                },
-                isViewingFriend = uiState.isViewingFriend,
-                onClick = onOpenFriends,
-                viewModel = viewModel,
-            )
-            Spacer(Modifier.height(2.dp))
-
-            if (uiState.isLocalStatsMode && !uiState.isViewingFriend) {
-                LocalStatsBanner(
-                    isOfflineFallback = uiState.isLastFmConnected,
-                    onClick = if (uiState.isLastFmConnected) viewModel::refresh else onOpenSettings,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
-                )
-            }
-
-            uiState.stats?.let { stats ->
-                StatsCard(
-                    scrobbles = stats.scrobbles,
-                    trackCount = stats.trackCount,
-                    artistCount = stats.artistCount,
-                    albumCount = stats.albumCount,
-                    // Honest label: local Room aggregates are plays, not global scrobbles.
-                    headlineLabel = if (uiState.isLocalStatsMode && !uiState.isViewingFriend) "Plays" else "Scrobbles",
-                    onOpenGenres = onOpenGenres,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 0.dp),
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-
-
             PullToRefreshBox(
                 isRefreshing = uiState.isRefreshing,
                 onRefresh = viewModel::refresh,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .adaptiveContentWidth(maxWidth = 860.dp)
+                    .safeHorizontalContentPadding(),
             ) {
                 val listState = rememberLazyListState()
                 LaunchedEffect(listState, uiState.allTracks.size) {
                     snapshotFlowNearEnd(listState) { viewModel.loadNextPage() }
                 }
 
-                // Computed off the main thread in HomeViewModel — see its
-                // doc comment on `rows` for why this used to jank on every
-                // Last.fm poll tick when it ran inline here instead.
                 val rows by viewModel.rows.collectAsStateWithLifecycle()
                 val playbackQueue = remember(rows) {
                     rows.mapNotNull { row ->
@@ -313,12 +155,21 @@ fun HomeScreen(
                         if (rows[rowIndex] is HomeRow.Track) nextPlaybackIndex++ else -1
                     }
                 }
-                // Content keys without the row index. Suffixing the index made
-                // every key shift by one whenever a scrobble or now-playing row
-                // landed on top, so the list threw away and rebuilt every
-                // visible row (covers flashed, scroll jumped). Duplicates (the
-                // same track scrobbled twice in a second) get an occurrence
-                // counter instead, which stays stable as rows are prepended.
+                val isRankedMode = uiState.sortMode != HomeSortMode.RECENT
+                val rankByRow = remember(rows, isRankedMode) {
+                    var nextRank = 1
+                    IntArray(rows.size) { rowIndex ->
+                        if (!isRankedMode) {
+                            -1
+                        } else {
+                            when (val row = rows[rowIndex]) {
+                                is HomeRow.Track -> if (row.track.isNowPlaying) -1 else nextRank++
+                                is HomeRow.Album, is HomeRow.Artist -> nextRank++
+                                is HomeRow.DateHeader -> -1
+                            }
+                        }
+                    }
+                }
                 val rowKeys = remember(rows) {
                     val seen = HashMap<String, Int>(rows.size)
                     Array(rows.size) { i ->
@@ -338,133 +189,167 @@ fun HomeScreen(
                     }
                 }
                 val musicPlayer = com.lastwave.app.ui.player.LocalMusicPlayer.current
-                // Long-press (deep press) on a track row opens the mini tray;
-                // the 3-dot button keeps opening the full menu sheet.
                 var miniTrayRowIndex by remember { mutableStateOf<Int?>(null) }
 
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp)
-                        // Standard shape clip avoids running ComicOutlineNode across the full scrolling list container
-                        .uiClip(ListContainerShape)
-                        .background(com.lastwave.app.ui.theme.glassCardColor(MaterialTheme.colorScheme.surfaceContainer)),
+                val probeKeyToTarget = remember(rows, rowKeys) {
+                    rows.mapIndexedNotNull { index, row ->
+                        val track = (row as? HomeRow.Track)?.track ?: return@mapIndexedNotNull null
+                        val key = rowKeys.getOrNull(index) ?: return@mapIndexedNotNull null
+                        key to LosslessProbeTarget(
+                            title = track.name,
+                            artist = track.artist,
+                        )
+                    }.toMap()
+                }
+                ObserveVisibleLosslessProbes(listState = listState, keyToTarget = probeKeyToTarget)
+
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 0.dp,
+                        bottom = FloatingNavDefaults.contentBottomPadding(),
+                    ),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                        MixHeader(sortMode = uiState.sortMode, onSortModeChange = viewModel::setSortMode)
-                    }
-
-                    val probeKeyToTarget = remember(rows, rowKeys) {
-                        rows.mapIndexedNotNull { index, row ->
-                            val track = (row as? HomeRow.Track)?.track ?: return@mapIndexedNotNull null
-                            val key = rowKeys.getOrNull(index) ?: return@mapIndexedNotNull null
-                            key to LosslessProbeTarget(
-                                title = track.name,
-                                artist = track.artist,
+                    if (uiState.isLocalStatsMode && !uiState.isViewingFriend) {
+                        item(key = "local_notice", contentType = "local_notice") {
+                            LocalStatsInlineNotice(
+                                isOfflineFallback = uiState.isLastFmConnected,
+                                onClick = if (uiState.isLastFmConnected) viewModel::refresh else onOpenSettings,
                             )
-                        }.toMap()
-                    }
-                    ObserveVisibleLosslessProbes(listState = listState, keyToTarget = probeKeyToTarget)
-
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(
-                            start = 8.dp,
-                            end = 8.dp,
-                            top = 0.dp,
-                            bottom = FloatingNavDefaults.contentBottomPadding(),
-                        ),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        itemsIndexed(
-                            rows,
-                            key = { index, _ -> rowKeys.getOrNull(index) ?: index.toString() },
-                            contentType = { _, row ->
-                                when (row) {
-                                    is HomeRow.DateHeader -> "date"
-                                    is HomeRow.Track -> "track"
-                                    is HomeRow.Album -> "album"
-                                    is HomeRow.Artist -> "artist"
-                                }
-                            },
-                        ) { rowIndex, row ->
-                            Box {
-                                when (row) {
-                                    is HomeRow.DateHeader -> DateHeaderRow(row.label)
-                                    is HomeRow.Track -> TrackRow(
-                                        track = row.track,
-                                        badge = row.badge,
-                                        onClick = {
-                                            musicPlayer.playQueue(
-                                                tracks = playbackQueue,
-                                                startIndex = playbackIndexByRow.getOrElse(rowIndex) { 0 },
-                                                sourceLabel = "Home",
-                                            )
-                                        },
-                                        onLongClick = { miniTrayRowIndex = rowIndex },
-                                        onMenuClick = { menuTrack = row.track },
-                                    )
-                                    is HomeRow.Album -> AlbumRow(
-                                        album = row.album,
-                                        badge = row.badge,
-                                        onClick = {
-                                            artistAlbumNavigator.openAlbum(
-                                                title = row.album.name,
-                                                artist = row.album.artist,
-                                                browseId = "", // The room DB doesn't have browseId for HomeAlbum easily accessible here unless we added it, but HomeAlbum has no browseId field. It will search.
-                                            )
-                                        }
-                                    )
-                                    is HomeRow.Artist -> ArtistRow(
-                                        artist = row.artist,
-                                        badge = row.badge,
-                                        onClick = {
-                                            artistAlbumNavigator.openArtist(
-                                                name = row.artist.name,
-                                                browseId = "", // Will search by name
-                                            )
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        if (rows.isEmpty()) {
-                            item(key = "empty", contentType = "empty") {
-                                Box(
-                                    Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(stringResource(R.string.home_no_tracks), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
                         }
                     }
 
-                    miniTrayRowIndex?.let { trayIndex ->
-                        (rows.getOrNull(trayIndex) as? HomeRow.Track)?.let { trayRow ->
-                            TrackMiniTraySheet(
-                                data = TrackMiniTrayData(
-                                    title = trayRow.track.name,
-                                    artist = trayRow.track.artist,
-                                    artworkUrl = trayRow.track.artworkUrl,
-                                    sourceLabel = "Home",
-                                    onPlay = {
+                    uiState.stats?.let { stats ->
+                        item(key = "telemetry_metrics", contentType = "telemetry_metrics") {
+                            TelemetryMetricGrid(
+                                scrobbles = stats.scrobbles,
+                                trackCount = stats.trackCount,
+                                artistCount = stats.artistCount,
+                                albumCount = stats.albumCount,
+                                headlineLabel = if (uiState.isLocalStatsMode && !uiState.isViewingFriend) "Plays" else "Scrobbles",
+                                onSelectTracks = { viewModel.setSortMode(HomeSortMode.MOST_PLAYED) },
+                                onSelectArtists = { viewModel.setSortMode(HomeSortMode.TOP_ARTISTS) },
+                                onSelectAlbums = { viewModel.setSortMode(HomeSortMode.TOP_ALBUMS) },
+                            )
+                        }
+                    }
+
+                    item(key = "telemetry_genres", contentType = "telemetry_genres") {
+                        TelemetryGenreRow(
+                            tags = uiState.topTags,
+                            onOpenGenres = onOpenGenres,
+                        )
+                    }
+
+                    item(key = "telemetry_activity", contentType = "telemetry_activity") {
+                        TelemetryActivityChart(bins = uiState.dailyActivity7d)
+                    }
+
+                    item(key = "telemetry_tabs", contentType = "telemetry_tabs") {
+                        TelemetryTabStrip(
+                            sortMode = uiState.sortMode,
+                            onSortModeChange = viewModel::setSortMode,
+                        )
+                    }
+
+                    itemsIndexed(
+                        rows,
+                        key = { index, _ -> rowKeys.getOrNull(index) ?: index.toString() },
+                        contentType = { _, row ->
+                            when (row) {
+                                is HomeRow.DateHeader -> "date"
+                                is HomeRow.Track -> "track"
+                                is HomeRow.Album -> "album"
+                                is HomeRow.Artist -> "artist"
+                            }
+                        },
+                    ) { rowIndex, row ->
+                        val rank = rankByRow.getOrNull(rowIndex)?.takeIf { it > 0 }
+                        val showDivider = rowIndex < rows.lastIndex && rows[rowIndex + 1] !is HomeRow.DateHeader
+                        Box {
+                            when (row) {
+                                is HomeRow.DateHeader -> DateHeaderRow(row.label)
+                                is HomeRow.Track -> TrackRow(
+                                    track = row.track,
+                                    badge = row.badge,
+                                    rank = rank,
+                                    showDivider = showDivider,
+                                    onClick = {
                                         musicPlayer.playQueue(
                                             tracks = playbackQueue,
-                                            startIndex = playbackIndexByRow.getOrElse(trayIndex) { 0 },
+                                            startIndex = playbackIndexByRow.getOrElse(rowIndex) { 0 },
                                             sourceLabel = "Home",
                                         )
                                     },
-                                ),
-                                onDismiss = { miniTrayRowIndex = null },
-                            )
+                                    onLongClick = { miniTrayRowIndex = rowIndex },
+                                    onMenuClick = { menuTrack = row.track },
+                                )
+                                is HomeRow.Album -> AlbumRow(
+                                    album = row.album,
+                                    badge = row.badge,
+                                    rank = rank,
+                                    showDivider = showDivider,
+                                    onClick = {
+                                        artistAlbumNavigator.openAlbum(
+                                            title = row.album.name,
+                                            artist = row.album.artist,
+                                            browseId = "",
+                                        )
+                                    },
+                                )
+                                is HomeRow.Artist -> ArtistRow(
+                                    artist = row.artist,
+                                    badge = row.badge,
+                                    rank = rank,
+                                    showDivider = showDivider,
+                                    onClick = {
+                                        artistAlbumNavigator.openArtist(
+                                            name = row.artist.name,
+                                            browseId = "",
+                                        )
+                                    },
+                                )
+                            }
                         }
+                    }
+
+                    if (rows.isEmpty()) {
+                        item(key = "empty", contentType = "empty") {
+                            Box(
+                                Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(stringResource(R.string.home_no_tracks), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+
+                miniTrayRowIndex?.let { trayIndex ->
+                    (rows.getOrNull(trayIndex) as? HomeRow.Track)?.let { trayRow ->
+                        TrackMiniTraySheet(
+                            data = TrackMiniTrayData(
+                                title = trayRow.track.name,
+                                artist = trayRow.track.artist,
+                                artworkUrl = trayRow.track.artworkUrl,
+                                sourceLabel = "Home",
+                                onPlay = {
+                                    musicPlayer.playQueue(
+                                        tracks = playbackQueue,
+                                        startIndex = playbackIndexByRow.getOrElse(trayIndex) { 0 },
+                                        sourceLabel = "Home",
+                                    )
+                                },
+                            ),
+                            onDismiss = { miniTrayRowIndex = null },
+                        )
                     }
                 }
             }
         }
-    }
     }
 
     menuTrack?.let { track ->

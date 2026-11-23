@@ -70,7 +70,6 @@ import java.util.Date
 
 private val cacheLimitOptions = listOf(128, 192, 256, 320, 512, 768, 1024, 1536, 2048, 3072, 4000)
 private val storageCardShape = RoundedCornerShape(28.dp)
-private val storageIconShape = RoundedCornerShape(14.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -391,12 +390,7 @@ private fun StorageIconBadge(
     container: Color,
     tint: Color,
 ) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .background(container, storageIconShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+    SettingsIconMedallion(accent = tint, size = 42.dp, cornerRadius = 12.dp) { resolvedTint ->
+        Icon(icon, contentDescription = null, tint = resolvedTint, modifier = Modifier.size(21.dp))
     }
 }

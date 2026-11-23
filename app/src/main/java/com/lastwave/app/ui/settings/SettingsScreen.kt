@@ -683,21 +683,20 @@ fun SettingsScreen(
                         }
                         // Dashboard tiles instead of the inherited sectioned list: each area at a glance.
                         item {
+                            val roleColors = SettingsMedallionColors.current()
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     SettingsTile(
-                                        icon = Icons.Filled.GraphicEq,
-                                        container = MaterialTheme.colorScheme.primaryContainer,
-                                        content = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        glyph = SettingsDuotoneGlyph.AUDIO_WAVEFORM,
+                                        accent = roleColors.audio,
                                         title = stringResource(R.string.set_cat_audio),
                                         subtitle = streamingQualityLabel(misc.wifiStreamingQuality),
                                         onClick = { activeTab = SettingsTab.AUDIO },
                                         modifier = Modifier.weight(1f),
                                     )
                                     SettingsTile(
-                                        icon = Icons.Filled.Palette,
-                                        container = MaterialTheme.colorScheme.tertiaryContainer,
-                                        content = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        glyph = SettingsDuotoneGlyph.APPEARANCE_PRISM,
+                                        accent = roleColors.appearance,
                                         title = stringResource(R.string.set_cat_appear),
                                         subtitle = stringResource(R.string.set_cat_appear_sub),
                                         onClick = { activeTab = SettingsTab.APPEARANCE },
@@ -706,38 +705,37 @@ fun SettingsScreen(
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     SettingsTile(
-                                        icon = Icons.Filled.CloudSync,
-                                        container = MaterialTheme.colorScheme.errorContainer,
-                                        content = MaterialTheme.colorScheme.onErrorContainer,
+                                        glyph = SettingsDuotoneGlyph.YOUTUBE_BRAND,
+                                        accent = roleColors.youtube,
                                         title = stringResource(R.string.set_cat_yt),
                                         subtitle = if (ytConnection.isConnected) "Connected" else "Not connected",
+                                        statusDotColor = if (ytConnection.isConnected) roleColors.statusConnected else null,
                                         onClick = { activeTab = SettingsTab.YOUTUBE },
                                         modifier = Modifier.weight(1f),
                                     )
                                     SettingsTile(
-                                        icon = Icons.Filled.PlayCircle,
-                                        container = MaterialTheme.colorScheme.tertiaryContainer,
-                                        content = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        glyph = SettingsDuotoneGlyph.SPOTIFY_BRAND,
+                                        accent = roleColors.spotify,
                                         title = stringResource(R.string.set_cat_spotify),
                                         subtitle = if (spotifyConnected) "Connected" else "Not connected",
+                                        statusDotColor = if (spotifyConnected) roleColors.statusConnected else null,
                                         onClick = { activeTab = SettingsTab.SPOTIFY },
                                         modifier = Modifier.weight(1f),
                                     )
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     SettingsTile(
-                                        icon = Icons.Filled.Album,
-                                        container = MaterialTheme.colorScheme.primaryContainer,
-                                        content = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        glyph = SettingsDuotoneGlyph.LASTFM_BRAND,
+                                        accent = roleColors.lastFm,
                                         title = stringResource(R.string.set_cat_lfm),
                                         subtitle = if (isLastFmConnected) "Scrobbling" else "Not connected",
+                                        statusDotColor = if (isLastFmConnected) roleColors.statusConnected else null,
                                         onClick = { activeTab = SettingsTab.LAST_FM },
                                         modifier = Modifier.weight(1f),
                                     )
                                     SettingsTile(
-                                        icon = Icons.Filled.QueueMusic,
-                                        container = MaterialTheme.colorScheme.secondaryContainer,
-                                        content = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        glyph = SettingsDuotoneGlyph.LIBRARY_VINYL,
+                                        accent = roleColors.library,
                                         title = stringResource(R.string.set_cat_lib),
                                         subtitle = if (downloadCount > 0) "$downloadCount downloaded" else "Downloads • Imports",
                                         onClick = { activeTab = SettingsTab.LIBRARY },
@@ -746,9 +744,8 @@ fun SettingsScreen(
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     SettingsTile(
-                                        icon = Icons.Filled.Extension,
-                                        container = MaterialTheme.colorScheme.secondaryContainer,
-                                        content = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        glyph = SettingsDuotoneGlyph.MODULES_HEX,
+                                        accent = roleColors.modules,
                                         title = stringResource(R.string.settings_modules_title),
                                         subtitle = stringResource(R.string.settings_modules_sub),
                                         onClick = onOpenModules,
@@ -756,9 +753,8 @@ fun SettingsScreen(
                                         isHighlighted = highlightedSettingId == "services.modules" || highlightedSettingId == "library.modules",
                                     )
                                     SettingsTile(
-                                        icon = Icons.Filled.Backup,
-                                        container = MaterialTheme.colorScheme.secondaryContainer,
-                                        content = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        glyph = SettingsDuotoneGlyph.DATA_VAULT,
+                                        accent = roleColors.data,
                                         title = stringResource(R.string.set_cat_data),
                                         subtitle = stringResource(R.string.set_cat_data_sub),
                                         onClick = { activeTab = SettingsTab.DATA_BACKUP },
@@ -768,6 +764,7 @@ fun SettingsScreen(
                             }
                         }
                         item {
+                            val aboutAccent = SettingsMedallionColors.current().about
                             SettingsGroup(rowCount = 1) { _, position ->
                                 SettingsActionCard(
                                     icon = Icons.Filled.Info,
@@ -777,6 +774,8 @@ fun SettingsScreen(
                                     subtitle = if (updateInfo.isUpdateAvailable) "Update Available (${updateInfo.latestVersion}) \u2022 v${appVersionName(context)}" else "v${appVersionName(context)} \u2022 Language, Community",
                                     onClick = { activeTab = SettingsTab.ABOUT },
                                     position = position,
+                                    duotoneGlyph = SettingsDuotoneGlyph.CLAUDEWAVES_CREST,
+                                    medallionAccent = aboutAccent,
                                 )
                             }
                         }
@@ -800,6 +799,7 @@ fun SettingsScreen(
                     }
 
                     val isIgnored = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)
+                    val audioRoleColors = SettingsMedallionColors.current()
                     val audioRows = buildList<@Composable (GroupPosition) -> Unit> {
                         add { position ->
                             SettingsActionCard(
@@ -814,6 +814,8 @@ fun SettingsScreen(
                                 },
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "audio.streaming_quality" || highlightedSettingId == "audio.wifi_streaming_quality"),
+                                duotoneGlyph = SettingsDuotoneGlyph.WIFI_HIRES,
+                                medallionAccent = audioRoleColors.audio,
                             )
                         }
                         add { position ->
@@ -829,6 +831,8 @@ fun SettingsScreen(
                                 },
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "audio.cellular_streaming_quality"),
+                                duotoneGlyph = SettingsDuotoneGlyph.CELLULAR_BARS,
+                                medallionAccent = audioRoleColors.modules,
                             )
                         }
                         add { position ->
@@ -842,6 +846,8 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setQualityFollowsOutput,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "audio.quality_follows_output"),
+                                duotoneGlyph = SettingsDuotoneGlyph.HEADPHONES_WAVE,
+                                medallionAccent = audioRoleColors.appearance,
                             )
                         }
                         add { position ->
@@ -854,6 +860,8 @@ fun SettingsScreen(
                                 onClick = { showDownloadQualityDialog = true },
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "audio.download_quality"),
+                                duotoneGlyph = SettingsDuotoneGlyph.DOWNLOAD_TRAY,
+                                medallionAccent = audioRoleColors.spotify,
                             )
                         }
                         add { position ->
@@ -995,6 +1003,8 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setCrossfadeEnabled,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "audio.crossfade"),
+                                duotoneGlyph = SettingsDuotoneGlyph.CROSSFADE_WAVE,
+                                medallionAccent = audioRoleColors.appearance,
                             )
                         }
                         if (misc.crossfadeEnabled) {
@@ -1117,6 +1127,7 @@ fun SettingsScreen(
                         LoudnessMode.ALBUM -> "Album \u2022 Keep intentional album dynamics"
                         else -> "Off \u2022 Play tagged tracks at original level"
                     }
+                    val outputRoleColors = SettingsMedallionColors.current()
                     SettingsGroup(rowCount = 9) { index, position ->
                         when (index) {
                             0 -> SettingsToggleCard(
@@ -1135,6 +1146,8 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setUsbExclusiveEnabled,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "audio.usb_exclusive"),
+                                duotoneGlyph = SettingsDuotoneGlyph.USB_DAC_WAVE,
+                                medallionAccent = outputRoleColors.modules,
                             )
                             1 -> {
                                 // Probe what this output accepts only once the row is on screen.
@@ -1203,6 +1216,8 @@ fun SettingsScreen(
                                 onClick = { showEqSheet = true },
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "audio.equalizer"),
+                                duotoneGlyph = SettingsDuotoneGlyph.EQ_FADERS,
+                                medallionAccent = outputRoleColors.library,
                             )
                             5 -> SettingsToggleCard(
                                 icon = Icons.Filled.VolumeUp,

@@ -1,155 +1,62 @@
 package com.lastwave.app.ui.home
 
-import androidx.compose.foundation.border
-import com.lastwave.app.ui.common.TrackSubtitleWithBadge
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringResource
-import com.lastwave.app.R
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material3.DropdownMenu
-import com.lastwave.app.ui.comic.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import com.lastwave.app.ui.comic.IconButton
-import androidx.compose.material3.MaterialTheme
-import com.lastwave.app.ui.comic.Surface
-import androidx.compose.material3.Text
-import com.lastwave.app.ui.comic.TextButton
-import com.lastwave.app.playback.toPlayableTrack
-import com.lastwave.app.ui.comic.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.ui.text.style.TextOverflow
-import com.lastwave.app.ui.common.ArtworkImage
-import com.lastwave.app.ui.common.ExpressiveHeader
-import com.lastwave.app.ui.common.HeaderActionIcon
-import com.lastwave.app.ui.common.safeHorizontalContentPadding
-import com.lastwave.app.ui.common.adaptiveContentWidth
-import com.lastwave.app.ui.common.TrackContextMenuSheet
-import com.lastwave.app.ui.common.TrackMenuCapabilities
-import com.lastwave.app.ui.common.TrackMenuTarget
-import com.lastwave.app.ui.common.TrackMiniTrayData
-import com.lastwave.app.ui.common.TrackMiniTraySheet
-import com.lastwave.app.ui.theme.ArtworkShape
-import com.lastwave.app.ui.theme.BadgePillShape
-import com.lastwave.app.ui.theme.ExpressiveHeroShape
-import com.lastwave.app.ui.theme.ExpressivePillShape
-import com.lastwave.app.ui.theme.HeroInnerShape
-import com.lastwave.app.ui.theme.ListContainerShape
-import com.lastwave.app.ui.theme.NowPlayingCardShape
-import com.lastwave.app.ui.theme.StatPillShape
-import com.lastwave.app.ui.theme.TrackRowShape
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.Scaffold
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.AutoAwesome
-import com.lastwave.app.ui.comic.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.State
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import com.lastwave.app.ui.common.LocalAmbientAnimationsActive
 import androidx.compose.ui.Alignment
-
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.draw.clip as uiClip
-import com.lastwave.app.ui.comic.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import com.lastwave.app.ui.shell.FloatingNavDefaults
-import coil.compose.SubcomposeAsyncImage
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.lastwave.app.data.repository.HomeAlbum
 import com.lastwave.app.data.repository.HomeArtistItem
-import com.lastwave.app.data.repository.HomeSortMode
 import com.lastwave.app.data.repository.HomeTrack
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
+import com.lastwave.app.ui.comic.clip
+import com.lastwave.app.ui.common.ArtworkImage
+import com.lastwave.app.ui.common.LocalAmbientAnimationsActive
+import com.lastwave.app.ui.common.TrackSubtitleWithBadge
+import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import com.lastwave.app.ui.theme.comicPanel
 
-// Immutable shapes hoisted out of composition: previously each of these was
-// constructed inline inside row/card composables, i.e. re-allocated for every
-// row on every recomposition. Rows are the hottest path while scrolling, so
-// they must not allocate.
+private val TelemetryArtShape = RoundedCornerShape(10.dp)
+private val TelemetryNowPlayingShape = RoundedCornerShape(14.dp)
 
 @Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -159,23 +66,28 @@ internal fun TrackRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onMenuClick: () -> Unit,
+    rank: Int? = null,
+    showDivider: Boolean = true,
 ) {
     val isNowPlaying = track.isNowPlaying
-    val secondaryTextColor =
-        if (isNowPlaying) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-        else MaterialTheme.colorScheme.onSurfaceVariant
-    val cardModifier = if (isNowPlaying) {
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    val secondaryTextColor = if (isNowPlaying) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val rowBase = if (isNowPlaying) {
         Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .uiClip(NowPlayingCardShape)
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.70f),
-                        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-                    ),
-                ),
+            .comicPanel(TelemetryNowPlayingShape, offset = 2.dp)
+            .uiClip(TelemetryNowPlayingShape)
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isDark) 0.24f else 0.42f))
+            .then(
+                if (isComic) Modifier
+                else Modifier.border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), TelemetryNowPlayingShape),
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     } else {
@@ -184,23 +96,28 @@ internal fun TrackRow(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     }
 
-    Surface(
-        shape = if (isNowPlaying) NowPlayingCardShape else TrackRowShape,
-        color = Color.Transparent,
-        tonalElevation = if (isNowPlaying) 2.dp else 0.dp,
-        modifier = cardModifier,
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 64.dp)
-                .padding(vertical = 6.dp, horizontal = 8.dp),
+            modifier = rowBase
+                .heightIn(min = 60.dp)
+                .padding(vertical = 8.dp, horizontal = if (isNowPlaying) 10.dp else 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (rank != null && !isNowPlaying) {
+                Text(
+                    text = rank.toString(),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(26.dp),
+                )
+            }
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(ArtworkShape)
+                    .size(44.dp)
+                    .clip(TelemetryArtShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 ArtworkImage(
@@ -212,16 +129,17 @@ internal fun TrackRow(
                 )
                 if (isNowPlaying) {
                     com.lastwave.app.ui.player.PlayingWaveBars(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(24.dp, 18.dp),
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(20.dp, 16.dp),
                     )
                 }
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     track.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -232,29 +150,18 @@ internal fun TrackRow(
                         subtitle = displayArtist,
                         title = track.name,
                         artist = track.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = secondaryTextColor,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isNowPlaying) MaterialTheme.colorScheme.onSurfaceVariant else secondaryTextColor,
                     )
                 }
             }
-            Spacer(Modifier.width(8.dp))
             if (isNowPlaying) {
+                Spacer(Modifier.width(8.dp))
                 val active = LocalAmbientAnimationsActive.current
-                val pulseScale: State<Float>
-                val dotAlpha: State<Float>
-                if (active) {
+                val dotAlpha: State<Float> = if (active) {
                     val infiniteTransition = rememberInfiniteTransition(label = "nowPlayingPulse")
-                    pulseScale = infiniteTransition.animateFloat(
-                        initialValue = 1.0f,
-                        targetValue = 1.06f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1200, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse,
-                        ),
-                        label = "pulseScale",
-                    )
-                    dotAlpha = infiniteTransition.animateFloat(
-                        initialValue = 0.45f,
+                    infiniteTransition.animateFloat(
+                        initialValue = 0.4f,
                         targetValue = 1f,
                         animationSpec = infiniteRepeatable(
                             animation = tween(800, easing = LinearEasing),
@@ -263,211 +170,87 @@ internal fun TrackRow(
                         label = "dotAlpha",
                     )
                 } else {
-                    pulseScale = remember { mutableFloatStateOf(1f) }
-                    dotAlpha = remember { mutableFloatStateOf(1f) }
+                    remember { mutableFloatStateOf(1f) }
                 }
-                Surface(
-                    shape = BadgePillShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    tonalElevation = 4.dp,
-                    shadowElevation = 2.dp,
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = pulseScale.value
-                        scaleY = pulseScale.value
-                    },
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .graphicsLayer { alpha = dotAlpha.value }
-                                .background(MaterialTheme.colorScheme.onPrimary, CircleShape),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "Now Playing",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                }
-            }
-            if (badge != null) {
-                Surface(shape = BadgePillShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .graphicsLayer { alpha = dotAlpha.value }
+                            .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    )
                     Text(
-                        badge,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        text = "LIVE",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
+            } else if (badge != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
             }
-            // Home-only per item 7: a small filled tonal container around
-            // the overflow trigger. This composable is private to
-            // HomeScreen.kt, so this doesn't touch the three-dot button on
-            // Item 1 (consistency pass): the same OverflowMenuButton is now
-            // used on every screen's song list, not just Home.
             com.lastwave.app.ui.common.OverflowMenuButton(onClick = onMenuClick)
         }
-    }
-}
-
-@Composable
-internal fun HomeNowPlayingBanner(
-    track: HomeTrack,
-    onPlay: () -> Unit,
-    onStartMix: () -> Unit,
-    onMenuClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = NowPlayingCardShape,
-        color = Color.Transparent,
-        tonalElevation = 2.dp,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .uiClip(NowPlayingCardShape)
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
-                        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f),
-                    ),
-                ),
-            ),
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Surface(
-                    shape = BadgePillShape,
-                    color = MaterialTheme.colorScheme.primary,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        com.lastwave.app.ui.player.PlayingWaveBars(
-                            modifier = Modifier.size(14.dp, 12.dp),
-                            waveColor = MaterialTheme.colorScheme.onPrimary,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "NOW PLAYING",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                }
-                IconButton(onClick = onMenuClick, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Filled.MoreVert,
-                        contentDescription = stringResource(R.string.home_menu_cd),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(ArtworkShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                ) {
-                    ArtworkImage(
-                        name = track.name,
-                        artist = track.artist,
-                        embeddedUrl = track.artworkUrl,
-                        fallbackIcon = Icons.Filled.GraphicEq,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = track.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    TrackSubtitleWithBadge(
-                        subtitle = track.artist,
-                        title = track.name,
-                        artist = track.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = onPlay,
-                    modifier = Modifier.weight(1f).height(38.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    shape = BadgePillShape,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.home_play), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                }
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onStartMix,
-                    modifier = Modifier.weight(1f).height(38.dp),
-                    shape = BadgePillShape,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                ) {
-                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.home_mix), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                }
-            }
+        if (showDivider && !isNowPlaying) {
+            HorizontalDivider(
+                thickness = if (isComic) 1.dp else 0.5.dp,
+                color = if (isComic) {
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.25f else 0.42f)
+                },
+            )
         }
     }
 }
 
 @Composable
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 internal fun AlbumRow(
     album: HomeAlbum,
     badge: String?,
     onClick: () -> Unit,
+    rank: Int? = null,
+    showDivider: Boolean = true,
 ) {
-    Surface(
-        shape = TrackRowShape,
-        color = Color.Transparent,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
-    ) {
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(vertical = 6.dp, horizontal = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 60.dp)
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp, horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (rank != null) {
+                Text(
+                    text = rank.toString(),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(26.dp),
+                )
+            }
             Box(
-                modifier = Modifier.size(52.dp).clip(ArtworkShape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(TelemetryArtShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 ArtworkImage(
                     name = album.name,
@@ -477,11 +260,11 @@ internal fun AlbumRow(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     album.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -491,35 +274,74 @@ internal fun AlbumRow(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         displayArtist,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
+            if (badge != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            }
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                thickness = if (isComic) 1.dp else 0.5.dp,
+                color = if (isComic) {
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.25f else 0.42f)
+                },
+            )
         }
     }
 }
 
 @Composable
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 internal fun ArtistRow(
     artist: HomeArtistItem,
     badge: String?,
     onClick: () -> Unit,
+    rank: Int? = null,
+    showDivider: Boolean = true,
 ) {
-    Surface(
-        shape = TrackRowShape,
-        color = Color.Transparent,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
-    ) {
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(vertical = 6.dp, horizontal = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 60.dp)
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp, horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (rank != null) {
+                Text(
+                    text = rank.toString(),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(26.dp),
+                )
+            }
             Box(
-                modifier = Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 ArtworkImage(
                     name = "artist:${artist.name}",
@@ -529,16 +351,37 @@ internal fun ArtistRow(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
+            Spacer(Modifier.width(12.dp))
+            Text(
+                artist.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (badge != null) {
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    artist.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    text = badge,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 6.dp),
                 )
             }
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                thickness = if (isComic) 1.dp else 0.5.dp,
+                color = if (isComic) {
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.25f else 0.42f)
+                },
+            )
         }
     }
 }

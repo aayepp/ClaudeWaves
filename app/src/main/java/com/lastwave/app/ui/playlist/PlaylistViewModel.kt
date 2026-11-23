@@ -103,10 +103,15 @@ class PlaylistViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlaylistUiState())
     val uiState: StateFlow<PlaylistUiState> = _uiState.asStateFlow()
 
+    /** Songs saved for offline, exposed directly for Library's Offline segment and Downloads vault count. */
+    val downloadedTracks: StateFlow<List<com.lastwave.app.data.local.db.DownloadedTrackEntity>> =
+        trackDownloadManager.downloadedTrackDao.getAll()
+            .catch { emit(emptyList()) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /** Songs saved for offline, for Library's Downloads card. */
-    val downloadedCount: StateFlow<Int> = trackDownloadManager.downloadedTrackDao.getAll()
+    val downloadedCount: StateFlow<Int> = downloadedTracks
         .map { it.size }
-        .catch { emit(0) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     fun openDownloads() {

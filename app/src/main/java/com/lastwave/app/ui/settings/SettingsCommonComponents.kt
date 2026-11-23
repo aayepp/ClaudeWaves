@@ -4,7 +4,11 @@ import com.lastwave.app.ui.comic.clipOnly
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.draw.drawBehind
+import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
 import com.lastwave.app.ui.theme.comicPanel
+import com.lastwave.app.ui.theme.glassCardBorder
+import com.lastwave.app.ui.theme.glassCardColor
 import com.lastwave.app.ui.theme.isDeviceGlassCapable
 import com.lastwave.app.ui.theme.liquidGlass
 import com.lastwave.app.ui.theme.liquidGlassSource
@@ -284,7 +288,7 @@ val LocalToggleDetailViewer = staticCompositionLocalOf<((ToggleDetailInfo) -> Un
 // -- Expressive shape scale used only within this screen --
 internal val CardOuterShape = RoundedCornerShape(28.dp)
 // iOS-style icon tile: a small rounded square rather than a pill.
-internal val IconBadgeShape = RoundedCornerShape(9.dp)
+internal val IconBadgeShape = RoundedCornerShape(11.dp)
 
 /** Where a row sits within a visually-connected group of settings rows —
  *  drives per-row corner radii so a multi-row group reads as one premium
@@ -359,27 +363,15 @@ internal fun SectionLabel(text: String) {
 
 @Composable
 internal fun IconBadge(icon: ImageVector, container: Color, tint: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(36.dp)
-            .clip(IconBadgeShape)
-            .background(container),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+    SettingsIconMedallion(accent = tint, modifier = modifier) { resolvedTint ->
+        Icon(icon, contentDescription = null, tint = resolvedTint, modifier = Modifier.size(20.dp))
     }
 }
 
 @Composable
 internal fun IconBadge(painter: Painter, container: Color, tint: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(36.dp)
-            .clip(IconBadgeShape)
-            .background(container),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(painter, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+    SettingsIconMedallion(accent = tint, modifier = modifier) { resolvedTint ->
+        Icon(painter, contentDescription = null, tint = resolvedTint, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -492,6 +484,8 @@ internal fun SettingsToggleCard(
     position: GroupPosition = GroupPosition.SINGLE,
     enabled: Boolean = true,
     isHighlighted: Boolean = false,
+    duotoneGlyph: SettingsDuotoneGlyph? = null,
+    medallionAccent: Color? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberPressScale(interactionSource)
@@ -535,11 +529,20 @@ internal fun SettingsToggleCard(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconBadge(
-                icon,
-                if (enabled) iconContainer else iconContainer.copy(alpha = 0.5f),
-                if (enabled) iconTint else iconTint.copy(alpha = 0.5f),
-            )
+            if (duotoneGlyph != null) {
+                val baseAccent = medallionAccent ?: iconTint
+                SettingsIconMedallion(
+                    accent = if (enabled) baseAccent else baseAccent.copy(alpha = 0.45f),
+                ) { resolvedTint ->
+                    SettingsDuotoneIcon(duotoneGlyph, resolvedTint, Modifier.size(20.dp))
+                }
+            } else {
+                IconBadge(
+                    icon,
+                    if (enabled) iconContainer else iconContainer.copy(alpha = 0.5f),
+                    if (enabled) iconTint else iconTint.copy(alpha = 0.5f),
+                )
+            }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -588,6 +591,8 @@ internal fun SettingsActionCard(
     onClick: () -> Unit,
     position: GroupPosition = GroupPosition.SINGLE,
     isHighlighted: Boolean = false,
+    duotoneGlyph: SettingsDuotoneGlyph? = null,
+    medallionAccent: Color? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberPressScale(interactionSource)
@@ -614,7 +619,13 @@ internal fun SettingsActionCard(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconBadge(icon, iconContainer, iconTint)
+            if (duotoneGlyph != null) {
+                SettingsIconMedallion(accent = medallionAccent ?: iconTint) { resolvedTint ->
+                    SettingsDuotoneIcon(duotoneGlyph, resolvedTint, Modifier.size(20.dp))
+                }
+            } else {
+                IconBadge(icon, iconContainer, iconTint)
+            }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = titleColor, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -750,33 +761,84 @@ private fun LiquidGlassLivePreview(modifier: Modifier = Modifier) {
 
 private val SettingsTileShape = RoundedCornerShape(20.dp)
 
-/** One area of Settings on the landing grid: a large icon over its name and a one-line status. */
+/** One area of Settings on the landing grid: frosted hairline tile + duotone medallion. */
 @Composable
 internal fun SettingsTile(
-    icon: ImageVector,
-    container: Color,
-    content: Color,
+    glyph: SettingsDuotoneGlyph,
+    accent: Color,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    statusDotColor: Color? = null,
     isHighlighted: Boolean = false,
 ) {
-    Column(
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val scale = rememberPressScale(interactionSource)
+    val tileSurface = when {
+        isComic -> MaterialTheme.colorScheme.surface
+        isDark -> glassCardColor(MaterialTheme.colorScheme.surfaceContainerHigh)
+        else -> glassCardColor(MaterialTheme.colorScheme.surface)
+    }
+    val tileBorder = when {
+        isComic -> null
+        else -> glassCardBorder() ?: BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.42f else 0.55f),
+        )
+    }
+
+    Row(
         modifier
-            .height(104.dp)
+            .heightIn(min = 96.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .settingHighlightGlow(isHighlighted = isHighlighted, shape = SettingsTileShape)
-            .comicPanel(SettingsTileShape)
-            .clip(SettingsTileShape)
-            .background(container)
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+            .comicPanel(SettingsTileShape, offset = 3.dp)
+            .then(if (tileBorder != null) Modifier.border(tileBorder, SettingsTileShape) else Modifier)
+            .clipOnly(SettingsTileShape)
+            .background(tileSurface)
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(26.dp))
-        Column {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = content.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        SettingsIconMedallion(accent = accent, size = 38.dp, cornerRadius = 11.dp) { tint ->
+            SettingsDuotoneIcon(glyph = glyph, tint = tint, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                if (statusDotColor != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clipOnly(CircleShape)
+                            .background(statusDotColor),
+                    )
+                }
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

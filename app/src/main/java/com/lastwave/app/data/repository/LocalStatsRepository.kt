@@ -1,6 +1,7 @@
 package com.lastwave.app.data.repository
 
 import com.lastwave.app.data.local.db.DownloadedTrackDao
+import com.lastwave.app.data.local.db.SongPlayStatsDao
 import com.lastwave.app.data.playlist.PlaylistRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,18 +22,21 @@ import javax.inject.Singleton
 class LocalStatsRepository @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val downloadedTrackDao: DownloadedTrackDao,
+    private val songPlayStatsDao: SongPlayStatsDao,
 ) {
     data class LocalStats(
         val stats: HomeStats,
         val topTracks: List<HomeTrack>,
         val topArtists: List<HomeArtistItem>,
         val topAlbums: List<HomeAlbum>,
+        val recentPlays: List<HomeTrack> = emptyList(),
     )
 
     suspend fun load(): LocalStats {
         val playlists = runCatching { playlistRepository.getAll() }.getOrDefault(emptyList())
         val liked = runCatching { playlistRepository.getLikedSongs()?.tracks.orEmpty() }.getOrDefault(emptyList())
         val downloaded = runCatching { downloadedTrackDao.getAllList() }.getOrDefault(emptyList())
+        val recentEntities = runCatching { songPlayStatsDao.recentlyPlayed(limit = 200) }.getOrDefault(emptyList())
 
         val allTracks = (playlists.flatMap { it.tracks } + liked)
             .filter { it.name.isNotBlank() && it.artist.isNotBlank() && !com.lastwave.app.util.ArtistHelper.isPlayCountOrStat(it.artist) }
@@ -109,6 +113,20 @@ class LocalStatsRepository @Inject constructor(
                 )
             }
 
+        val recentPlays = recentEntities.mapNotNull { e ->
+            if (e.title.isBlank() || e.artist.isBlank() || e.lastPlayedAtMillis <= 0L ||
+                com.lastwave.app.util.ArtistHelper.isPlayCountOrStat(e.artist)
+            ) return@mapNotNull null
+            HomeTrack(
+                name = e.title,
+                artist = e.artist,
+                artworkUrl = e.artworkUrl,
+                timestampMillis = e.lastPlayedAtMillis,
+                playCount = e.playCount.coerceAtLeast(1),
+                videoId = e.videoId,
+            )
+        }
+
         return LocalStats(
             stats = HomeStats(
                 scrobbles = scrobbles,
@@ -120,6 +138,7 @@ class LocalStatsRepository @Inject constructor(
             topTracks = topTracks,
             topArtists = topArtists,
             topAlbums = topAlbums,
+            recentPlays = recentPlays,
         )
     }
 }

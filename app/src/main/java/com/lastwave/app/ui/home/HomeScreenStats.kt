@@ -1,25 +1,13 @@
 package com.lastwave.app.ui.home
 
-import androidx.compose.foundation.border
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,292 +15,174 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringResource
-import com.lastwave.app.R
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material3.DropdownMenu
-import com.lastwave.app.ui.comic.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import com.lastwave.app.ui.comic.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.lastwave.app.ui.comic.Surface
 import androidx.compose.material3.Text
-import com.lastwave.app.ui.comic.TextButton
-import com.lastwave.app.playback.toPlayableTrack
-import com.lastwave.app.ui.comic.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.ui.text.style.TextOverflow
-import com.lastwave.app.ui.common.ArtworkImage
-import com.lastwave.app.ui.common.ExpressiveHeader
-import com.lastwave.app.ui.common.HeaderActionIcon
-import com.lastwave.app.ui.common.safeHorizontalContentPadding
-import com.lastwave.app.ui.common.adaptiveContentWidth
-import com.lastwave.app.ui.common.TrackContextMenuSheet
-import com.lastwave.app.ui.common.TrackMenuCapabilities
-import com.lastwave.app.ui.common.TrackMenuTarget
-import com.lastwave.app.ui.common.TrackMiniTrayData
-import com.lastwave.app.ui.common.TrackMiniTraySheet
-import com.lastwave.app.ui.theme.ArtworkShape
-import com.lastwave.app.ui.theme.BadgePillShape
-import com.lastwave.app.ui.theme.ExpressiveHeroShape
-import com.lastwave.app.ui.theme.ExpressivePillShape
-import com.lastwave.app.ui.theme.HeroInnerShape
-import com.lastwave.app.ui.theme.ListContainerShape
-import com.lastwave.app.ui.theme.NowPlayingCardShape
-import com.lastwave.app.ui.theme.StatPillShape
-import com.lastwave.app.ui.theme.TrackRowShape
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.Scaffold
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.AutoAwesome
-import com.lastwave.app.ui.comic.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
-
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.repeatOnLifecycle
-import com.lastwave.app.ui.comic.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import com.lastwave.app.ui.shell.FloatingNavDefaults
-import coil.compose.SubcomposeAsyncImage
-import com.lastwave.app.data.repository.HomeAlbum
-import com.lastwave.app.data.repository.HomeArtistItem
-import com.lastwave.app.data.repository.HomeSortMode
-import com.lastwave.app.data.repository.HomeTrack
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
-
-// Immutable shapes hoisted out of composition: previously each of these was
-// constructed inline inside row/card composables, i.e. re-allocated for every
-// row on every recomposition. Rows are the hottest path while scrolling, so
-// they must not allocate.
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
 
 @Composable
-internal fun LocalStatsBanner(
+internal fun LocalStatsInlineNotice(
     isOfflineFallback: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = modifier.fillMaxWidth(),
-        onClick = onClick,
-    ) {
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    val hairline = if (isComic) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.36f else 0.52f)
+    }
+    Column(modifier = modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 40.dp)
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isOfflineFallback) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary,
+                        ),
+                )
+                Text(
+                    text = if (isOfflineFallback) {
+                        "Last.fm unreachable · Showing local plays"
+                    } else {
+                        "Local plays · Connect Last.fm to sync scrobbles"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = if (isOfflineFallback) "Retry" else "Settings",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        HorizontalDivider(thickness = if (isComic) 1.5.dp else 0.75.dp, color = hairline)
+    }
+}
+
+@Composable
+internal fun TelemetryMetricGrid(
+    scrobbles: Long,
+    trackCount: Long,
+    artistCount: Long,
+    albumCount: Long,
+    headlineLabel: String,
+    onSelectTracks: () -> Unit,
+    onSelectArtists: () -> Unit,
+    onSelectAlbums: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    val dividerThickness = if (isComic) 1.5.dp else 0.75.dp
+    val dividerColor = if (isComic) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.36f else 0.52f)
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalDivider(thickness = dividerThickness, color = dividerColor)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                if (isOfflineFallback) {
-                    "Last.fm unreachable \u2014 showing local plays \u00b7 Tap to retry"
-                } else {
-                    "Connect Last.fm in Settings to sync global scrobbles"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            MetricCell(
+                value = formatCount(scrobbles),
+                label = headlineLabel,
+                modifier = Modifier.weight(1f),
+            )
+            VerticalDivider(modifier = Modifier.height(34.dp), thickness = dividerThickness, color = dividerColor)
+            MetricCell(
+                value = formatCount(trackCount),
+                label = "Tracks",
+                onClick = onSelectTracks,
+                modifier = Modifier.weight(1f),
+            )
+            VerticalDivider(modifier = Modifier.height(34.dp), thickness = dividerThickness, color = dividerColor)
+            MetricCell(
+                value = formatCount(artistCount),
+                label = "Artists",
+                onClick = onSelectArtists,
+                modifier = Modifier.weight(1f),
+            )
+            VerticalDivider(modifier = Modifier.height(34.dp), thickness = dividerThickness, color = dividerColor)
+            MetricCell(
+                value = formatCount(albumCount),
+                label = "Albums",
+                onClick = onSelectAlbums,
                 modifier = Modifier.weight(1f),
             )
         }
+        HorizontalDivider(thickness = dividerThickness, color = dividerColor)
     }
 }
 
 @Composable
-internal fun PodiumSection(
-    artists: List<HomeArtistItem>,
-    albums: List<HomeAlbum>,
-    tags: List<String>,
+private fun MetricCell(
+    value: String,
+    label: String,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (artists.isNotEmpty()) {
-            PodiumSectionTitle("Top Artists")
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp),
-            ) {
-                items(artists, key = { "artist_${it.name.lowercase()}" }) { artist ->
-                    ArtistPodiumCard(artist)
-                }
-            }
-        }
-        if (albums.isNotEmpty()) {
-            PodiumSectionTitle("Top Albums")
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp),
-            ) {
-                items(albums, key = { "album_${it.artist.lowercase()}_${it.name.lowercase()}" }) { album ->
-                    AlbumPodiumCard(album)
-                }
-            }
-        }
-        if (tags.isNotEmpty()) {
-            PodiumSectionTitle("Genres")
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp),
-            ) {
-                items(tags, key = { "tag_$it" }) { tag ->
-                    Surface(
-                        shape = BadgePillShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ) {
-                        Text(
-                            tag.replaceFirstChar { c -> c.uppercase() },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun PodiumSectionTitle(label: String) {
-    Text(
-        label,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(start = 2.dp),
-    )
-}
-
-internal fun formatPlays(count: Long): String =
-    if (count >= 1000) "%.1fk plays".format(count / 1000.0) else "$count plays"
-
-@Composable
-internal fun ArtistPodiumCard(artist: HomeArtistItem) {
     Column(
-        modifier = Modifier.width(84.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .then(if (onClick != null) Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-        ) {
-            ArtworkImage(
-                name = artist.name,
-                artist = artist.name,
-                embeddedUrl = artist.artworkUrl,
-                fallbackIcon = Icons.Filled.MusicNote,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        Spacer(Modifier.height(6.dp))
         Text(
-            artist.name,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
+            text = value,
+            style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (artist.playCount > 0) {
-            Text(
-                formatPlays(artist.playCount),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun AlbumPodiumCard(album: HomeAlbum) {
-    Column(
-        modifier = Modifier.width(96.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(ArtworkShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-        ) {
-            ArtworkImage(
-                name = album.name,
-                artist = album.artist,
-                embeddedUrl = album.artworkUrl,
-                fallbackIcon = Icons.Filled.MusicNote,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
-            album.name,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            album.artist,
+            text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -322,93 +192,157 @@ internal fun AlbumPodiumCard(album: HomeAlbum) {
 }
 
 @Composable
-internal fun StatsCard(
-    scrobbles: Long,
-    trackCount: Long,
-    artistCount: Long,
-    albumCount: Long,
+internal fun TelemetryGenreRow(
+    tags: List<String>,
     onOpenGenres: () -> Unit,
     modifier: Modifier = Modifier,
-    headlineLabel: String = "Scrobbles",
 ) {
-    Surface(
-        shape = ExpressiveHeroShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
-            Surface(
-                shape = HeroInnerShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.align(Alignment.Center),
-                    ) {
-                        Text(
-                            formatCount(scrobbles),
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Text(
-                            headlineLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
-                        )
-                    }
-                    Surface(
-                        shape = ExpressivePillShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(46.dp).align(Alignment.CenterEnd),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            IconButton(onClick = onOpenGenres) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = stringResource(R.string.home_view_genres_cd),
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    val dividerColor = if (isComic) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.36f else 0.52f)
+    }
+    val summary = if (tags.isNotEmpty()) {
+        tags.take(4).joinToString(" · ") { tag -> tag.replaceFirstChar { it.uppercase() } }
+    } else {
+        "Top tags & genres"
+    }
 
-            Spacer(Modifier.height(8.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatPill("Tracks", trackCount, Modifier.weight(1f))
-                StatPill("Artists", artistCount, Modifier.weight(1f))
-                StatPill("Albums", albumCount, Modifier.weight(1f))
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .clickable(onClick = onOpenGenres)
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Genres",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open Genres",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
+        HorizontalDivider(thickness = if (isComic) 1.5.dp else 0.75.dp, color = dividerColor)
     }
 }
 
 @Composable
-internal fun StatPill(label: String, value: Long, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = StatPillShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-    ) {
-        Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                formatCount(value),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
-            )
+internal fun TelemetryActivityChart(
+    bins: List<DailyActivityBin>,
+    modifier: Modifier = Modifier,
+) {
+    val isDark = LocalIsDarkTheme.current
+    val isComic = LocalComicTheme.current
+    val displayBins = if (bins.size == 7) {
+        bins
+    } else {
+        listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").map { DailyActivityBin(it, 0, false) }
+    }
+    val maxPlays = displayBins.maxOfOrNull { it.plays }?.coerceAtLeast(1) ?: 1
+    val hasActivity = displayBins.any { it.plays > 0 }
+    val gridColor = if (isComic) {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.22f else 0.35f)
+    }
+    val mutedBarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isDark) 0.34f else 0.25f)
+    val peakBarColor = MaterialTheme.colorScheme.primary
+    val barShape = RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp)
+
+    Column(modifier = modifier.fillMaxWidth().padding(top = 12.dp, bottom = 6.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(84.dp),
+        ) {
+            Column(
+                modifier = Modifier.matchParentSize(),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                repeat(3) {
+                    HorizontalDivider(thickness = 0.6.dp, color = gridColor)
+                }
+            }
+            if (!hasActivity) {
+                Text(
+                    text = "Last 7 days",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp),
+                )
+            }
+            Row(
+                modifier = Modifier.matchParentSize().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                displayBins.forEach { bin ->
+                    val fraction = if (hasActivity && bin.plays > 0) {
+                        (bin.plays.toFloat() / maxPlays.toFloat()).coerceIn(0.14f, 1f)
+                    } else {
+                        0.06f
+                    }
+                    val fillColor = if (bin.isPeak) peakBarColor else mutedBarColor
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.76f)
+                                .fillMaxHeight(fraction)
+                                .clip(barShape)
+                                .background(fillColor)
+                                .then(
+                                    if (isComic && bin.plays > 0) {
+                                        Modifier.border(1.2.dp, MaterialTheme.colorScheme.outline, barShape)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            displayBins.forEach { bin ->
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = bin.dayLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (bin.isPeak) FontWeight.Bold else FontWeight.Normal,
+                        color = if (bin.isPeak) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

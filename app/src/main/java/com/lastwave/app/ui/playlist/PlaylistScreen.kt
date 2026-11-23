@@ -1,137 +1,134 @@
 package com.lastwave.app.ui.playlist
 
-import com.lastwave.app.ui.theme.LocalComicTheme
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import com.lastwave.app.ui.comic.FilledTonalButton
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Shuffle
-import com.lastwave.app.ui.comic.AlertDialog
-import com.lastwave.app.ui.comic.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
-import com.lastwave.app.ui.comic.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import com.lastwave.app.ui.comic.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import com.lastwave.app.ui.comic.Surface
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import com.lastwave.app.ui.comic.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.lastwave.app.ui.comic.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import com.lastwave.app.R
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lastwave.app.R
 import com.lastwave.app.data.generate.GeneratedTrack
-import com.lastwave.app.data.playlist.SavedPlaylist
 import com.lastwave.app.data.playlist.LIKED_SONGS_MODE
 import com.lastwave.app.data.playlist.LOCAL_SONGS_MODE
-import com.lastwave.app.data.playlist.isYouTubeOnly
+import com.lastwave.app.data.playlist.SavedPlaylist
+import com.lastwave.app.data.playlist.SpotifyUserPlaylist
 import com.lastwave.app.playback.toPlayableTrack
-import com.lastwave.app.ui.common.ArtworkImage
+import com.lastwave.app.ui.comic.AlertDialog
+import com.lastwave.app.ui.comic.DropdownMenuItem
+import com.lastwave.app.ui.comic.IconButton
+import com.lastwave.app.ui.comic.Surface
+import com.lastwave.app.ui.comic.TextButton
+import com.lastwave.app.ui.comic.clipOnly
+import com.lastwave.app.ui.theme.comicPanel
+import com.lastwave.app.ui.common.ConnectedButtonGroup
+import com.lastwave.app.ui.common.ConnectedButtonItem
 import com.lastwave.app.ui.common.ExpressiveHeader
+import com.lastwave.app.ui.common.GenerationProgressCard
 import com.lastwave.app.ui.common.GlassHeaderLayout
 import com.lastwave.app.ui.common.PlaylistCover
-import com.lastwave.app.ui.common.TopCurvedSectionClipShape
 import com.lastwave.app.ui.common.TrackContextMenuSheet
 import com.lastwave.app.ui.common.TrackMenuCapabilities
 import com.lastwave.app.ui.common.TrackMenuTarget
 import com.lastwave.app.ui.common.adaptiveContentWidth
+import com.lastwave.app.ui.settings.toPlayableTrack as downloadedToPlayableTrack
 import com.lastwave.app.ui.shell.FloatingNavDefaults
 import com.lastwave.app.ui.theme.ExpressivePillShape
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import com.lastwave.app.ui.theme.glassCardBorder
+import com.lastwave.app.ui.theme.glassCardColor
+
+private enum class LibrarySegment(val label: String) {
+    ALL("All"),
+    PLAYLISTS("Playlists"),
+    OFFLINE("Offline"),
+    LOCAL("Local"),
+}
+
+private sealed interface CoverGridEntry {
+    val stableKey: String
+
+    data class Spotify(val playlist: SpotifyUserPlaylist) : CoverGridEntry {
+        override val stableKey: String = "sp_${playlist.id}"
+    }
+
+    data class Room(val playlist: SavedPlaylist) : CoverGridEntry {
+        override val stableKey: String = "pl_${playlist.id}_${playlist.remotePlaylistId ?: "local"}"
+    }
+}
+
+private val GeneratorPillShape = RoundedCornerShape(50)
 
 /**
- * Faithful port of playlist.js's saved-playlists screen (§4): card list
- * backed by Room via PlaylistViewModel, expand/collapse with lazy track
- * rendering, the "just generated" regenerate bar, export bottom sheet
- * (CSV/M3U), Generate Similar, and delete — plus the shared track context
- * menu (§1.7) with Copy + Delete Scrobble enabled (this screen's full
- * capability set, matching the original's playlist.js menu exactly).
+ * Segmented Category Hub Library screen (Library 3):
+ *  1. Compact header (`Library` + Search toggle + `Generator` pill + `+` create)
+ *  2. 4-way segmented bar (`All | Playlists | Offline | Local`)
+ *  3. `All`: 2×2 Quick-Vault grid (`Liked Songs`, `Downloads`, `Local Songs`, `Smart Mix`)
+ *     + `Playlists` header with sort + frameless 3-col (4-col wide) cover wall
+ *  4. `Offline` & `Local`: inline playable track lists with links to full management screens.
  */
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistScreen(
@@ -141,10 +138,14 @@ fun PlaylistScreen(
     viewModel: PlaylistViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val downloadedTracks by viewModel.downloadedTracks.collectAsStateWithLifecycle()
+    val downloadedCount by viewModel.downloadedCount.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val musicPlayer = com.lastwave.app.ui.player.LocalMusicPlayer.current
     val playbackState by musicPlayer.listPlaybackState.collectAsStateWithLifecycle()
-    val addToPlaylist = com.lastwave.app.ui.player.LocalAddToPlaylist.current
+
+    var selectedSegment by rememberSaveable { mutableStateOf(LibrarySegment.ALL) }
+    var searchVisible by rememberSaveable { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var coverEditorPlaylistId by remember { mutableStateOf<Long?>(null) }
     var coverPickerPlaylistId by remember { mutableStateOf<Long?>(null) }
@@ -170,360 +171,516 @@ fun PlaylistScreen(
     var selectedPlaylists by remember { mutableStateOf(setOf<Long>()) }
     var showMultipleDeleteConfirm by remember { mutableStateOf(false) }
 
+    val localSongsPlaylist = remember(state.playlists) {
+        state.playlists.firstOrNull { it.mode == LOCAL_SONGS_MODE }
+    }
+    val likedRoomPlaylist = remember(state.playlists) {
+        state.playlists.firstOrNull { it.mode == LIKED_SONGS_MODE }
+    }
+    val spotifyLiked = remember(state.spotifyPlaylists, state.isSpotifySyncEnabled) {
+        if (state.isSpotifySyncEnabled) state.spotifyPlaylists.firstOrNull { it.id == "liked" } else null
+    }
+    val likedCount = maxOf(
+        likedRoomPlaylist?.let { it.remoteTrackCount ?: it.tracks.size } ?: 0,
+        spotifyLiked?.trackCount ?: 0,
+    )
+
+    val filteredPlaylists = remember(state.playlists, searchQuery) {
+        state.playlists.filter {
+            it.mode != LOCAL_SONGS_MODE && it.matchesPlaylistSearch(searchQuery)
+        }
+    }
+    val effectiveSpotify = remember(state.spotifyPlaylists, state.isSpotifySyncEnabled, searchQuery) {
+        if (!state.isSpotifySyncEnabled) emptyList()
+        else if (searchQuery.isBlank()) state.spotifyPlaylists
+        else state.spotifyPlaylists.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    }
+    val gridEntries = remember(effectiveSpotify, filteredPlaylists) {
+        effectiveSpotify.map(CoverGridEntry::Spotify) + filteredPlaylists.map(CoverGridEntry::Room)
+    }
+
+    val filteredDownloads = remember(downloadedTracks, searchQuery) {
+        if (searchQuery.isBlank()) downloadedTracks
+        else downloadedTracks.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+                it.artist.contains(searchQuery, ignoreCase = true)
+        }
+    }
+    val filteredLocalTracks = remember(localSongsPlaylist, searchQuery) {
+        val raw = localSongsPlaylist?.tracks.orEmpty()
+        if (searchQuery.isBlank()) raw
+        else raw.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+                it.artist.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        // Header (with the search row) floats over the list, which scrolls under its glass.
         GlassHeaderLayout(
             Modifier
                 .fillMaxSize()
                 .adaptiveContentWidth(maxWidth = 860.dp)
                 .align(Alignment.TopCenter),
             header = { headerModifier, headerBackdrop ->
-            var sortMenuExpanded by remember { mutableStateOf(false) }
-            ExpressiveHeader(
-                modifier = headerModifier,
-                backdrop = headerBackdrop,
-                title = if (selectedPlaylists.isNotEmpty()) stringResource(R.string.pl_selected_count, selectedPlaylists.size) else stringResource(R.string.pl_title),
-                subtitle = if (selectedPlaylists.isNotEmpty()) {
-                    stringResource(R.string.pl_select_more_hint)
+                val isDark = LocalIsDarkTheme.current
+                val isComic = LocalComicTheme.current
+                val pillSurface = when {
+                    isComic -> MaterialTheme.colorScheme.surface
+                    isDark -> glassCardColor(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    else -> glassCardColor(MaterialTheme.colorScheme.surface)
+                }
+                val pillBorder = if (isComic) {
+                    null
                 } else {
-                    val totalPlaylistsCount = state.playlists.size + (if (state.isSpotifySyncEnabled) state.spotifyPlaylists.size else 0)
-                    // A playlist whose remote count is still unknown adds 0 rather than hiding the whole total.
-                    val totalTracks = state.playlists.sumOf { it.remoteTrackCount ?: it.tracks.size } +
-                        (if (state.isSpotifySyncEnabled) state.spotifyPlaylists.sumOf { it.trackCount ?: 0 } else 0)
-                    stringResource(R.string.pl_count_tracks, totalPlaylistsCount, totalTracks)
-                },
-                actions = {
-                    if (selectedPlaylists.isNotEmpty()) {
-                        IconButton(
-                            onClick = { showMultipleDeleteConfirm = true },
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.pl_delete_selected_cd), tint = MaterialTheme.colorScheme.error)
-                        }
-                        IconButton(
-                            onClick = { selectedPlaylists = setOf() },
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.pl_clear_selection_cd))
-                        }
+                    glassCardBorder() ?: BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.42f else 0.55f),
+                    )
+                }
+
+                ExpressiveHeader(
+                    modifier = headerModifier,
+                    backdrop = headerBackdrop,
+                    title = if (selectedPlaylists.isNotEmpty()) {
+                        stringResource(R.string.pl_selected_count, selectedPlaylists.size)
                     } else {
-                        IconButton(
-                            onClick = viewModel::openCreateDialog,
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.pl_create_cd))
-                        }
-                        Box {
+                        stringResource(R.string.pl_title)
+                    },
+                    subtitle = if (selectedPlaylists.isNotEmpty()) stringResource(R.string.pl_select_more_hint) else null,
+                    actions = {
+                        if (selectedPlaylists.isNotEmpty()) {
+                            IconButton(
+                                onClick = { showMultipleDeleteConfirm = true },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.pl_delete_selected_cd), tint = MaterialTheme.colorScheme.error)
+                            }
+                            IconButton(
+                                onClick = { selectedPlaylists = setOf() },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.pl_clear_selection_cd))
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    if (searchVisible || searchQuery.isNotBlank()) {
+                                        searchQuery = ""
+                                        searchVisible = false
+                                    } else {
+                                        searchVisible = true
+                                    }
+                                },
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Icon(
+                                    imageVector = if (searchVisible || searchQuery.isNotBlank()) Icons.Filled.Close else Icons.Filled.Search,
+                                    contentDescription = "Search library",
+                                )
+                            }
+
                             Surface(
-                                onClick = { sortMenuExpanded = true },
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                tonalElevation = 1.dp,
-                                modifier = Modifier.heightIn(min = 34.dp),
+                                onClick = onOpenGenerator,
+                                shape = GeneratorPillShape,
+                                color = pillSurface,
+                                border = pillBorder,
+                                modifier = Modifier
+                                    .heightIn(min = 36.dp)
+                                    .comicPanel(GeneratorPillShape, offset = 2.dp),
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                                 ) {
                                     Icon(
-                                        Icons.AutoMirrored.Filled.Sort,
-                                        contentDescription = stringResource(R.string.pl_sort_cd),
-                                        modifier = Modifier.size(15.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        imageVector = Icons.Filled.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp),
                                     )
-                                    Spacer(Modifier.width(6.dp))
                                     Text(
-                                        stringResource(R.string.pl_sort_label),
+                                        text = "Generator",
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
                                 }
                             }
-                            DropdownMenu(
-                                expanded = sortMenuExpanded,
-                                onDismissRequest = { sortMenuExpanded = false },
-                                shape = RoundedCornerShape(22.dp),
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                tonalElevation = 4.dp,
-                                shadowElevation = 10.dp,
-                                modifier = Modifier.padding(vertical = 4.dp),
-                            ) {
-                                DropdownMenuItem(text = { Text(stringResource(R.string.pl_sort_newest)) }, onClick = { viewModel.setSortMode(PlaylistSortMode.DATE_DESC); sortMenuExpanded = false })
-                                DropdownMenuItem(text = { Text(stringResource(R.string.pl_sort_oldest)) }, onClick = { viewModel.setSortMode(PlaylistSortMode.DATE_ASC); sortMenuExpanded = false })
-                                DropdownMenuItem(text = { Text(stringResource(R.string.pl_sort_name)) }, onClick = { viewModel.setSortMode(PlaylistSortMode.NAME); sortMenuExpanded = false })
-                                DropdownMenuItem(text = { Text(stringResource(R.string.pl_sort_track_count)) }, onClick = { viewModel.setSortMode(PlaylistSortMode.TRACK_COUNT); sortMenuExpanded = false })
-                            }
-                        }
-                    }
-                },
-                bottomContent = {
-            // Search Bar + Generator button matching Downloads tab design
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            "Search playlists...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Filled.Search,
-                            contentDescription = "Search",
-                            modifier = Modifier.padding(start = 10.dp).size(20.dp),
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Clear, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = if (LocalComicTheme.current) MaterialTheme.colorScheme.outline else androidx.compose.ui.graphics.Color.Transparent,
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                )
 
-                FilledTonalButton(
-                    onClick = onOpenGenerator,
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                    modifier = Modifier.height(48.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.AutoAwesome,
-                        contentDescription = "Generator",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "Generator",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-                },
-            )
+                            IconButton(
+                                onClick = viewModel::openCreateDialog,
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.pl_create_cd))
+                            }
+                        }
+                    },
+                    bottomContent = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            AnimatedVisibility(
+                                visible = searchVisible || searchQuery.isNotBlank(),
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut(),
+                            ) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    placeholder = {
+                                        Text(
+                                            "Search library...",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Search,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(Icons.Filled.Clear, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                    },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = if (isComic) MaterialTheme.colorScheme.outline else Color.Transparent,
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(46.dp),
+                                )
+                            }
+
+                            ConnectedButtonGroup(
+                                items = LibrarySegment.entries.map { ConnectedButtonItem(label = it.label) },
+                                selectedIndex = selectedSegment.ordinal,
+                                onSelect = { index ->
+                                    selectedSegment = LibrarySegment.entries.getOrElse(index) { LibrarySegment.ALL }
+                                },
+                                modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
+                            )
+                        }
+                    },
+                )
             },
         ) { headerInset ->
-        Column(Modifier.fillMaxSize()) {
-            val localSongsPlaylist = remember(state.playlists, searchQuery) {
-                state.playlists.firstOrNull {
-                    it.mode == LOCAL_SONGS_MODE && it.matchesPlaylistSearch(searchQuery)
-                }
-            }
-
-            val filteredPlaylists = remember(state.playlists, searchQuery) {
-                state.playlists.filter {
-                    it.mode != LOCAL_SONGS_MODE && it.matchesPlaylistSearch(searchQuery)
-                }
-            }
-
-            val filteredSpotifyPlaylists = remember(state.spotifyPlaylists, searchQuery) {
-                if (searchQuery.isBlank()) state.spotifyPlaylists
-                else state.spotifyPlaylists.filter {
-                    it.name.contains(searchQuery, ignoreCase = true)
-                }
-            }
-
-            val effectiveSpotify = if (state.isSpotifySyncEnabled) filteredSpotifyPlaylists else emptyList()
-            val downloadedCount by viewModel.downloadedCount.collectAsStateWithLifecycle()
-            // Downloads lives here now (it left the Home/Stats headers): always
-            // shown, except while a search for something else is typed.
-            val showDownloadsCard = searchQuery.isBlank() ||
-                "downloads".contains(searchQuery.trim(), ignoreCase = true)
-
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
             ) {
+                val columns = if (maxWidth >= 600.dp) 4 else 3
+                val gridRows = remember(gridEntries, columns) { gridEntries.chunked(columns) }
+
                 when {
-                    state.isLoading && state.playlists.isEmpty() && !state.isGenerating -> Box(Modifier.padding(top = headerInset)) { LoadingState() }
-                    localSongsPlaylist == null && filteredPlaylists.isEmpty() && !state.isGenerating &&
-                        effectiveSpotify.isEmpty() && (downloadedCount == 0 || !showDownloadsCard) -> Box(Modifier.padding(top = headerInset)) { EmptyState() }
+                    state.isLoading && state.playlists.isEmpty() && !state.isGenerating -> {
+                        Box(Modifier.padding(top = headerInset)) { LoadingState() }
+                    }
+                    selectedSegment == LibrarySegment.PLAYLISTS && gridEntries.isEmpty() && !state.isGenerating -> {
+                        Box(Modifier.padding(top = headerInset)) { EmptyState() }
+                    }
                     else -> LazyColumn(
                         contentPadding = PaddingValues(
                             start = 16.dp,
                             end = 16.dp,
-                            // Clear the 16.dp glass fade below the pinned Search playlists bar so
-                            // "Songs from this device" sits cleanly below it on every theme.
-                            top = 18.dp + headerInset,
+                            top = 14.dp + headerInset,
                             bottom = FloatingNavDefaults.contentBottomPadding(),
                         ),
-                        verticalArrangement = Arrangement.spacedBy(com.lastwave.app.ui.common.GroupGap),
-                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxSize(),
                     ) {
-                        if (localSongsPlaylist != null) {
-                            val hasPlaylistsBelow = showDownloadsCard ||
-                                state.isGenerating ||
-                                state.justSavedBannerVisible ||
-                                effectiveSpotify.isNotEmpty() ||
-                                filteredPlaylists.isNotEmpty()
-                            item(key = "local_songs_hero", contentType = "local_songs_hero") {
-                                Box(
-                                    modifier = Modifier
-                                        .animateItem()
-                                        .then(if (hasPlaylistsBelow) Modifier.padding(bottom = 10.dp) else Modifier),
-                                ) {
-                                    LocalSongsHeroCard(
-                                        playlist = localSongsPlaylist,
-                                        isPlaying = playbackState.isPlaying,
-                                        playbackSource = playbackState.sourceLabel,
-                                        onClick = { onOpenPlaylist(localSongsPlaylist.id) },
-                                        onEditCover = { coverEditorPlaylistId = localSongsPlaylist.id },
-                                        onPlay = {
+                        when (selectedSegment) {
+                            LibrarySegment.ALL, LibrarySegment.PLAYLISTS -> {
+                                if (selectedSegment == LibrarySegment.ALL) {
+                                    item(key = "quick_vault_grid", contentType = "quick_vault_grid") {
+                                        LibraryQuickVaultGrid(
+                                            likedCount = likedCount,
+                                            downloadedCount = downloadedCount,
+                                            localCount = localSongsPlaylist?.tracks?.size ?: 0,
+                                            onOpenLiked = {
+                                                when {
+                                                    likedRoomPlaylist != null && (likedRoomPlaylist.tracks.isNotEmpty() || spotifyLiked == null) ->
+                                                        onOpenPlaylist(likedRoomPlaylist.id)
+                                                    spotifyLiked != null -> onOpenFeedPlaylist("sp_liked")
+                                                    else -> selectedSegment = LibrarySegment.PLAYLISTS
+                                                }
+                                            },
+                                            onOpenDownloads = viewModel::openDownloads,
+                                            onOpenLocal = {
+                                                val localId = localSongsPlaylist?.id
+                                                if (localId != null) onOpenPlaylist(localId)
+                                                else selectedSegment = LibrarySegment.LOCAL
+                                            },
+                                            onOpenGenerator = onOpenGenerator,
+                                        )
+                                    }
+                                }
+
+                                if (state.isGenerating) {
+                                    item(key = "generationProgress", contentType = "generationProgress") {
+                                        GenerationProgressCard(message = state.generatingMessage)
+                                    }
+                                }
+
+                                if (state.justSavedBannerVisible) {
+                                    item(key = "banner") {
+                                        LaunchedEffect(state.justSavedBannerVisible) {
+                                            kotlinx.coroutines.delay(3000)
+                                            viewModel.dismissJustSavedBanner()
+                                        }
+                                        Surface(
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Text(
+                                                "Playlist saved!",
+                                                modifier = Modifier.padding(14.dp),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                fontWeight = FontWeight.Medium,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                item(key = "playlists_header", contentType = "playlists_header") {
+                                    PlaylistsSectionHeader(
+                                        sortMode = state.sortMode,
+                                        onSortModeChange = viewModel::setSortMode,
+                                    )
+                                }
+
+                                if (gridRows.isEmpty()) {
+                                    item(key = "playlists_empty", contentType = "playlists_empty") {
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.pl_empty),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    itemsIndexed(
+                                        items = gridRows,
+                                        key = { _, row -> row.joinToString("|") { it.stableKey } },
+                                        contentType = { _, _ -> "cover_grid_row" },
+                                    ) { _, rowItems ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        ) {
+                                            rowItems.forEach { entry ->
+                                                Box(Modifier.weight(1f)) {
+                                                    when (entry) {
+                                                        is CoverGridEntry.Spotify -> SpotifyCoverGridTile(
+                                                            playlist = entry.playlist,
+                                                            onClick = {
+                                                                val routeId = if (entry.playlist.id == "liked") "sp_liked" else "sp_${entry.playlist.id}"
+                                                                onOpenFeedPlaylist(routeId)
+                                                            },
+                                                        )
+                                                        is CoverGridEntry.Room -> {
+                                                            val pl = entry.playlist
+                                                            PlaylistCoverGridTile(
+                                                                playlist = pl,
+                                                                isRegenerating = state.regeneratingId == pl.id,
+                                                                isPlaying = playbackState.isPlaying,
+                                                                playbackSource = playbackState.sourceLabel,
+                                                                isSelected = selectedPlaylists.contains(pl.id),
+                                                                onClick = {
+                                                                    if (selectedPlaylists.isNotEmpty()) {
+                                                                        selectedPlaylists = if (selectedPlaylists.contains(pl.id)) {
+                                                                            selectedPlaylists - pl.id
+                                                                        } else {
+                                                                            selectedPlaylists + pl.id
+                                                                        }
+                                                                    } else {
+                                                                        onOpenPlaylist(pl.id)
+                                                                    }
+                                                                },
+                                                                onLongClick = {
+                                                                    selectedPlaylists = if (selectedPlaylists.contains(pl.id)) {
+                                                                        selectedPlaylists - pl.id
+                                                                    } else {
+                                                                        selectedPlaylists + pl.id
+                                                                    }
+                                                                },
+                                                                onPlay = {
+                                                                    musicPlayer.playQueue(
+                                                                        pl.tracks.map(GeneratedTrack::toPlayableTrack),
+                                                                        startIndex = 0,
+                                                                        sourceLabel = pl.title,
+                                                                    )
+                                                                },
+                                                                onTogglePin = { viewModel.togglePinned(pl.id) },
+                                                                onDownload = { viewModel.downloadPlaylist(pl.id) },
+                                                                onMakeLocal = { viewModel.makeLocal(pl.id) },
+                                                                onRegenerate = {
+                                                                    viewModel.regenerate(pl.id) { newId ->
+                                                                        onOpenPlaylist(newId)
+                                                                    }
+                                                                },
+                                                                onEditCover = { coverEditorPlaylistId = pl.id },
+                                                                onRename = { viewModel.requestRename(pl.id) },
+                                                                onExport = { viewModel.openExportSheet(pl.id) },
+                                                                onDelete = { viewModel.requestDelete(pl.id) },
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            repeat((columns - rowItems.size).coerceAtLeast(0)) {
+                                                Spacer(Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            LibrarySegment.OFFLINE -> {
+                                item(key = "offline_header", contentType = "segment_header") {
+                                    SegmentActionHeader(
+                                        title = "Downloads · ${filteredDownloads.size}",
+                                        actionLabel = "Manage",
+                                        hasTracks = filteredDownloads.isNotEmpty(),
+                                        onPlayAll = {
                                             musicPlayer.playQueue(
-                                                localSongsPlaylist.tracks.map(GeneratedTrack::toPlayableTrack),
+                                                tracks = filteredDownloads.map { it.downloadedToPlayableTrack() },
                                                 startIndex = 0,
-                                                sourceLabel = localSongsPlaylist.title,
+                                                sourceLabel = "Downloads",
+                                            )
+                                        },
+                                        onAction = viewModel::openDownloads,
+                                    )
+                                }
+                                if (filteredDownloads.isEmpty()) {
+                                    item(key = "offline_empty", contentType = "segment_empty") {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Text(
+                                                text = "No offline downloads yet",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            TextButton(onClick = viewModel::openDownloads) {
+                                                Text("Open Downloads")
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    itemsIndexed(
+                                        items = filteredDownloads,
+                                        key = { _, item -> "dl_${item.id}" },
+                                        contentType = { _, _ -> "inline_track" },
+                                    ) { index, track ->
+                                        LibraryInlineTrackRow(
+                                            title = track.title,
+                                            artist = track.artist,
+                                            artworkUrl = track.artworkUrl,
+                                            trailingBadge = track.formatBadge.takeIf { it.isNotBlank() && it != "AUDIO" },
+                                            showDivider = index < filteredDownloads.lastIndex,
+                                            onClick = {
+                                                musicPlayer.playQueue(
+                                                    tracks = filteredDownloads.map { it.downloadedToPlayableTrack() },
+                                                    startIndex = index,
+                                                    sourceLabel = "Downloads",
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+
+                            LibrarySegment.LOCAL -> {
+                                item(key = "local_header", contentType = "segment_header") {
+                                    SegmentActionHeader(
+                                        title = "Local Songs · ${filteredLocalTracks.size}",
+                                        actionLabel = "Browse",
+                                        hasTracks = filteredLocalTracks.isNotEmpty(),
+                                        onPlayAll = {
+                                            musicPlayer.playQueue(
+                                                tracks = filteredLocalTracks.map(GeneratedTrack::toPlayableTrack),
+                                                startIndex = 0,
+                                                sourceLabel = localSongsPlaylist?.title ?: "Local Songs",
                                                 enableRadioContinuation = false,
                                             )
                                         },
-                                    )
-                                }
-                            }
-                        }
-
-                        if (showDownloadsCard) {
-                            val hasPlaylistsBelow = state.isGenerating ||
-                                state.justSavedBannerVisible ||
-                                effectiveSpotify.isNotEmpty() ||
-                                filteredPlaylists.isNotEmpty()
-                            item(key = "downloads_hero", contentType = "downloads_hero") {
-                                Box(
-                                    modifier = Modifier
-                                        .animateItem()
-                                        .then(if (hasPlaylistsBelow) Modifier.padding(bottom = 13.dp) else Modifier),
-                                ) {
-                                    DownloadsHeroCard(
-                                        downloadedCount = downloadedCount,
-                                        onClick = viewModel::openDownloads,
-                                    )
-                                }
-                            }
-                        }
-
-                        if (state.isGenerating) {
-                            item(key = "generationProgress", contentType = "generationProgress") {
-                                com.lastwave.app.ui.common.GenerationProgressCard(message = state.generatingMessage)
-                            }
-                        }
-
-                        if (state.justSavedBannerVisible) {
-                            item(key = "banner") {
-                                LaunchedEffect(state.justSavedBannerVisible) {
-                                    kotlinx.coroutines.delay(3000)
-                                    viewModel.dismissJustSavedBanner()
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        "Playlist saved!",
-                                        modifier = Modifier.padding(14.dp),
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        fontWeight = FontWeight.Medium,
-                                    )
-                                }
-                            }
-                        }
-
-                        val groupedPlaylistCount = effectiveSpotify.size + filteredPlaylists.size
-
-                        if (effectiveSpotify.isNotEmpty()) {
-                            itemsIndexed(
-                                items = effectiveSpotify,
-                                key = { _, pl -> "sp_${pl.id}" },
-                            ) { index, pl ->
-                                Box(Modifier.animateItem()) {
-                                    SpotifyPlaylistCard(
-                                        playlist = pl,
-                                        position = com.lastwave.app.ui.common.groupPositionFor(index, groupedPlaylistCount),
-                                        onClick = {
-                                            val routeId = if (pl.id == "liked") "sp_liked" else "sp_${pl.id}"
-                                            onOpenFeedPlaylist(routeId)
+                                        onAction = {
+                                            localSongsPlaylist?.let { onOpenPlaylist(it.id) }
                                         },
                                     )
                                 }
-                            }
-                        }
-
-                        itemsIndexed(
-                            items = filteredPlaylists,
-                            key = { _, playlist -> "pl_${playlist.id}_${playlist.remotePlaylistId ?: "local"}" },
-                        ) { index, playlist ->
-                            val isNewest = playlist.id == state.newestId
-                            val globalIndex = effectiveSpotify.size + index
-                            Box(Modifier.animateItem()) {
-                                PlaylistCard(
-                                    playlist = playlist,
-                                    isNewest = isNewest,
-                                    position = com.lastwave.app.ui.common.groupPositionFor(globalIndex, groupedPlaylistCount),
-                                    isRegenerating = state.regeneratingId == playlist.id,
-                                    currentTrack = playbackState.current,
-                                    isPlaying = playbackState.isPlaying,
-                                    playbackSource = playbackState.sourceLabel,
-                                    onClick = {
-                                        if (selectedPlaylists.isNotEmpty()) {
-                                            selectedPlaylists = if (selectedPlaylists.contains(playlist.id)) selectedPlaylists - playlist.id else selectedPlaylists + playlist.id
-                                        } else {
-                                            onOpenPlaylist(playlist.id)
+                                if (filteredLocalTracks.isEmpty()) {
+                                    item(key = "local_empty", contentType = "segment_empty") {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Text(
+                                                text = "No local songs found",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            localSongsPlaylist?.let { localPl ->
+                                                TextButton(onClick = { onOpenPlaylist(localPl.id) }) {
+                                                    Text(stringResource(R.string.local_choose_folder))
+                                                }
+                                            }
                                         }
-                                    },
-                                    onExport = { viewModel.openExportSheet(playlist.id) },
-                                    onRename = { viewModel.requestRename(playlist.id) },
-                                    onEditCover = { coverEditorPlaylistId = playlist.id },
-                                    onTogglePin = { viewModel.togglePinned(playlist.id) },
-                                    onDownload = { viewModel.downloadPlaylist(playlist.id) },
-                                    onRegenerate = {
-                                        viewModel.regenerate(playlist.id) { newId ->
-                                            onOpenPlaylist(newId)
-                                        }
-                                    },
-                                    onDelete = { viewModel.requestDelete(playlist.id) },
-                                    onMakeLocal = { viewModel.makeLocal(playlist.id) },
-                                    onPlay = {
-                                        musicPlayer.playQueue(
-                                            playlist.tracks.map(GeneratedTrack::toPlayableTrack),
-                                            startIndex = 0,
-                                            sourceLabel = playlist.title,
+                                    }
+                                } else {
+                                    itemsIndexed(
+                                        items = filteredLocalTracks,
+                                        key = { idx, item -> "loc_${item.url.ifBlank { "${item.name}_${item.artist}" }}_$idx" },
+                                        contentType = { _, _ -> "inline_track" },
+                                    ) { index, track ->
+                                        LibraryInlineTrackRow(
+                                            title = track.name,
+                                            artist = track.artist,
+                                            artworkUrl = track.artworkUrl,
+                                            showDivider = index < filteredLocalTracks.lastIndex,
+                                            onClick = {
+                                                musicPlayer.playQueue(
+                                                    tracks = filteredLocalTracks.map(GeneratedTrack::toPlayableTrack),
+                                                    startIndex = index,
+                                                    sourceLabel = localSongsPlaylist?.title ?: "Local Songs",
+                                                    enableRadioContinuation = false,
+                                                )
+                                            },
+                                            onMenuClick = localSongsPlaylist?.let { localPl ->
+                                                { menuTarget = localPl.id to track }
+                                            },
                                         )
-                                    },
-                                    isSelected = selectedPlaylists.contains(playlist.id),
-                                    onLongClick = {
-                                        selectedPlaylists = if (selectedPlaylists.contains(playlist.id)) selectedPlaylists - playlist.id else selectedPlaylists + playlist.id
-                                    },
-                                )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-        }
         }
 
         if (showMultipleDeleteConfirm) {
@@ -537,7 +694,7 @@ fun PlaylistScreen(
                             viewModel.deleteMultiple(selectedPlaylists)
                             selectedPlaylists = setOf()
                             showMultipleDeleteConfirm = false
-                        }
+                        },
                     ) {
                         Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
                     }
@@ -556,7 +713,8 @@ fun PlaylistScreen(
             Surface(
                 shape = ExpressivePillShape,
                 color = MaterialTheme.colorScheme.inverseSurface,
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .padding(bottom = FloatingNavDefaults.contentBottomPadding() + 12.dp),
             ) {
                 Text(msg, color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
@@ -586,7 +744,6 @@ fun PlaylistScreen(
         )
     }
 
-    // ── Delete-scrobble authorization-required dialog ──
     if (state.createDialogVisible) {
         var title by remember(state.createDialogVisible) { mutableStateOf("") }
         AlertDialog(
@@ -699,6 +856,168 @@ fun PlaylistScreen(
             onDeleteScrobble = { name, artist -> viewModel.deleteScrobble(name, artist) },
             onRefreshArtwork = { viewModel.refreshArtwork(track.name, track.artist) },
         )
+    }
+}
+
+@Composable
+private fun PlaylistsSectionHeader(
+    sortMode: PlaylistSortMode,
+    onSortModeChange: (PlaylistSortMode) -> Unit,
+) {
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+    val sortLabel = when (sortMode) {
+        PlaylistSortMode.DATE_DESC -> "Recent"
+        PlaylistSortMode.DATE_ASC -> "Oldest"
+        PlaylistSortMode.NAME -> "Name"
+        PlaylistSortMode.TRACK_COUNT -> "Tracks"
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.pl_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Box {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .heightIn(min = 36.dp)
+                    .clipOnly(RoundedCornerShape(10.dp))
+                    .clickable { sortMenuExpanded = true }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = sortLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    imageVector = Icons.Filled.ExpandMore,
+                    contentDescription = stringResource(R.string.pl_sort_cd),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            DropdownMenu(
+                expanded = sortMenuExpanded,
+                onDismissRequest = { sortMenuExpanded = false },
+                shape = RoundedCornerShape(18.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                SortMenuItem(stringResource(R.string.pl_sort_newest), sortMode == PlaylistSortMode.DATE_DESC) {
+                    onSortModeChange(PlaylistSortMode.DATE_DESC); sortMenuExpanded = false
+                }
+                SortMenuItem(stringResource(R.string.pl_sort_oldest), sortMode == PlaylistSortMode.DATE_ASC) {
+                    onSortModeChange(PlaylistSortMode.DATE_ASC); sortMenuExpanded = false
+                }
+                SortMenuItem(stringResource(R.string.pl_sort_name), sortMode == PlaylistSortMode.NAME) {
+                    onSortModeChange(PlaylistSortMode.NAME); sortMenuExpanded = false
+                }
+                SortMenuItem(stringResource(R.string.pl_sort_track_count), sortMode == PlaylistSortMode.TRACK_COUNT) {
+                    onSortModeChange(PlaylistSortMode.TRACK_COUNT); sortMenuExpanded = false
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SortMenuItem(label: String, active: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                label,
+                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            )
+        },
+        trailingIcon = {
+            if (active) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun SegmentActionHeader(
+    title: String,
+    actionLabel: String,
+    hasTracks: Boolean,
+    onPlayAll: () -> Unit,
+    onAction: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (hasTracks) {
+                Surface(
+                    onClick = onPlayAll,
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.heightIn(min = 34.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Play all",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "Play",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .heightIn(min = 34.dp)
+                    .clipOnly(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onAction)
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
     }
 }
 

@@ -35,6 +35,13 @@ import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.Dispatchers
 
 @Immutable
+data class DailyActivityBin(
+    val dayLabel: String,
+    val plays: Int,
+    val isPeak: Boolean,
+)
+
+@Immutable
 data class HomeUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
@@ -47,7 +54,7 @@ data class HomeUiState(
     val viewingUsername: String = "",
     val stats: HomeStats? = null,
     val nowPlaying: HomeTrack? = null,
-    val sortMode: HomeSortMode = HomeSortMode.RECENT,
+    val sortMode: HomeSortMode = HomeSortMode.MOST_PLAYED,
     val allTracks: List<HomeTrack> = emptyList(),
     val topTracksOverall: List<HomeTrack> = emptyList(),
     val topTracks7Days: List<HomeTrack> = emptyList(),
@@ -57,6 +64,7 @@ data class HomeUiState(
     val topArtists: List<com.lastwave.app.data.repository.HomeArtistItem> = emptyList(),
     val topAlbums: List<com.lastwave.app.data.repository.HomeAlbum> = emptyList(),
     val topTags: List<String> = emptyList(),
+    val dailyActivity7d: List<DailyActivityBin> = emptyList(),
     val page: Int = 1,
     val totalPages: Int = 1,
     val error: String? = null,
@@ -156,17 +164,49 @@ fun HomeUiState.visibleRows(): List<HomeRow> {
         HomeSortMode.TOP_ALBUMS -> {
             val rows = mutableListOf<HomeRow>()
             topAlbums.forEach { a ->
-                rows += HomeRow.Album(a, badge = null)
+                rows += HomeRow.Album(a, badge = playCountBadge(a.playCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
             }
             rows
         }
         HomeSortMode.TOP_ARTISTS -> {
             val rows = mutableListOf<HomeRow>()
             topArtists.forEach { a ->
-                rows += HomeRow.Artist(a, badge = null)
+                rows += HomeRow.Artist(a, badge = playCountBadge(a.playCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
             }
             rows
         }
+    }
+}
+
+internal fun computeDailyActivity7d(
+    tracks: List<HomeTrack>,
+    nowMillis: Long = System.currentTimeMillis(),
+): List<DailyActivityBin> {
+    val countsByDay = HashMap<String, Int>(14)
+    val cal = Calendar.getInstance()
+    tracks.forEach { t ->
+        val ts = t.timestampMillis ?: return@forEach
+        cal.timeInMillis = ts
+        val key = "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.DAY_OF_YEAR)}"
+        countsByDay[key] = (countsByDay[key] ?: 0) + 1
+    }
+    val dayNames = arrayOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+    val raw = (6 downTo 0).map { daysAgo ->
+        val c = Calendar.getInstance().apply {
+            timeInMillis = nowMillis
+            add(Calendar.DAY_OF_YEAR, -daysAgo)
+        }
+        val key = "${c.get(Calendar.YEAR)}-${c.get(Calendar.DAY_OF_YEAR)}"
+        val label = dayNames[(c.get(Calendar.DAY_OF_WEEK) - 1).coerceIn(0, 6)]
+        label to (countsByDay[key] ?: 0)
+    }
+    val maxPlays = raw.maxOfOrNull { it.second } ?: 0
+    return raw.map { (label, count) ->
+        DailyActivityBin(
+            dayLabel = label,
+            plays = count,
+            isPeak = maxPlays > 0 && count == maxPlays,
+        )
     }
 }
 
@@ -253,7 +293,6 @@ class HomeViewModel @Inject constructor(
 
     private var cachedTopTracks: List<HomeTrack> = emptyList()
     private var profileLoadJob: Job? = null
-    private var fallbackForcedMostPlayed: Boolean = false
 
     private val _rows = MutableStateFlow<List<HomeRow>>(emptyList())
 
@@ -401,8 +440,7 @@ class HomeViewModel @Inject constructor(
         cachedTopTracks = data.topTracks
         val (nowPlaying, merged) = mergeRecentWithTop(data.recent.nowPlaying, data.recent.tracks, data.topTracks)
         notifyNowPlayingArtwork(nowPlaying)
-        val resetFallbackSort = fallbackForcedMostPlayed
-        fallbackForcedMostPlayed = false
+        val activity = computeDailyActivity7d(merged)
         _uiState.update { state ->
             state.copy(
                 isLoading = false,
@@ -412,13 +450,9 @@ class HomeViewModel @Inject constructor(
                 nowPlaying = nowPlaying,
                 allTracks = merged,
                 topTracksOverall = data.topTracks,
+                dailyActivity7d = activity,
                 page = data.recent.page,
                 totalPages = data.recent.totalPages,
-                sortMode = if (resetFallbackSort && state.sortMode == HomeSortMode.MOST_PLAYED) {
-                    HomeSortMode.RECENT
-                } else {
-                    state.sortMode
-                },
                 isLocalStatsMode = false,
                 isLastFmConnected = connected,
                 error = null,
@@ -436,7 +470,8 @@ class HomeViewModel @Inject constructor(
     private suspend fun tryLoadLocalStats(username: String, isConnected: Boolean): Boolean {
         val local = runCatching { localStatsRepository.load() }.getOrNull() ?: return false
         cachedTopTracks = local.topTracks
-        fallbackForcedMostPlayed = true
+        val localTimeline = local.recentPlays.ifEmpty { local.topTracks }
+        val activity = computeDailyActivity7d(local.recentPlays)
         _uiState.update {
             it.copy(
                 isLoading = false,
@@ -444,15 +479,18 @@ class HomeViewModel @Inject constructor(
                 viewingUsername = username,
                 stats = local.stats,
                 nowPlaying = null,
-                // Local tracks carry no timestamps, so default to Most Played
-                // (Recent would filter everything out).
-                sortMode = HomeSortMode.MOST_PLAYED,
-                allTracks = local.topTracks,
+                sortMode = if (it.sortMode == HomeSortMode.RECENT && local.recentPlays.isEmpty()) {
+                    HomeSortMode.MOST_PLAYED
+                } else {
+                    it.sortMode
+                },
+                allTracks = localTimeline,
                 topTracksOverall = local.topTracks,
                 topTracks7Days = emptyList(),
                 topTracks30Days = emptyList(),
                 topArtists = local.topArtists.take(10),
                 topAlbums = local.topAlbums.take(10),
+                dailyActivity7d = activity,
                 page = 1,
                 totalPages = 1,
                 isLocalStatsMode = true,
@@ -569,17 +607,20 @@ class HomeViewModel @Inject constructor(
                 try {
                     val local = localStatsRepository.load()
                     cachedTopTracks = local.topTracks
+                    val localTimeline = local.recentPlays.ifEmpty { local.topTracks }
+                    val activity = computeDailyActivity7d(local.recentPlays)
                     val tags = runCatching { tasteProfileProvider.get().topTags.toList() }
                         .getOrDefault(emptyList()).take(8)
                     _uiState.update {
                         it.copy(
                             isRefreshing = false,
                             stats = local.stats,
-                            allTracks = local.topTracks,
+                            allTracks = localTimeline,
                             topTracksOverall = local.topTracks,
                             topArtists = local.topArtists.take(10),
                             topAlbums = local.topAlbums.take(10),
                             topTags = tags,
+                            dailyActivity7d = activity,
                             isLastFmConnected = connected,
                             error = null,
                         )
@@ -601,6 +642,7 @@ class HomeViewModel @Inject constructor(
                         val (nowPlaying, merged) = mergeRecentWithTop(page.nowPlaying, page.tracks, cachedTopTracks)
                         notifyNowPlayingArtwork(nowPlaying)
                         val freshStats = statsResult.getOrNull()
+                        val activity = computeDailyActivity7d(merged)
                         _uiState.update { state ->
                             val baseStats = freshStats ?: state.stats
                             val resolvedStats = if (baseStats != null && baseStats.scrobbles <= 0L && page.totalScrobbles > 0L) {
@@ -611,6 +653,7 @@ class HomeViewModel @Inject constructor(
                                 stats = resolvedStats,
                                 nowPlaying = nowPlaying,
                                 allTracks = merged,
+                                dailyActivity7d = activity,
                                 page = page.page,
                                 totalPages = page.totalPages,
                                 error = null,
@@ -645,8 +688,10 @@ class HomeViewModel @Inject constructor(
                     _uiState.update { state ->
                         val existingKeys = state.allTracks.map { it.key to it.timestampMillis }.toSet()
                         val newOnes = merged.filter { (it.key to it.timestampMillis) !in existingKeys }
+                        val combined = state.allTracks + newOnes
                         state.copy(
-                            allTracks = state.allTracks + newOnes,
+                            allTracks = combined,
+                            dailyActivity7d = computeDailyActivity7d(combined),
                             page = page.page,
                             totalPages = page.totalPages,
                         )
@@ -814,13 +859,16 @@ class HomeViewModel @Inject constructor(
                 }
                 runCatching { localStatsRepository.load() }.onSuccess { local ->
                     cachedTopTracks = local.topTracks
+                    val localTimeline = local.recentPlays.ifEmpty { local.topTracks }
+                    val activity = computeDailyActivity7d(local.recentPlays)
                     _uiState.update {
                         it.copy(
                             stats = local.stats,
-                            allTracks = local.topTracks,
+                            allTracks = localTimeline,
                             topTracksOverall = local.topTracks,
                             topArtists = local.topArtists.take(10),
                             topAlbums = local.topAlbums.take(10),
+                            dailyActivity7d = activity,
                             isLastFmConnected = connected,
                         )
                     }
@@ -841,6 +889,7 @@ class HomeViewModel @Inject constructor(
                     recentTotalScrobbles = page.totalScrobbles
                     val (nowPlaying, merged) = mergeRecentWithTop(page.nowPlaying, page.tracks, cachedTopTracks)
                     notifyNowPlayingArtwork(nowPlaying)
+                    val activity = computeDailyActivity7d(merged)
                     _uiState.update { state ->
                         val baseStats = state.stats
                         val resolvedStats = if (baseStats != null && baseStats.scrobbles <= 0L && page.totalScrobbles > 0L) {
@@ -850,6 +899,7 @@ class HomeViewModel @Inject constructor(
                             stats = resolvedStats,
                             nowPlaying = nowPlaying,
                             allTracks = merged,
+                            dailyActivity7d = activity,
                             page = page.page,
                             totalPages = page.totalPages,
                         )
