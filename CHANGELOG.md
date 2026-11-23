@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.21] - 2026-11-23
+
+### Added
+- **Interactive 7-day Stats chart filter:** tap any bar in the 7-day listening activity graph to highlight that day with its play count and estimated listening time, filtering Tracks, Artists, Albums, and History below with a quick `Top` / `Time` sort switch and one-tap `Clear`.
+- **Minimal Now Playing (BitChord) style:** new toggle in Settings → Appearance offering an uncrowded, frameless Now Playing layout with bare floating transport icons (`Shuffle`, `Previous`, `Play/Pause`, `Next`, `Repeat`), bare Heart and Volume/Audio buttons, a thin hairline scrubber with inline quality text, and bare icon-only bottom actions while keeping lyrics preview, full lyrics, and download behaviour unchanged across all themes.
+
 ## [1.0.20] - 2026-11-23
 
 ### Changed
