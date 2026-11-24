@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.32] - 2026-11-24
+
+### Changed
+- **Frameless Fullmode lyric preview:** removed the dark horizontal rounded container box behind the 3-line Now Playing lyrics preview in Fullmode, replacing it with a dual-layer glyph-hugging blurred halo (`BlurredEdgeTreatment.Unbounded` on Android 12+ and layered shadow fallback on older Android versions) that adapts to theme ink/shade so lyrics stay crisp and legible across pure-white, bright, colorful, and dark artwork in every theme.
+
 ## [1.0.31] - 2026-11-24
 
 ### Fixed
