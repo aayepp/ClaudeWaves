@@ -114,7 +114,10 @@ fun StaticArtworkHero(
 
                 BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
                     val coverSide = minOf(maxWidth, maxHeight * 0.62f)
-                    val topOffset = (statusTop + 28.dp).coerceAtMost(((maxHeight - coverSide) * 0.28f).coerceAtLeast(0.dp))
+                    // Align the cover bottom horizon near 50% screen height while clearing the status bar.
+                    val topOffset = ((maxHeight * 0.50f) - coverSide)
+                        .coerceIn(statusTop + 8.dp, statusTop + 18.dp)
+                        .coerceAtMost(((maxHeight - coverSide) * 0.28f).coerceAtLeast(0.dp))
                     val horizOffset = (maxWidth - coverSide) / 2f
                     val totalH = maxHeight.value.coerceAtLeast(1f)
                     val coverTopF = (topOffset.value / totalH).coerceIn(0.02f, 0.35f)

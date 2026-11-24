@@ -404,10 +404,10 @@ internal fun BoxScope.FullScreenArtworkBackground(
                         0.00f to PlayerPalette.shade.copy(alpha = 0.34f),
                         0.12f to PlayerPalette.shade.copy(alpha = 0.08f),
                         0.24f to Color.Transparent,
-                        0.52f to Color.Transparent,
-                        0.64f to PlayerPalette.shade.copy(alpha = 0.22f),
-                        0.78f to PlayerPalette.shade.copy(alpha = 0.44f),
-                        0.92f to PlayerPalette.shade.copy(alpha = 0.56f),
+                        0.50f to Color.Transparent,
+                        0.61f to PlayerPalette.shade.copy(alpha = 0.22f),
+                        0.76f to PlayerPalette.shade.copy(alpha = 0.44f),
+                        0.91f to PlayerPalette.shade.copy(alpha = 0.56f),
                         1.00f to PlayerPalette.shade.copy(alpha = 0.64f),
                     )
                 } else {
@@ -1188,7 +1188,7 @@ internal fun PlaybackSeekBar(
                 MinimalBestPartWhisper(
                     onClick = { onSeek(bestPartMs!!) },
                     pulse = { pulse.value },
-                    modifier = Modifier.padding(bottom = 3.dp),
+                    modifier = Modifier.padding(bottom = 10.dp),
                 )
             }
             SeekBar(
@@ -3245,7 +3245,7 @@ internal fun NowPlayingScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = if (compactHeight) 8.dp else 12.dp)
                             .height(LYRIC_PREVIEW_HEIGHT + 12.dp)
                             .graphicsLayer { alpha = lyricsTextAlpha },
                     )
@@ -3317,7 +3317,7 @@ internal fun NowPlayingScreen(
                             stepDirection = stepDirection,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 10.dp else 14.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 12.dp else 20.dp))
 
                         PlaybackSeekBar(
                             progressState = progressState,
@@ -3346,7 +3346,7 @@ internal fun NowPlayingScreen(
                             },
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 12.dp else 16.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 14.dp else 24.dp))
 
                         MinimalPlaybackControls(
                             state = state,
@@ -3354,7 +3354,7 @@ internal fun NowPlayingScreen(
                             compact = compactHeight,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 10.dp else 14.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 14.dp else 22.dp))
 
                         MinimalBottomActionRow(
                             hasLyrics = hasLyrics,
@@ -3378,7 +3378,7 @@ internal fun NowPlayingScreen(
                             stepDirection = stepDirection,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 8.dp else 12.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 8.dp else 14.dp))
 
                         AudioInformationRow(
                             state = state,
@@ -3390,7 +3390,7 @@ internal fun NowPlayingScreen(
                             onOpenOutputPicker = onOpenOutputPicker,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 14.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 6.dp else if (compactHeight) 10.dp else 16.dp))
 
                         PlaybackSeekBar(
                             progressState = progressState,
@@ -3418,7 +3418,7 @@ internal fun NowPlayingScreen(
                             )
                         }
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 6.dp else 10.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 4.dp else if (compactHeight) 8.dp else 16.dp))
 
                         MainPlaybackControls(
                             state = state,
@@ -3427,7 +3427,7 @@ internal fun NowPlayingScreen(
                             compact = compactHeight,
                         )
 
-                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 12.dp else 18.dp))
+                        Spacer(Modifier.height(if (ultraCompactHeight) 8.dp else if (compactHeight) 12.dp else 22.dp))
 
                         SecondaryActionRow(
                             hasLyrics = hasLyrics,
