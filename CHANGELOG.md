@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.39] - 2026-11-25
+
+### Removed
+- **Liquid Studio Style:** removed the optional Liquid Studio Style setting and custom Now Playing/Library alternate layouts while keeping Floating Liquid Glass Toast Pills and the seamless Fullmode open/close transition to MiniPlayer.
+
+### Fixed
+- **Oversaturated Liquid Glass buttons in Fullmode:** restored the Fullmode readability gradient inside `liquidGlassSource(playerBackdrop)` so frosted buttons sample properly darkened artwork across all themes, and gated the video overlay scrim by `canvasCover` to avoid double darkening on static covers.
+- **Animated Album Canvas in Fullmode:** matched deluxe/edition album variants and single-titled YouTube Music tracks in `CanvasArtwork`, retried clean Apple Music artist+title queries when noisy album tags miss, removed the 8-second `waitUntilAudible` stall on already-loaded tracks, prevented Android 14–16/OriginOS `TextureView` zero-alpha `SurfaceTexture` deadlock (`MIN_ACTIVE_TEXTURE_ALPHA`), and switched canvas HLS playback to `OkHttpDataSource` capped at `1200x1600` / `6 Mbps`.
+
 ## [1.0.38] - 2026-11-25
 
 ### Added
