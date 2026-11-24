@@ -288,6 +288,7 @@ class MusicPlayer @Inject constructor(
     internal var activeUpgradeMediaId: String? = null
     internal var activeUpgradeTargetQuality: Int? = null
     internal var activeUpgradeDeferred: Deferred<ResolvedStream?>? = null
+    @Volatile internal var allowDirectRecoveryMediaId: String? = null
     /** Verified source-master offsets, so a repeat upgrade skips the silent probe. */
     private val swapOffsetCache = SwapOffsetCache()
     /**
@@ -781,7 +782,8 @@ class MusicPlayer @Inject constructor(
      */
     private val MEDIA_CONTENT_TYPES = com.google.common.base.Predicate<String> { type ->
         HttpDataSource.REJECT_PAYWALL_TYPES.apply(type) ||
-            type?.contains("dash+xml", ignoreCase = true) == true
+            type?.contains("dash+xml", ignoreCase = true) == true ||
+            type?.startsWith("text/plain", ignoreCase = true) == true
     }
 
     private val httpUpstreamFactory: OkHttpDataSource.Factory by lazy {
@@ -6625,6 +6627,37 @@ class MusicPlayer @Inject constructor(
      * instead of failing inside ExoPlayer. The ranged read is drained so the
      * pooled connection can be reused by the player's own open.
      */
+    private fun hasAudioContainerHeader(bytes: ByteArray, length: Int): Boolean = when {
+        length >= 4 &&
+            bytes[0] == 0x66.toByte() && bytes[1] == 0x4C.toByte() &&
+            bytes[2] == 0x61.toByte() && bytes[3] == 0x43.toByte() -> true // fLaC
+        length >= 8 &&
+            bytes[4] == 0x66.toByte() && bytes[5] == 0x74.toByte() &&
+            bytes[6] == 0x79.toByte() && bytes[7] == 0x70.toByte() -> true // MP4/M4A ftyp
+        length >= 4 &&
+            bytes[0] == 0x4F.toByte() && bytes[1] == 0x67.toByte() &&
+            bytes[2] == 0x67.toByte() && bytes[3] == 0x53.toByte() -> true // OggS
+        length >= 4 &&
+            bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() &&
+            bytes[2] == 0x46.toByte() && bytes[3] == 0x46.toByte() -> true // RIFF/WAV
+        length >= 3 &&
+            bytes[0] == 0x49.toByte() && bytes[1] == 0x44.toByte() &&
+            bytes[2] == 0x33.toByte() -> true // ID3
+        length >= 2 &&
+            (bytes[0].toInt() and 0xFF) == 0xFF &&
+            (bytes[1].toInt() and 0xE0) == 0xE0 -> true // ADTS AAC / MPEG frame sync
+        else -> false
+    }
+
+    private fun looksLikeErrorPayload(bytes: ByteArray, length: Int): Boolean {
+        for (i in 0 until length) {
+            val b = bytes[i].toInt() and 0xFF
+            if (b == ' '.code || b == '\t'.code || b == '\r'.code || b == '\n'.code) continue
+            return b == '<'.code || b == '{'.code || b == '['.code
+        }
+        return false
+    }
+
     private suspend fun isProviderReadyForStartup(
         stream: ResolvedStream,
         timeoutMs: Long = STARTUP_PROVIDER_PROBE_MS,
@@ -6637,7 +6670,7 @@ class MusicPlayer @Inject constructor(
         val request = runCatching {
             okhttp3.Request.Builder().url(stream.url)
                 .apply { mediaRequestHeaders(stream).forEach { (name, value) -> header(name, value) } }
-                .header("Range", "bytes=0-${STARTUP_PROBE_BYTES - 1}")
+                .header("Range", "bytes=0-4095")
                 .build()
         }.getOrNull() ?: return false
         val startedAt = SystemClock.elapsedRealtime()
@@ -6647,27 +6680,43 @@ class MusicPlayer @Inject constructor(
                 continuation.invokeOnCancellation { call.cancel() }
                 call.enqueue(object : okhttp3.Callback {
                     override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                        android.util.Log.i("MusicPlayer", "[STARTUP SOURCE] provider probe failed: ${e.javaClass.simpleName}")
-                        continuation.resume(false)
+                        android.util.Log.i("MusicPlayer", "[STARTUP SOURCE] provider probe failed: ${e.javaClass.simpleName}: ${e.message}")
+                        if (continuation.isActive) continuation.resume(false)
                     }
 
                     override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        var typeStr = "none"
+                        var bytesRead = 0
+                        var probeErr: String? = null
+                        val header = ByteArray(16)
                         val readable = response.use {
                             val type = it.body?.contentType()
-                            it.isSuccessful && type?.type != "text" && type?.subtype != "json" &&
-                                runCatching {
-                                    val source = it.body?.source() ?: return@runCatching false
-                                    source.request(1L).also { ok ->
-                                        if (ok) source.request(STARTUP_PROBE_BYTES)
-                                    }
-                                }.getOrDefault(false)
+                            typeStr = type?.toString() ?: "none"
+                            if (!it.isSuccessful) return@use false
+                            runCatching {
+                                val source = it.body?.source() ?: return@runCatching false
+                                if (!source.request(1L)) return@runCatching false
+                                bytesRead = source.read(header, 0, header.size).coerceAtLeast(0)
+                                if (bytesRead <= 0) return@runCatching false
+                                if (hasAudioContainerHeader(header, bytesRead)) return@runCatching true
+                                val sub = type?.subtype?.lowercase().orEmpty()
+                                val isPaywallType = type?.type.equals("text", ignoreCase = true) ||
+                                    sub.contains("html") || sub.contains("json") || sub.contains("xml")
+                                !isPaywallType && !looksLikeErrorPayload(header, bytesRead)
+                            }.onFailure { err ->
+                                probeErr = "${err.javaClass.simpleName}:${err.message}"
+                            }.getOrDefault(false)
+                        }
+                        val magicHex = (0 until minOf(bytesRead, 4)).joinToString("") {
+                            "%02x".format(header[it].toInt() and 0xFF)
                         }
                         android.util.Log.i(
                             "MusicPlayer",
                             "[STARTUP SOURCE] provider probe http=${response.code} readable=$readable " +
+                                "type=$typeStr bytes=$bytesRead magic=$magicHex err=${probeErr ?: "none"} " +
                                 "ms=${SystemClock.elapsedRealtime() - startedAt}",
                         )
-                        continuation.resume(readable)
+                        if (continuation.isActive) continuation.resume(readable)
                     }
                 })
             }
@@ -6797,9 +6846,40 @@ class MusicPlayer @Inject constructor(
         }
         // DASH/DRM cannot be byte-probed; it needs a full player prepare.
         fun isManifest(stream: ResolvedStream) = !stream.mimeType.startsWith("audio/") || stream.segmentedDrm != null
-        suspend fun playableProvider(acceptManifest: Boolean): ResolvedStream? = awaitProvider()?.takeIf {
-            isStreamAllowedForQuality(it, requestedQuality, miscSnapshot) &&
-                (if (isManifest(it)) acceptManifest else isProviderReadyForStartup(it, probeTimeoutMs()))
+        val failedProbeUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val retriedAfterProbeFail = java.util.concurrent.atomic.AtomicBoolean(false)
+        suspend fun playableProvider(acceptManifest: Boolean): ResolvedStream? {
+            val candidate = awaitProvider() ?: return null
+            if (!isStreamAllowedForQuality(candidate, requestedQuality, miscSnapshot)) return null
+            if (isManifest(candidate)) return candidate.takeIf { acceptManifest }
+            if (candidate.url !in failedProbeUrls && isProviderReadyForStartup(candidate, probeTimeoutMs())) {
+                return candidate
+            }
+            failedProbeUrls.add(candidate.url)
+            if (startDirect && retriedAfterProbeFail.compareAndSet(false, true)) {
+                val remainingMs = probeTimeoutMs()
+                if (remainingMs > 600L) {
+                    val backup = withTimeoutOrNull(remainingMs) {
+                        runCatching {
+                            resolveLosslessTrackAudioStream(
+                                track = track,
+                                misc = miscSnapshot,
+                                excludedLosslessUrls = excludedLosslessUrls + failedProbeUrls,
+                                expectedDurationSeconds = track.durationMs?.takeIf { it > 0 }?.div(1_000)?.toInt(),
+                                requestedQuality = requestedQuality,
+                            )
+                        }.getOrNull()
+                    }
+                    if (backup != null && backup.url !in failedProbeUrls &&
+                        isStreamAllowedForQuality(backup, requestedQuality, miscSnapshot)
+                    ) {
+                        if (isManifest(backup)) return backup.takeIf { acceptManifest }
+                        if (isProviderReadyForStartup(backup, probeTimeoutMs())) return backup
+                        failedProbeUrls.add(backup.url)
+                    }
+                }
+            }
+            return null
         }
         // Whichever source is playable first starts. Waiting on the provider
         // first cost 5 s per song whenever it answered slowly or with an error;
@@ -6823,6 +6903,14 @@ class MusicPlayer @Inject constructor(
             ) ?: playableProvider(acceptManifest = true)
                 ?: fallback.await().getOrThrow()).also { winner ->
                 if (claimPlayback) {
+                    if (startDirect && wantProvider && winner.youtubeCandidate != null &&
+                        (failedProbeUrls.isNotEmpty() || addonMatched.matched)
+                    ) {
+                        allowDirectRecoveryMediaId = track.mediaIdKey()
+                        if (failedProbeUrls.isNotEmpty() && canPromote) activeUpgradeDeferred = null
+                    } else {
+                        allowDirectRecoveryMediaId = null
+                    }
                     val name = when {
                         winner.cacheKey.startsWith("local:") || winner.cacheKey.startsWith("offline:") -> "local"
                         winner.youtubeCandidate != null -> "youtube"
@@ -7769,8 +7857,10 @@ class MusicPlayer @Inject constructor(
         val explicitlyChanging = requestedQualityOverride != null
         // Only "Fast start" upgrades to lossless mid-song: "Best quality first"
         // already gave lossless its chance at 0:00, "Never upgrade" never does.
-        // Both still let a 96k stream recover to 320k, and a downgrade through.
-        if (!explicitlyChanging && misc.hiResStart != HiResStart.FAST &&
+        // Exception: allow one-shot recovery when Best quality first fell back to YouTube.
+        val allowDirectRecovery = misc.hiResStart == HiResStart.DIRECT &&
+            allowDirectRecoveryMediaId == track.mediaIdKey()
+        if (!explicitlyChanging && misc.hiResStart != HiResStart.FAST && !allowDirectRecovery &&
             requestedQuality >= LosslessMusicApi.QUALITY_CD_LOSSLESS &&
             streamQualityTier(currentStream) < requestedQuality
         ) return false
@@ -7792,6 +7882,7 @@ class MusicPlayer @Inject constructor(
         activeUpgradeDeferred = null
 
         activeUpgradeJob?.cancel()
+        if (allowDirectRecoveryMediaId == track.mediaIdKey()) allowDirectRecoveryMediaId = null
         activeUpgradeMediaId = expectedMediaId
         activeUpgradeTargetQuality = requestedQuality
         val trace = QualitySwitchTrace(track.title, requestedQuality)
