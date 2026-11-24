@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.37] - 2026-11-24
+
+### Changed
+- **Cleaner Last.fm settings:** removed the duplicate Discord Rich Presence card inside the Last.fm settings tab (keeping the dedicated top-level Settings card) and routed Settings search results for Discord Rich Presence directly to the Discord settings screen.
+
 ## [1.0.36] - 2026-11-24
 
 ### Fixed
