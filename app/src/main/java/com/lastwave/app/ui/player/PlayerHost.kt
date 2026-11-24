@@ -4,6 +4,7 @@ package com.lastwave.app.ui.player
 
 import com.lastwave.app.ui.theme.comicPanel
 import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalLiquidStudioStyle
 import com.lastwave.app.ui.theme.NowPlayingPaletteScope
 import com.lastwave.app.data.local.HomeHoldShortcut
 import com.lastwave.app.ui.shell.ExpandableHomeHoldPill
@@ -54,6 +55,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.draw.blur
@@ -262,8 +264,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.palette.graphics.Palette
 import coil.imageLoader
@@ -527,7 +532,8 @@ fun PlayerHost(
     val playerLayerShown by remember { derivedStateOf { playerExpansion.value > 0f } }
     val sheetMoving by remember { derivedStateOf { playerExpansion.value < 1f } }
     // Full-bleed covers have no sleeve to land on: the card's own cover grows instead.
-    val artworkFlight = if (settings.canvasFullBleed) null else remember { ArtworkFlight { playerExpansion.value } }
+    val isFullmodeTransition = settings.canvasFullBleed
+    val artworkFlight = if (isFullmodeTransition) null else remember { ArtworkFlight { playerExpansion.value } }
     val contentCovered by remember { derivedStateOf { playerExpansion.value >= 1f && !isPlayerDragging } }
     val showMiniPlayer by remember { derivedStateOf { playerExpansion.value < 0.45f } }
     val showBottomNav by remember { derivedStateOf { state.current == null || playerExpansion.value < 0.625f } }
@@ -582,9 +588,24 @@ fun PlayerHost(
     var homePillExtraWidth by remember { mutableStateOf(0.dp) }
     // While docking, the card slides down over the fading bar, not under it.
     val chromeDocking by remember { derivedStateOf { chromeCollapse.progress() > 0f } }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var activeToastPill by remember { mutableStateOf<PlayerToastEvent?>(null) }
     LaunchedEffect(viewModel) {
-        viewModel.toastMessage.collect { msg ->
-            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+        viewModel.toastEvents.collect { event ->
+            activeToastPill = event
+        }
+    }
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.downloadCompletedEvents.collect { event ->
+                val savedLabel = context.getString(com.lastwave.app.R.string.toast_saved_to_downloads)
+                val subtitle = if (event.formatBadge.isNotBlank()) "${event.formatBadge} · $savedLabel" else savedLabel
+                activeToastPill = PlayerToastEvent(
+                    kind = PlayerToastKind.DOWNLOADED,
+                    title = context.getString(com.lastwave.app.R.string.toast_downloaded, event.title),
+                    subtitle = subtitle,
+                )
+            }
         }
     }
     val backdropContrastCoordinator = rememberBackdropContrastCoordinator(
@@ -615,6 +636,7 @@ fun PlayerHost(
         LocalSetHomePillExtraWidth provides { homePillExtraWidth = it },
         LocalHomeHoldShortcut provides HomeHoldShortcut.fromId(settings.homeHoldShortcut),
         LocalOnHomeHoldShortcut provides onExecuteHomeHoldShortcut,
+        LocalLiquidStudioStyle provides settings.liquidStudioStyle,
     ) {
         Box(
             Modifier
@@ -683,7 +705,12 @@ fun PlayerHost(
                 // Off Home the card sits in the same row Home's collapsed bar uses, beside the Home circle.
                 val dockProgress = if (onHome != null) Docked else chromeCollapse.progress
                 val miniAlpha: GraphicsLayerScope.() -> Unit = {
-                    alpha = (1f - playerExpansion.value.coerceIn(0f, 1f) * 2.2f).coerceIn(0f, 1f)
+                    val p = playerExpansion.value.coerceIn(0f, 1f)
+                    alpha = if (isFullmodeTransition) {
+                        (1f - (p / 0.22f).coerceIn(0f, 1f))
+                    } else {
+                        (1f - p * 2.2f).coerceIn(0f, 1f)
+                    }
                 }
                 if (onHome != null) {
                     HomeDockButton(
@@ -716,17 +743,24 @@ fun PlayerHost(
                     compactProgress = dockProgress,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .zIndex(if (miniOnTop || chromeDocking) 1f else 0f)
+                        .zIndex(if ((!isFullmodeTransition && miniOnTop) || chromeDocking) 1f else 0f)
                         .graphicsLayer {
                             miniAlpha()
-                            // Follow the morphing card's top edge as it rises.
-                            translationY = -(miniCardBounds?.top ?: 0f) * playerExpansion.value.coerceIn(0f, 1f)
+                            // In normal mode, follow the morphing card's top edge as it rises.
+                            // In Fullmode, keep the MiniPlayer pill seated cleanly above the dock so
+                            // the unified fullscreen artwork card lands directly onto it.
+                            translationY = if (isFullmodeTransition) {
+                                0f
+                            } else {
+                                -(miniCardBounds?.top ?: 0f) * playerExpansion.value.coerceIn(0f, 1f)
+                            }
                         }
                         .dockBesidePill(
                             miniBottomPadding,
                             dockProgress,
                             pillOnRight = settings.homeButtonRight,
                             extraPillWidth = { homePillExtraWidth },
+                            elastic = settings.liquidStudioStyle,
                         ),
                 )
             }
@@ -772,13 +806,33 @@ fun PlayerHost(
                             val left = androidx.compose.ui.util.lerp(start.left, 0f, p)
                             val right = androidx.compose.ui.util.lerp(start.right, size.width, p)
                             val top = androidx.compose.ui.util.lerp(start.top, 0f, p)
-                            val bottom = androidx.compose.ui.util.lerp(start.bottom, size.height, p)
+                            val bottom = if (isFullmodeTransition) {
+                                androidx.compose.ui.util.lerp(start.bottom, size.height, p.pow(1.35f))
+                            } else {
+                                androidx.compose.ui.util.lerp(start.bottom, size.height, p)
+                            }
                             val startRadius = minOf(start.height / 2f, PLAYER_SHEET_CORNER_RADIUS.toPx() + 8.dp.toPx())
+                            val radius = if (isFullmodeTransition) {
+                                androidx.compose.ui.util.lerp(startRadius, 0f, p.pow(1.2f))
+                            } else {
+                                androidx.compose.ui.util.lerp(startRadius, 0f, p)
+                            }
                             // Content is anchored to the card's top edge and clipped to the card.
                             translationY = top
-                            // Pre-mount frames (p == 0): composed and measured, but not drawn over the mini player.
-                            alpha = if (p == 0f) 0f else 1f
-                            shape = PlayerMorphShape(left, right, bottom - top, androidx.compose.ui.util.lerp(startRadius, 0f, p))
+                            // In Fullmode, softly crossfade the shrinking pill directly into the
+                            // resting MiniPlayer at p = 0..0.16 for a seamless landing.
+                            alpha = if (isFullmodeTransition) {
+                                val t = (p / 0.16f).coerceIn(0f, 1f)
+                                t * t * (3f - 2f * t)
+                            } else {
+                                if (p == 0f) 0f else 1f
+                            }
+                            shadowElevation = if (isFullmodeTransition && p > 0f && p < 1f) {
+                                sin(p * kotlin.math.PI.toFloat()) * 14.dp.toPx()
+                            } else {
+                                0f
+                            }
+                            shape = PlayerMorphShape(left, right, bottom - top, radius)
                             clip = p < 1f
                         }
                         .drawBehind {
@@ -794,7 +848,19 @@ fun PlayerHost(
                             artist = state.current!!.artist,
                             embeddedUrl = state.current!!.artworkUrl,
                             fallbackIcon = Icons.Filled.MusicNote,
-                            modifier = Modifier.fillMaxSize(),
+                            decodeSizePx = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    val p = playerExpansion.value.coerceIn(0f, 1f)
+                                    val start = miniCardBounds
+                                        ?: androidx.compose.ui.geometry.Rect(0f, size.height, size.width, size.height)
+                                    val top = androidx.compose.ui.util.lerp(start.top, 0f, p)
+                                    val bottom = androidx.compose.ui.util.lerp(start.bottom, size.height, p.pow(1.35f))
+                                    val cardH = (bottom - top).coerceIn(0f, size.height)
+                                    // Keep focal region centered inside the shrinking pill; reaches 0f cleanly at p = 1f.
+                                    translationY = (cardH - size.height) * 0.42f
+                                },
                         )
                     }
                     Box(
@@ -802,11 +868,16 @@ fun PlayerHost(
                             .fillMaxSize()
                             .graphicsLayer {
                                 val p = playerExpansion.value.coerceIn(0f, 1f)
-                                // Full player: invisible until 25% expanded, opaque at 100%,
-                                // with a 24dp upward settle (PixelMusic FullPlayerVisualState).
-                                val contentAlpha = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                // Fullmode fades chrome early (p = 0.50..0.94) so only the pure
+                                // unified artwork shrinks cleanly into the MiniPlayer pill.
+                                val contentAlpha = if (isFullmodeTransition) {
+                                    val raw = ((p - 0.50f) / 0.44f).coerceIn(0f, 1f)
+                                    raw * raw * (3f - 2f * raw)
+                                } else {
+                                    ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                }
                                 alpha = contentAlpha
-                                val settlePx = with(sheetDensity) { 24.dp.toPx() }
+                                val settlePx = with(sheetDensity) { (if (isFullmodeTransition) 16.dp else 24.dp).toPx() }
                                 translationY = androidx.compose.ui.util.lerp(settlePx, 0f, contentAlpha)
                             },
                     ) {
@@ -923,6 +994,37 @@ fun PlayerHost(
                     },
                 )
             }
+
+            val toastBottomPadding = when {
+                expanded || playerExpansion.value > 0.5f -> 96.dp
+                miniPlayerVisible -> {
+                    val miniBase = when {
+                        onHome != null -> 14.dp
+                        hasBottomNavigation || searchBarBelow -> if (material3NavigationEnabled) 80.dp else 76.dp
+                        else -> 14.dp
+                    }
+                    miniBase + 78.dp
+                }
+                hasBottomNavigation || searchBarBelow -> (if (material3NavigationEnabled) 80.dp else 76.dp) + 14.dp
+                else -> 20.dp
+            }
+            PlayerToastPillHost(
+                toast = activeToastPill,
+                onDismiss = { activeToastPill = null },
+                onTap = { event ->
+                    activeToastPill = null
+                    if (event.kind == PlayerToastKind.DOWNLOADED) {
+                        expanded = false
+                        viewModel.navigateToDownloads()
+                    }
+                },
+                backdrop = if (miniGlass && !playerLayerShown) miniBackdrop else null,
+                forceDarkSurface = expanded || playerExpansion.value > 0.5f,
+                bottomPadding = toastBottomPadding,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(10f),
+            )
         }
     }
 }

@@ -198,28 +198,41 @@ internal fun Modifier.dockBesidePill(
     progress: () -> Float,
     pillOnRight: Boolean = false,
     extraPillWidth: () -> Dp = { 0.dp },
+    elastic: Boolean = false,
 ): Modifier =
     layout { measurable, constraints ->
         val p = progress()
-        val shiftX = ((CompactPillSize + extraPillWidth() + CompactRowGap).toPx() * p).roundToInt()
+        val extraDp = extraPillWidth()
+        val shiftX = ((CompactPillSize + extraDp + CompactRowGap).toPx() * p).roundToInt()
         val shiftY = ((lift - CompactRowBottomMargin).toPx() * p).roundToInt()
         val placeable = measurable.measure(constraints.offset(horizontal = -shiftX))
         // Reporting less height than measured drops the card by shiftY; only the empty
         // bottom padding hangs below the screen edge.
         val height = (placeable.height - shiftY).coerceAtLeast(0)
+        val extraFrac = (extraDp.value / 84f).coerceIn(0f, 1f)
+        fun androidx.compose.ui.layout.Placeable.PlacementScope.placeDockable(x: Int) {
+            if (elastic && extraFrac > 0.001f) {
+                placeable.placeRelativeWithLayer(x, 0) {
+                    val bounce = kotlin.math.sin(extraFrac * kotlin.math.PI.toFloat())
+                    scaleY = 1f - 0.03f * bounce
+                }
+            } else {
+                placeable.placeRelative(x, 0)
+            }
+        }
         if (!constraints.hasBoundedWidth) {
-            layout(placeable.width + shiftX, height) { placeable.placeRelative(if (pillOnRight) 0 else shiftX, 0) }
+            layout(placeable.width + shiftX, height) { placeDockable(if (pillOnRight) 0 else shiftX) }
         } else if (pillOnRight) {
             val width = constraints.maxWidth
             val x = minOf((width - placeable.width) / 2, width - placeable.width - shiftX)
-            layout(width, height) { placeable.placeRelative(x, 0) }
+            layout(width, height) { placeDockable(x) }
         } else {
             // Take the full width and keep the card centred; only move it when the
             // centred card would sit under the pill. A width-capped card (tablets)
             // already clears the pill, so it no longer jumps sideways on collapse.
             val width = constraints.maxWidth
             val x = maxOf((width - placeable.width) / 2, shiftX)
-            layout(width, height) { placeable.placeRelative(x, 0) }
+            layout(width, height) { placeDockable(x) }
         }
     }
 

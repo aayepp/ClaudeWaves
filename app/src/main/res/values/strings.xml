@@ -160,6 +160,9 @@
     <string name="settings_now_playing_minimal">Minimal Design</string>
     <string name="settings_now_playing_minimal_on">Clean frameless Now Playing controls, bare icons &amp; inline quality label</string>
     <string name="settings_now_playing_minimal_off">Standard ClaudeWaves Now Playing layout</string>
+    <string name="settings_liquid_studio_style">Liquid Studio Style</string>
+    <string name="settings_liquid_studio_style_on">Glass morphing controls, squircle ripple, 3D flip preview &amp; Click-Wheel queue</string>
+    <string name="settings_liquid_studio_style_off">Standard ClaudeWaves layout &amp; animations</string>
     <string name="menu_play_best_part">Play best part</string>
     <string name="player_best_part">Best part</string>
     <string name="menu_best_part_not_found">No best part found, playing from the start</string>
@@ -1139,6 +1142,8 @@
     <string name="toast_import_result">Imported “%1$s”: %2$d tracks, %3$d skipped</string>
     <string name="toast_import_fail">Import failed: %1$s</string>
     <string name="toast_excl_cleared">Exclusion history cleared</string>
+    <string name="toast_downloaded">Downloaded “%1$s”</string>
+    <string name="toast_saved_to_downloads">Saved to Downloads</string>
     <string name="set_cat_audio">Audio &amp; Playback</string>
     <string name="set_cat_audio_sub">Streaming quality, Audio engine, Equalizer, Output &amp; Loudness</string>
     <string name="set_cat_appear">Appearance &amp; Visuals</string>

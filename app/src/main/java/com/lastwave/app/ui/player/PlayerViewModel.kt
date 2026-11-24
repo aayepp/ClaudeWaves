@@ -398,7 +398,11 @@ class PlayerViewModel @Inject constructor(
         scope = viewModelScope,
         settings = equalizer,
         logTag = "PlayerViewModel",
-        onFailure = { resId -> viewModelScope.launch { _toastMessage.emit(player.appContext.getString(resId)) } },
+        onFailure = { resId ->
+            viewModelScope.launch {
+                _toastEvents.emit(PlayerToastEvent(PlayerToastKind.ERROR, player.appContext.getString(resId)))
+            }
+        },
         runAction = { _, block ->
             viewModelScope.launch {
                 runCatching { block() }.onFailure { err ->
@@ -463,10 +467,22 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             when {
                 downloadManager.isDownloading(track.title, track.artist) -> {
-                    _toastMessage.emit(player.appContext.getString(com.lastwave.app.R.string.menu_download_progress))
+                    _toastEvents.emit(
+                        PlayerToastEvent(
+                            kind = PlayerToastKind.INFO,
+                            title = player.appContext.getString(com.lastwave.app.R.string.menu_download_progress),
+                            subtitle = track.title,
+                        ),
+                    )
                 }
                 downloadManager.isTrackDownloaded(track.title, track.artist) -> {
-                    _toastMessage.emit(player.appContext.getString(com.lastwave.app.R.string.menu_already_downloaded))
+                    _toastEvents.emit(
+                        PlayerToastEvent(
+                            kind = PlayerToastKind.DOWNLOADED,
+                            title = player.appContext.getString(com.lastwave.app.R.string.menu_already_downloaded),
+                            subtitle = track.title,
+                        ),
+                    )
                 }
                 else -> {
                     unviewedDownloads.update {
@@ -537,8 +553,13 @@ class PlayerViewModel @Inject constructor(
 
     fun toggleYouTubeLike(track: PlayableTrack) = toggleLiked(track)
 
-    private val _toastMessage = MutableSharedFlow<String>()
-    val toastMessage = _toastMessage.asSharedFlow()
+    private val _toastEvents = MutableSharedFlow<PlayerToastEvent>(
+        replay = 0,
+        extraBufferCapacity = 8,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    )
+    val toastEvents = _toastEvents.asSharedFlow()
+    val downloadCompletedEvents = downloadManager.completedEvents
 
     private fun lyricsOffsetTrackKey(track: PlayableTrack): String =
         track.videoId?.takeIf { it.isNotBlank() }?.let { "vid:$it" }
@@ -1025,7 +1046,13 @@ class PlayerViewModel @Inject constructor(
                     ytMusicLibraryManager.refresh()
                     refreshCustomPlaylists()
                 }
-                _toastMessage.emit(if (anyAdded) "Added to playlist" else "Couldn't add to playlist")
+                _toastEvents.emit(
+                    PlayerToastEvent(
+                        kind = if (anyAdded) PlayerToastKind.PLAYLIST_ADDED else PlayerToastKind.ERROR,
+                        title = if (anyAdded) "Added to playlist" else "Couldn't add to playlist",
+                        subtitle = if (anyAdded) track.title else null,
+                    ),
+                )
             }
         }
     }
@@ -1058,7 +1085,7 @@ class PlayerViewModel @Inject constructor(
             runCatching {
                 val playlist = playlistRepository.createCustom(title)
                 playlistRepository.addTrack(playlist.id, track.toGeneratedTrack())
-                _toastMessage.emit("Added to playlist")
+                _toastEvents.emit(PlayerToastEvent(PlayerToastKind.PLAYLIST_ADDED, "Added to playlist", track.title))
             }
         }
     }
@@ -1074,7 +1101,13 @@ class PlayerViewModel @Inject constructor(
                         added = true
                     }
                 }
-                _toastMessage.emit(if (added) "Added to offline playlist" else "Already in offline playlist")
+                _toastEvents.emit(
+                    PlayerToastEvent(
+                        kind = if (added) PlayerToastKind.PLAYLIST_ADDED else PlayerToastKind.INFO,
+                        title = if (added) "Added to offline playlist" else "Already in offline playlist",
+                        subtitle = track.title,
+                    ),
+                )
             }
         }
     }
@@ -1086,7 +1119,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 localOfflineRepository.createPlaylist(clean, listOf(url))
-                _toastMessage.emit("Added to offline playlist")
+                _toastEvents.emit(PlayerToastEvent(PlayerToastKind.PLAYLIST_ADDED, "Added to offline playlist", track.title))
             }
         }
     }
@@ -1095,13 +1128,18 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val liked = trackLikeController.toggle(track)
-                _toastMessage.emit(if (liked) "Added to Liked Songs" else "Removed from Liked Songs")
+                _toastEvents.emit(
+                    PlayerToastEvent(
+                        kind = if (liked) PlayerToastKind.LIKED_ADDED else PlayerToastKind.LIKED_REMOVED,
+                        title = if (liked) "Added to Liked Songs" else "Removed from Liked Songs",
+                        subtitle = track.title,
+                    ),
+                )
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
                 android.util.Log.e("PlayerViewModel", "Like toggle failed", error)
-                // emit, not tryEmit: this flow has no buffer, so tryEmit was always dropped.
-                _toastMessage.emit("Couldn't update Liked Songs")
+                _toastEvents.emit(PlayerToastEvent(PlayerToastKind.ERROR, "Couldn't update Liked Songs"))
             }
         }
     }
@@ -1114,7 +1152,7 @@ class PlayerViewModel @Inject constructor(
                 throw cancellation
             } catch (error: Exception) {
                 android.util.Log.e("PlayerViewModel", "Like failed", error)
-                _toastMessage.emit("Couldn't update Liked Songs")
+                _toastEvents.emit(PlayerToastEvent(PlayerToastKind.ERROR, "Couldn't update Liked Songs"))
             }
         }
     }

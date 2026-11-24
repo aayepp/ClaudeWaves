@@ -58,8 +58,12 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -262,6 +266,13 @@ class TrackDownloadManager @Inject constructor(
 
     internal val _downloads = MutableStateFlow<Map<String, DownloadProgress>>(emptyMap())
     val downloads: StateFlow<Map<String, DownloadProgress>> = _downloads.asStateFlow()
+
+    private val _completedEvents = MutableSharedFlow<DownloadCompletedEvent>(
+        replay = 0,
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val completedEvents: SharedFlow<DownloadCompletedEvent> = _completedEvents.asSharedFlow()
 
     @Volatile
     internal var hiddenHistoryCache: HiddenHistory? = null
@@ -491,6 +502,7 @@ class TrackDownloadManager @Inject constructor(
         year: String? = null,
         videoId: String? = null,
         durationMs: Long? = null,
+        silent: Boolean = false,
     ) {
         val key = makeDownloadKey(title, artist)
         // Admission and job registration share [admissionLock] with the wipe so a
@@ -509,6 +521,7 @@ class TrackDownloadManager @Inject constructor(
                     year,
                     videoId,
                     durationMs,
+                    silent,
                 )
             }
             activeJobs[key] = job
@@ -525,6 +538,7 @@ class TrackDownloadManager @Inject constructor(
         year: String?,
         videoId: String?,
         durationMs: Long?,
+        silent: Boolean = false,
     ) {
             // Bound the number of simultaneous downloads: each one holds
             // sockets, buffers and (during tagging) a decoded cover bitmap,
@@ -1943,6 +1957,15 @@ class TrackDownloadManager @Inject constructor(
                     "$formatBadge • ${missingExtras.joinToString(" + ")}"
                 }
                 runCatching { showCompletedNotification(notifId, finalTitle, finalArtist, completedBadge) }
+                if (!silent) {
+                    _completedEvents.tryEmit(
+                        DownloadCompletedEvent(
+                            title = finalTitle,
+                            artist = finalArtist,
+                            formatBadge = formatBadge,
+                        ),
+                    )
+                }
             } catch (cancelled: CancellationException) {
                 // Cancelled by user — clean up partial file
                 destinationUri?.let { runCatching { context.contentResolver.delete(it, null, null) } }

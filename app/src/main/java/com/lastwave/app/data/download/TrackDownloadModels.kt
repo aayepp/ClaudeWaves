@@ -110,6 +110,12 @@ data class DownloadProgress(
     val error: String? = null,
 )
 
+data class DownloadCompletedEvent(
+    val title: String,
+    val artist: String,
+    val formatBadge: String,
+)
+
 internal data class DownloadTransfer(
     val bytesDownloaded: Long,
     val totalBytes: Long,

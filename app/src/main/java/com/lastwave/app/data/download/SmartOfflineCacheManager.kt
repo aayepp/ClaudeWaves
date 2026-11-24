@@ -172,6 +172,7 @@ class SmartOfflineCacheManager @Inject constructor(
                 artworkUrl = candidate.artworkUrl,
                 videoId = candidate.videoId,
                 durationMs = candidate.durationMs,
+                silent = true,
             )
             delay(ENQUEUE_YIELD_MS)
         }

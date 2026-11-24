@@ -621,29 +621,44 @@ internal fun ModernLyricsControls(
             currentPositionMs.coerceAtLeast(0L).toFloat()
         }
 
-        PlayerProgressSlider(
-            value = shown.coerceIn(0f, end),
-            onValueChange = {
-                dragValue = it
-                lastSeekValue = it
-            },
-            onValueChangeFinished = {
-                // Commit only this gesture's value; no value = no seek.
-                val target = (lastSeekValue ?: dragValue)?.toLong()
-                dragValue = null
-                lastSeekValue = null
-                if (target != null) player.seekTo(target)
-            },
-            valueRange = 0f..end,
-            enabled = totalDurationMs > 0,
-            modifier = Modifier.fillMaxWidth(),
-            interactionSource = seekInteraction,
-            primaryColor = primaryColor,
-            tertiaryColor = tertiaryColor,
-            wavy = wavySeekbarEnabled,
-            isPlaying = state.isPlaying,
-            secondaryColor = secondaryColor,
-        )
+        if (com.lastwave.app.ui.theme.LocalLiquidStudioStyle.current) {
+            LiquidStudioMorphSeekBar(
+                progressState = player.progressState,
+                isPlaying = state.isPlaying,
+                trackKey = lyricsTrackKey.orEmpty(),
+                fallbackDurationMs = totalDurationMs,
+                primaryColor = primaryColor,
+                secondaryColor = secondaryColor,
+                onSeek = player::seekTo,
+                slim = true,
+                showTimestamps = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            PlayerProgressSlider(
+                value = shown.coerceIn(0f, end),
+                onValueChange = {
+                    dragValue = it
+                    lastSeekValue = it
+                },
+                onValueChangeFinished = {
+                    // Commit only this gesture's value; no value = no seek.
+                    val target = (lastSeekValue ?: dragValue)?.toLong()
+                    dragValue = null
+                    lastSeekValue = null
+                    if (target != null) player.seekTo(target)
+                },
+                valueRange = 0f..end,
+                enabled = totalDurationMs > 0,
+                modifier = Modifier.fillMaxWidth(),
+                interactionSource = seekInteraction,
+                primaryColor = primaryColor,
+                tertiaryColor = tertiaryColor,
+                wavy = wavySeekbarEnabled,
+                isPlaying = state.isPlaying,
+                secondaryColor = secondaryColor,
+            )
+        }
 
         val currentSecond = shown.toLong() / 1000L
         val remainingSecond = (totalDurationMs - shown.toLong()).coerceAtLeast(0) / 1000L

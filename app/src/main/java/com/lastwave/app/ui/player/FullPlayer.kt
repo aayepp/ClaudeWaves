@@ -436,12 +436,15 @@ internal fun FullPlayer(
     // asynchronously, so without this a disabled toggle still paints one frame of
     // motion artwork over the cover.
     val activeCanvas = remember(canvas, showFullBleed, canvasEnabled) {
-        if (!canvasEnabled) {
+        if (!canvasEnabled || canvas == null) {
             null
         } else {
-            val tall = canvas?.tallUrl
-            if (showFullBleed && canvas != null && !tall.isNullOrBlank()) {
-                canvas.copy(url = tall)
+            val tall = canvas.tallUrl
+            if (showFullBleed && !tall.isNullOrBlank() && tall != canvas.url) {
+                canvas.copy(
+                    url = tall,
+                    fallbackUrl = canvas.url,
+                )
             } else {
                 canvas
             }
@@ -714,6 +717,16 @@ internal fun FullPlayer(
                 animationSpec = tween(240),
                 label = "readabilityAlpha",
             )
+            val fullBleedHeroAlpha by animateFloatAsState(
+                targetValue = if (showFullBleed && currentTab == FullPlayerTab.NOW_PLAYING) 1f else 0f,
+                animationSpec = tween(240, easing = FastOutSlowInEasing),
+                label = "fullBleedArtworkAlpha",
+            )
+            val queueWash by animateFloatAsState(
+                targetValue = if (currentTab == FullPlayerTab.QUEUE) 1f else 0f,
+                animationSpec = tween(220, easing = FastOutSlowInEasing),
+                label = "queueWash",
+            )
             Box(
                 Modifier
                     .matchParentSize()
@@ -731,11 +744,10 @@ internal fun FullPlayer(
                     progressState = progressState,
                     lyricsOffsetMs = lyricsOffsetMs,
                     resolvedAmbientUrl = resolvedAmbientUrl,
-                    activeCanvas = activeCanvas,
+                    heroAlpha = fullBleedHeroAlpha,
+                    queueWash = queueWash,
                     canvasCover = canvasCover,
-                    onCanvasCoverChanged = { canvasCover = it },
-                    onCanvasAspectChanged = { canvasAspect = it },
-                    pausedForTransition = shownDismissY > 1f || currentTab != FullPlayerTab.NOW_PLAYING,
+                    keepStaticHeroForGlass = fullGlass,
                     ambientColor = ambientColor,
                     ambientCompanion = ambientCompanion,
                     ambientDeep = ambientDeep,
@@ -746,6 +758,28 @@ internal fun FullPlayer(
                     comicPageOverAll = comicPageOverAll,
                     readabilityAlpha = readabilityAlpha,
                     lyricsOnArtworkColors = lyricsOnArtworkColors,
+                )
+            }
+            // Mount Fullmode CanvasArtworkPlayer outside liquidGlassSource(playerBackdrop) so the
+            // hardware TextureView stays live instead of freezing inside offscreen LayerBackdrop capture.
+            if (showFullBleed) {
+                if (activeCanvas != null) {
+                    CanvasArtworkPlayer(
+                        canvas = activeCanvas,
+                        isPlaying = state.isPlaying,
+                        contentMode = CanvasContentMode.CROP,
+                        alignPortraitTop = true,
+                        bottomFade = 0f,
+                        presentationAlpha = { fullBleedHeroAlpha },
+                        onCoverChanged = { canvasCover = it },
+                        onAspectRatioChanged = { canvasAspect = it },
+                        pausedForTransition = shownDismissY > 1f || currentTab != FullPlayerTab.NOW_PLAYING,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
+                FullBleedReadabilityScrim(
+                    alpha = readabilityAlpha.coerceIn(0f, 1f) * (1f - queueWash) * fullBleedHeroAlpha,
+                    modifier = Modifier.matchParentSize(),
                 )
             }
             // Bottom inset is applied per tab below, so the queue can run under the gesture pill.

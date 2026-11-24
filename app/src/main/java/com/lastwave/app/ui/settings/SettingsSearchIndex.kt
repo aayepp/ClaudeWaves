@@ -820,6 +820,23 @@ object SettingsSearchIndex {
             )
             add(
                 SettingsEntry(
+                    id = "appearance.liquid_studio_style",
+                    title = "Liquid Studio Style",
+                    subtitle = "Glass morphing controls, squircle ripple, 3D flip preview & Click-Wheel queue",
+                    keywords = listOf(
+                        "liquid studio", "new style", "studio", "cover flow", "click wheel",
+                        "3d flip", "morphing seekbar", "glass pill", "elastic dock", "squircle ripple", "animations"
+                    ),
+                    icon = Icons.Filled.AutoAwesome,
+                    iconContainer = { MaterialTheme.colorScheme.tertiaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onTertiaryContainer },
+                    parentTab = SettingsTab.APPEARANCE,
+                    section = "Experimental & Features",
+                    type = EntryType.TOGGLE,
+                )
+            )
+            add(
+                SettingsEntry(
                     id = "appearance.music_video",
                     title = "Music Video",
                     subtitle = "Watch exact-sync music video of currently playing song in player menu",

@@ -2,9 +2,12 @@ package com.lastwave.app.ui.player
 
 import android.os.Build
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -56,6 +59,7 @@ fun StaticArtworkHero(
     contentScale: ContentScale = ContentScale.Crop,
     alignment: Alignment = Alignment.TopCenter,
     mirrorExtend: Boolean = false,
+    silkCrossfade: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -73,7 +77,16 @@ fun StaticArtworkHero(
         Box(modifier = modifier.graphicsLayer { this.alpha = alpha }) {
             AnimatedContent(
                 targetState = displayUrl,
-                transitionSpec = { fadeIn(tween(420)) togetherWith fadeOut(tween(420)) },
+                transitionSpec = {
+                    if (silkCrossfade) {
+                        (fadeIn(tween(340, easing = FastOutSlowInEasing)) +
+                            scaleIn(tween(380, easing = FastOutSlowInEasing), initialScale = 1.055f)) togetherWith
+                            (fadeOut(tween(280, easing = FastOutSlowInEasing)) +
+                                scaleOut(tween(320, easing = FastOutSlowInEasing), targetScale = 0.965f))
+                    } else {
+                        fadeIn(tween(420)) togetherWith fadeOut(tween(420))
+                    }
+                },
                 label = "mirrorFullmodeArtwork",
             ) { targetUrl ->
                 if (targetUrl.isNullOrBlank()) {

@@ -94,19 +94,44 @@ fun CanvasArtworkPlayer(
 ) {
     val context = LocalContext.current
 
-    var url by remember(canvas) { mutableStateOf(canvas.url) }
-    var rendered by remember(canvas) { mutableStateOf(false) }
-    var clipAspect by remember(canvas) { mutableFloatStateOf(0f) }
+    val currentCanvas by rememberUpdatedState(canvas)
+    var url by remember { mutableStateOf(canvas.url) }
+    var rendered by remember { mutableStateOf(false) }
+    var clipAspect by remember { mutableFloatStateOf(0f) }
     var bounds by remember { mutableStateOf(IntSize.Zero) }
-    var textureView by remember(canvas) { mutableStateOf<TextureView?>(null) }
-    var frameTick by remember(canvas) { mutableIntStateOf(0) }
-    var surfaceGeneration by remember(canvas) { mutableIntStateOf(0) }
+    var textureView by remember { mutableStateOf<TextureView?>(null) }
+    var frameTick by remember { mutableIntStateOf(0) }
+    var surfaceGeneration by remember { mutableIntStateOf(0) }
 
     val currentContentMode by rememberUpdatedState(contentMode)
     val currentAlignPortraitTop by rememberUpdatedState(alignPortraitTop)
     val currentPortraitRevealBounds by rememberUpdatedState(portraitRevealBounds)
     val currentPresentationAlpha by rememberUpdatedState(presentationAlpha)
     val reportAspect by rememberUpdatedState(onAspectRatioChanged)
+
+    fun markFrameRendered() {
+        if (rendered) return
+        val transformed = textureView?.applyContentTransform(
+            clipAspect, currentContentMode, currentAlignPortraitTop,
+        ) == true
+        val portrait = currentContentMode == CanvasContentMode.FIT_PORTRAIT &&
+            clipAspect > 0f && clipAspect < 1f
+        val expected = currentPortraitRevealBounds
+        val view = textureView
+        val layoutReady = !portrait ||
+            (expected != IntSize.Zero && view?.width == expected.width &&
+                view?.height == expected.height)
+        if ((currentContentMode == CanvasContentMode.CROP || transformed) && layoutReady) {
+            rendered = true
+            frameTick++
+        }
+    }
+
+    LaunchedEffect(canvas.url, canvas.fallbackUrl) {
+        if (url != canvas.url) {
+            url = canvas.url
+        }
+    }
 
     val player = remember {
         val httpFactory = DefaultHttpDataSource.Factory()
@@ -140,15 +165,21 @@ fun CanvasArtworkPlayer(
                 val aspect = if (width.isFinite() && width > 0f && videoSize.height > 0) {
                     width / videoSize.height
                 } else 0f
-                if (aspect != clipAspect) rendered = false
+                if (aspect > 0f && aspect != clipAspect && currentContentMode == CanvasContentMode.FIT_PORTRAIT) {
+                    rendered = false
+                }
                 clipAspect = aspect
                 reportAspect(aspect)
                 textureView?.applyContentTransform(clipAspect, currentContentMode, currentAlignPortraitTop)
             }
 
+            override fun onRenderedFirstFrame() {
+                markFrameRendered()
+            }
+
             override fun onPlayerError(error: PlaybackException) {
-                val alternate = canvas.fallbackUrl
-                if (alternate != null && alternate != url) {
+                val alternate = currentCanvas.fallbackUrl
+                if (!alternate.isNullOrBlank() && alternate != url) {
                     Log.d(TAG, "Primary canvas error, falling back to: $alternate")
                     url = alternate
                 } else {
@@ -175,8 +206,9 @@ fun CanvasArtworkPlayer(
     }
 
     val foreground = rememberIsForeground()
-    LaunchedEffect(foreground, pausedForTransition) {
-        player.playWhenReady = foreground && !pausedForTransition
+    val fullPlayerOpen = LocalFullPlayerOpen.current
+    LaunchedEffect(foreground, fullPlayerOpen, pausedForTransition, url) {
+        player.playWhenReady = foreground && fullPlayerOpen && !pausedForTransition
     }
 
     LaunchedEffect(surfaceGeneration) {
@@ -238,6 +270,7 @@ fun CanvasArtworkPlayer(
 
                     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
                         delegate?.onSurfaceTextureSizeChanged(surface, width, height)
+                        textureView?.applyContentTransform(clipAspect, currentContentMode, currentAlignPortraitTop)
                         if (currentContentMode == CanvasContentMode.FIT_PORTRAIT && clipAspect in 0f..1f) {
                             rendered = false
                         }
@@ -251,22 +284,7 @@ fun CanvasArtworkPlayer(
 
                     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
                         delegate?.onSurfaceTextureUpdated(surface)
-                        if (!rendered) {
-                            val transformed = textureView?.applyContentTransform(
-                                clipAspect, currentContentMode, currentAlignPortraitTop,
-                            ) == true
-                            val portrait = currentContentMode == CanvasContentMode.FIT_PORTRAIT &&
-                                clipAspect > 0f && clipAspect < 1f
-                            val expected = currentPortraitRevealBounds
-                            val view = textureView
-                            val layoutReady = !portrait ||
-                                (expected != IntSize.Zero && view?.width == expected.width &&
-                                    view?.height == expected.height)
-                            if ((currentContentMode == CanvasContentMode.CROP || transformed) && layoutReady) {
-                                rendered = true
-                                frameTick++
-                            }
-                        }
+                        markFrameRendered()
                     }
                 }
             }
