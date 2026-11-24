@@ -289,6 +289,24 @@ class MusicPlayer @Inject constructor(
     internal var activeUpgradeTargetQuality: Int? = null
     internal var activeUpgradeDeferred: Deferred<ResolvedStream?>? = null
     @Volatile internal var allowDirectRecoveryMediaId: String? = null
+    private val failedLosslessUrls = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun rememberFailedLosslessUrl(url: String?) {
+        val clean = url?.takeIf(String::isNotBlank) ?: return
+        failedLosslessUrls[clean] = SystemClock.elapsedRealtime()
+    }
+
+    private fun activeFailedLosslessUrls(): Set<String> {
+        if (failedLosslessUrls.isEmpty()) return emptySet()
+        val now = SystemClock.elapsedRealtime()
+        val active = HashSet<String>()
+        val iter = failedLosslessUrls.entries.iterator()
+        while (iter.hasNext()) {
+            val entry = iter.next()
+            if (now - entry.value > 5 * 60_000L) iter.remove() else active.add(entry.key)
+        }
+        return active
+    }
     /** Verified source-master offsets, so a repeat upgrade skips the silent probe. */
     private val swapOffsetCache = SwapOffsetCache()
     /**
@@ -1349,6 +1367,7 @@ class MusicPlayer @Inject constructor(
                             runCatching { mediaCache.removeResource(cacheKey) }
                             preparedStreams.remove(cacheKey)
                         }
+                        if (failedLosslessStream) rememberFailedLosslessUrl(rejectedStream?.url)
                         val retryDelayMs = if (failedLocalStream || (failedLosslessStream && !playedAudibly)) {
                             0L
                         } else {
@@ -1408,6 +1427,11 @@ class MusicPlayer @Inject constructor(
                                 player.play()
                                 preloadNextQueueItem(failedIndex)
                                 if (!stream.isLossless && stream.audioCodec != "DOLBY ATMOS") {
+                                    if (failedLosslessStream && losslessTransportFailure &&
+                                        latestPlaybackSettings.hiResStart == HiResStart.DIRECT
+                                    ) {
+                                        allowDirectRecoveryMediaId = updated.mediaIdKey()
+                                    }
                                     scheduleQualityUpgrade(
                                         track = updated,
                                         expectedMediaId = failedMediaId ?: updated.mediaIdKey(),
@@ -6744,7 +6768,7 @@ class MusicPlayer @Inject constructor(
             losslessBudget != LosslessBudget.Disabled
         PlaybackStartupLog.cacheLookupStart()
         val prepared = findPreparedStreamFor(track, videoId, bypassLossless = !wantProvider, requestedQuality)
-            ?.takeIf { it.url !in excludedLosslessUrls }
+            ?.takeIf { it.url !in excludedLosslessUrls && it.url !in activeFailedLosslessUrls() }
             ?.takeIf {
                 val isLocal = it.cacheKey.startsWith("local:") || it.cacheKey.startsWith("offline:")
                 allowLocalDownloads || !isLocal
@@ -6856,6 +6880,7 @@ class MusicPlayer @Inject constructor(
                 return candidate
             }
             failedProbeUrls.add(candidate.url)
+            rememberFailedLosslessUrl(candidate.url)
             if (startDirect && retriedAfterProbeFail.compareAndSet(false, true)) {
                 val remainingMs = probeTimeoutMs()
                 if (remainingMs > 600L) {
@@ -6876,6 +6901,7 @@ class MusicPlayer @Inject constructor(
                         if (isManifest(backup)) return backup.takeIf { acceptManifest }
                         if (isProviderReadyForStartup(backup, probeTimeoutMs())) return backup
                         failedProbeUrls.add(backup.url)
+                        rememberFailedLosslessUrl(backup.url)
                     }
                 }
             }
@@ -7189,13 +7215,14 @@ class MusicPlayer @Inject constructor(
     ): ResolvedStream? {
         val atmosSupported = isSpatialAudioSupportedOnDevice()
         val effectiveQuality = effectiveLosslessQuality(misc, requestedQuality)
+        val combinedExcluded = excludedLosslessUrls + activeFailedLosslessUrls()
         val stream = losslessMusicApi.resolveStream(
             title = track.title,
             artist = track.artist,
             expectedDurationSeconds = expectedDurationSeconds,
             expectedAlbum = track.album,
             preferredQuality = effectiveQuality,
-            excludedUrls = excludedLosslessUrls,
+            excludedUrls = combinedExcluded,
         ) ?: if (effectiveQuality == LosslessMusicApi.QUALITY_DOLBY_ATMOS) {
             android.util.Log.i(
                 "MusicPlayer",
@@ -7207,13 +7234,13 @@ class MusicPlayer @Inject constructor(
                 expectedDurationSeconds = expectedDurationSeconds,
                 expectedAlbum = track.album,
                 preferredQuality = LosslessMusicApi.QUALITY_MAX_HI_RES,
-                excludedUrls = excludedLosslessUrls,
+                excludedUrls = combinedExcluded,
             )
         } else {
             null
         } ?: return null
 
-        if (stream.url.isBlank() || stream.url in excludedLosslessUrls) return null
+        if (stream.url.isBlank() || stream.url in combinedExcluded) return null
         // 320 kbps and Data Saver are caps, not minimums. Some addons answer a
         // lower-tier request with a higher rendition; reject it so Wi-Fi and
         // cellular profiles never silently exceed the selected quality limit.
