@@ -370,19 +370,9 @@ internal fun BoxScope.FullScreenArtworkBackground(
                 artist = track.artist,
                 embeddedUrl = track.artworkUrl,
                 resolvedUrl = resolvedAmbientUrl,
-                // Balanced below the top controls with gentle top & bottom feathering
-                // so the focal artwork isn't pinned flush into the status bar or crushed by dark fade.
-                topFade = 0.14f,
-                bottomFade = 0.22f,
                 alpha = heroAlpha * heroCover,
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.Center,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 22.dp)
-                    .fillMaxWidth()
-                    .aspectRatio(0.92f),
+                mirrorExtend = true,
+                modifier = Modifier.fillMaxSize(),
             )
             if (activeCanvas != null) {
                 CanvasArtworkPlayer(
@@ -411,14 +401,14 @@ internal fun BoxScope.FullScreenArtworkBackground(
             if (scrimStrength > 0.01f && queueWash < 0.99f) {
                 val scrimBrush = if (showFullBleed && isNowPlaying) {
                     Brush.verticalGradient(
-                        0.00f to PlayerPalette.shade.copy(alpha = 0.50f),
-                        0.14f to PlayerPalette.shade.copy(alpha = 0.18f),
+                        0.00f to PlayerPalette.shade.copy(alpha = 0.34f),
+                        0.12f to PlayerPalette.shade.copy(alpha = 0.08f),
                         0.24f to Color.Transparent,
-                        0.48f to Color.Transparent,
-                        0.58f to PlayerPalette.shade.copy(alpha = 0.34f),
-                        0.70f to PlayerPalette.shade.copy(alpha = 0.78f),
-                        0.86f to PlayerPalette.shade.copy(alpha = 0.92f),
-                        1.00f to PlayerPalette.shade.copy(alpha = 0.96f),
+                        0.52f to Color.Transparent,
+                        0.64f to PlayerPalette.shade.copy(alpha = 0.22f),
+                        0.78f to PlayerPalette.shade.copy(alpha = 0.44f),
+                        0.92f to PlayerPalette.shade.copy(alpha = 0.56f),
+                        1.00f to PlayerPalette.shade.copy(alpha = 0.64f),
                     )
                 } else {
                     Brush.verticalGradient(

@@ -1,5 +1,9 @@
 package com.lastwave.app.ui.common
 
+import android.graphics.RenderEffect
+import android.graphics.RuntimeShader
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -29,8 +33,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.RenderEffect as ComposeRenderEffect
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp as lerpColor
@@ -47,8 +55,93 @@ import com.lastwave.app.ui.theme.ComicAccent
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
+
+private const val LIQUID_RIPPLE_AGSL = """
+uniform shader uContent;
+uniform float2 uCenter;
+uniform float uR0;
+uniform float uR1;
+uniform float uAmp0;
+uniform float uAmp1;
+uniform float uSigma;
+uniform float uCa;
+uniform float uRingAlpha0;
+uniform float uRingAlpha1;
+uniform float3 uCool;
+uniform float3 uWarm;
+
+half4 main(float2 fragCoord) {
+    float2 delta = fragCoord - uCenter;
+    float dist = length(delta);
+    float2 dir = dist > 0.5 ? delta / dist : float2(0.0, 0.0);
+
+    float inv2S = 1.0 / (2.0 * uSigma * uSigma);
+    float d0 = dist - uR0;
+    float g0 = exp(-(d0 * d0) * inv2S);
+    float slope0 = -(d0 / uSigma) * g0;
+
+    float d1 = dist - uR1;
+    float g1 = exp(-(d1 * d1) * inv2S);
+    float slope1 = -(d1 / uSigma) * g1;
+
+    float disp = slope0 * uAmp0 + slope1 * uAmp1;
+    float ca = (g0 + g1) * uCa;
+
+    half4 srcB = uContent.eval(fragCoord - dir * (disp + ca));
+    half4 srcG = uContent.eval(fragCoord - dir * disp);
+    half4 srcR = uContent.eval(fragCoord - dir * (disp - ca));
+
+    half txtA = max(srcG.a, max(srcB.a, srcR.a));
+    half ringStrength = clamp(half(g0 * uRingAlpha0 + g1 * uRingAlpha1), 0.0h, 0.45h);
+    half prism = half(dir.y * 0.5 + 0.5);
+    half3 ringCol = half3(mix(uCool, uWarm, float(prism)));
+
+    half3 haloPremul = ringCol * ringStrength;
+    half3 txtPremul = half3(srcR.r, srcG.g, srcB.b);
+    half3 outRgb = txtPremul + haloPremul * (1.0h - txtA);
+    half outA = txtA + ringStrength * (1.0h - txtA);
+    return half4(outRgb, outA);
+}
+"""
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private class LiquidRippleShaderHolder {
+    private val shader = RuntimeShader(LIQUID_RIPPLE_AGSL)
+
+    fun updateAndCreateEffect(
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        amp0: Float,
+        amp1: Float,
+        sigma: Float,
+        ca: Float,
+        ringAlpha0: Float,
+        ringAlpha1: Float,
+        cool: Color,
+        warm: Color,
+    ): ComposeRenderEffect? {
+        shader.setFloatUniform("uCenter", cx, cy)
+        shader.setFloatUniform("uR0", r0)
+        shader.setFloatUniform("uR1", r1)
+        shader.setFloatUniform("uAmp0", amp0)
+        shader.setFloatUniform("uAmp1", amp1)
+        shader.setFloatUniform("uSigma", sigma)
+        shader.setFloatUniform("uCa", ca)
+        shader.setFloatUniform("uRingAlpha0", ringAlpha0)
+        shader.setFloatUniform("uRingAlpha1", ringAlpha1)
+        shader.setFloatUniform("uCool", cool.red, cool.green, cool.blue)
+        shader.setFloatUniform("uWarm", warm.red, warm.green, warm.blue)
+        return runCatching {
+            RenderEffect.createRuntimeShaderEffect(shader, "uContent").asComposeRenderEffect()
+        }.getOrNull()
+    }
+}
 
 private val HeroGlideEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
@@ -162,12 +255,26 @@ fun DetailSonarRevealOverlay(
     val isDark = LocalIsDarkTheme.current
     val isComic = LocalComicTheme.current
     val comicAccent = ComicAccent
-    val ringColor = remember(onBg, primary, isDark, isComic, comicAccent) {
+    val coolRingTint = remember(onBg, primary, isDark, isComic, comicAccent) {
         when {
             isComic -> comicAccent
-            isDark -> lerpColor(Color.White, primary, 0.25f)
-            else -> lerpColor(onBg, primary, 0.45f)
+            isDark -> lerpColor(Color(0xFFA5CDF5), primary, 0.22f)
+            else -> lerpColor(Color(0xFF2A62B8), primary, 0.35f)
         }
+    }
+    val warmRingTint = remember(onBg, primary, isDark, isComic, comicAccent) {
+        when {
+            isComic -> comicAccent
+            isDark -> lerpColor(Color(0xFFE8D0B9), primary, 0.18f)
+            else -> lerpColor(Color(0xFF5873C6), primary, 0.35f)
+        }
+    }
+
+    val useAgsl = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isComic
+    val shaderHolder = remember(useAgsl) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && useAgsl) {
+            LiquidRippleShaderHolder()
+        } else null
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "detailSonarPulse")
@@ -175,7 +282,7 @@ fun DetailSonarRevealOverlay(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = LinearEasing),
+            animation = tween(durationMillis = 2400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "detailSonarCycle",
@@ -188,43 +295,91 @@ fun DetailSonarRevealOverlay(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .zIndex(5f),
+            .zIndex(5f)
+            .graphicsLayer {
+                if (shaderHolder != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val p = if (isLoading) 0f else state.progress
+                    val ringFade = if (isLoading) 1f else (1f - (p / 0.58f).coerceIn(0f, 1f))
+                    val refractStrength = if (isLoading) 1f else (1f - (p / 0.38f).coerceIn(0f, 1f))
+                    if (ringFade <= 0.005f) {
+                        renderEffect = null
+                    } else {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                        val p0 = pulseCycleState.value
+                        val p1 = (p0 + 0.5f) % 1f
+                        val decel0 = 1f - (1f - p0).pow(1.85f)
+                        val decel1 = 1f - (1f - p1).pow(1.85f)
+                        val minR = 10f * this.density
+                        val maxR = min(size.width, size.height) * 0.27f
+                        val r0 = lerpFloat(minR, maxR, decel0)
+                        val r1 = lerpFloat(minR, maxR, decel1)
+                        val env0 = sin(p0 * PI).toFloat().coerceAtLeast(0f).pow(1.35f) * ringFade
+                        val env1 = sin(p1 * PI).toFloat().coerceAtLeast(0f).pow(1.35f) * ringFade
+                        val peakAlpha = if (isDark) 0.16f else 0.13f
+                        val amp0 = lerpFloat(9.5f * this.density, 3.0f * this.density, decel0) * env0 * refractStrength
+                        val amp1 = lerpFloat(9.5f * this.density, 3.0f * this.density, decel1) * env1 * refractStrength
+                        val ca = (if (isDark) 1.35f else 0.65f) * this.density * refractStrength * (env0 + env1) * 0.5f
+                        renderEffect = shaderHolder.updateAndCreateEffect(
+                            cx = size.width / 2f,
+                            cy = size.height / 2f - 18f * this.density,
+                            r0 = r0,
+                            r1 = r1,
+                            amp0 = amp0,
+                            amp1 = amp1,
+                            sigma = 19f * this.density,
+                            ca = ca,
+                            ringAlpha0 = env0 * peakAlpha,
+                            ringAlpha1 = env1 * peakAlpha,
+                            cool = coolRingTint,
+                            warm = warmRingTint,
+                        )
+                    }
+                }
+            },
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val p = if (isLoading) 0f else state.progress
-            val ringFade = if (isLoading) 1f else (1f - (p / 0.58f).coerceIn(0f, 1f))
-            if (ringFade <= 0.01f) return@Canvas
-            val ringExpand = if (isLoading) 1f else 1f + 0.88f * p
-            val pulseCycle = pulseCycleState.value
-            val cx = size.width / 2f
-            val cy = size.height / 2f - 18.dp.toPx()
-            val minRadius = 44.dp.toPx()
-            val maxRadius = min(size.width, size.height) * 0.37f
-            val ringCount = 5
-            for (i in 0 until ringCount) {
-                val phase = (pulseCycle + i / ringCount.toFloat()) % 1f
-                val radius = lerpFloat(minRadius, maxRadius, phase) * ringExpand
-                val envelope = sin(phase * PI).toFloat()
-                if (envelope <= 0.01f) continue
-                if (isComic) {
-                    drawCircle(
-                        color = ringColor.copy(alpha = 0.30f * envelope * ringFade),
-                        radius = radius,
-                        center = Offset(cx, cy),
-                        style = Stroke(width = 2.5.dp.toPx()),
-                    )
-                } else {
-                    val baseWidth = lerpFloat(10.dp.toPx(), 18.dp.toPx(), phase)
-                    val peakAlpha = (if (isDark) 0.14f else 0.11f) * envelope * ringFade
-                    for (layer in 0 until 3) {
-                        val layerWidth = baseWidth * (1f + layer * 0.65f)
-                        val layerAlpha = peakAlpha / (1f + layer * 1.15f)
+        if (!useAgsl) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val p = if (isLoading) 0f else state.progress
+                val ringFade = if (isLoading) 1f else (1f - (p / 0.58f).coerceIn(0f, 1f))
+                if (ringFade <= 0.01f) return@Canvas
+                val pulseCycle = pulseCycleState.value
+                val cx = size.width / 2f
+                val cy = size.height / 2f - 18.dp.toPx()
+                val minRadius = 18.dp.toPx()
+                val maxRadius = min(size.width, size.height) * 0.27f
+                val ringCount = 2
+                for (i in 0 until ringCount) {
+                    val phase = (pulseCycle + i * 0.5f) % 1f
+                    val decel = 1f - (1f - phase).pow(1.85f)
+                    val radius = lerpFloat(minRadius, maxRadius, decel)
+                    val envelope = sin(phase * PI).toFloat().coerceAtLeast(0f).pow(1.35f)
+                    if (envelope <= 0.01f) continue
+                    if (isComic) {
                         drawCircle(
-                            color = ringColor.copy(alpha = layerAlpha),
+                            color = coolRingTint.copy(alpha = 0.28f * envelope * ringFade),
                             radius = radius,
                             center = Offset(cx, cy),
-                            style = Stroke(width = layerWidth),
+                            style = Stroke(width = 2.5.dp.toPx()),
                         )
+                    } else {
+                        val peakAlpha = (if (isDark) 0.14f else 0.11f) * envelope * ringFade
+                        val baseWidth = 14.dp.toPx()
+                        val ringBrush = Brush.verticalGradient(
+                            0f to coolRingTint.copy(alpha = peakAlpha * 0.42f),
+                            1f to warmRingTint.copy(alpha = peakAlpha * 0.42f),
+                            startY = cy - radius,
+                            endY = cy + radius,
+                        )
+                        for (layer in 0 until 4) {
+                            val layerWidth = baseWidth * (0.7f + layer * 0.55f)
+                            drawCircle(
+                                brush = ringBrush,
+                                radius = radius,
+                                center = Offset(cx, cy),
+                                alpha = 1f / (1f + layer * 0.9f),
+                                style = Stroke(width = layerWidth),
+                            )
+                        }
                     }
                 }
             }
@@ -245,15 +400,19 @@ fun DetailSonarRevealOverlay(
                 .onSizeChanged { flyingTitleSize = it }
                 .graphicsLayer {
                     val p = if (isLoading) 0f else state.progress
-                    val breath = 1f + 0.022f * sin(pulseCycleState.value * 2f * PI).toFloat() * (1f - p)
+                    val waveAmp = if (useAgsl) 0f else (1f - p)
+                    val wRad = pulseCycleState.value * 2f * PI.toFloat()
+                    val swayX = cos(wRad) * 2.5f * this.density * waveAmp
+                    val bobY = sin(wRad) * 3.5f * this.density * waveAmp
+                    val breath = if (useAgsl) 1f else (1f + 0.025f * sin(wRad - 0.6f) * waveAmp)
                     val flyingScale = lerpFloat(1.14f, 1f, p) * breath
                     val targetTopLeft = state.heroTitleTopLeft
                     transformOrigin = TransformOrigin(0f, 0f)
                     val fw = flyingTitleSize.width.toFloat()
                     val fh = flyingTitleSize.height.toFloat()
                     val startScale = 1.14f * breath
-                    val startX = (maxContainerWidthPx - fw * startScale) / 2f
-                    val startY = (maxContainerHeightPx / 2f - centerOffsetYPx) - (fh * startScale) / 2f
+                    val startX = (maxContainerWidthPx - fw * startScale) / 2f + swayX
+                    val startY = (maxContainerHeightPx / 2f - centerOffsetYPx) - (fh * startScale) / 2f + bobY
                     val endX = targetTopLeft?.x ?: startX
                     val endY = targetTopLeft?.y ?: startY
                     translationX = lerpFloat(startX, endX, p)

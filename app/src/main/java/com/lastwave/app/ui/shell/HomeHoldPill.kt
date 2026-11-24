@@ -3,7 +3,6 @@ package com.lastwave.app.ui.shell
 import android.os.SystemClock
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -38,7 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,7 +45,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,11 +74,11 @@ import com.lastwave.app.ui.player.LocalSetHomePillExtraWidth
 import com.lastwave.app.ui.theme.ComicAccent
 import com.lastwave.app.ui.theme.ComicInk
 import com.lastwave.app.ui.theme.LocalComicTheme
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+private const val HomeHoldActivationMs = 150L
 internal val ExpandedHomePillWidth = 140.dp
 private val HomePillExtraMax = ExpandedHomePillWidth - CompactPillSize // 84.dp
 
@@ -136,16 +133,12 @@ internal fun ExpandableHomeHoldPill(
     val latestShortcut by rememberUpdatedState(shortcut)
     val latestOnShortcut by rememberUpdatedState(onShortcut)
     val latestHomeOnRight by rememberUpdatedState(homeOnRight)
+    val latestSetExtraWidth by rememberUpdatedState(setExtraWidth)
 
     val expandAnim = remember { Animatable(0f) }
     var isHolding by remember { mutableStateOf(false) }
     var selectedSlot by remember { mutableIntStateOf(0) } // 0 = Home / primary, 1 = 2nd shortcut
 
-    LaunchedEffect(expandAnim, setExtraWidth) {
-        snapshotFlow { expandAnim.value }.collectLatest { frac ->
-            setExtraWidth(HomePillExtraMax * frac.coerceIn(0f, 1.05f))
-        }
-    }
     DisposableEffect(setExtraWidth) {
         onDispose { setExtraWidth(0.dp) }
     }
@@ -153,7 +146,7 @@ internal fun ExpandableHomeHoldPill(
     val currentWidth: Dp = CompactPillSize + HomePillExtraMax * expandAnim.value.coerceIn(0f, 1.05f)
     val selectionAnim by animateFloatAsState(
         targetValue = selectedSlot.toFloat(),
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 1200f),
         label = "homeHoldSlotSlide",
     )
 
@@ -163,7 +156,7 @@ internal fun ExpandableHomeHoldPill(
         } else {
             contentColor.copy(alpha = if (expandAnim.value > 0.2f) 0.72f else 1f)
         },
-        animationSpec = tween(140),
+        animationSpec = tween(70),
         label = "homeHoldSlot0Tint",
     )
     val slot1Tint by animateColorAsState(
@@ -172,7 +165,7 @@ internal fun ExpandableHomeHoldPill(
         } else {
             contentColor.copy(alpha = 0.72f)
         },
-        animationSpec = tween(140),
+        animationSpec = tween(70),
         label = "homeHoldSlot1Tint",
     )
 
@@ -196,9 +189,10 @@ internal fun ExpandableHomeHoldPill(
                     val initialX = down.position.x
                     val initialY = down.position.y
                     val touchSlop = viewConfiguration.touchSlop
-                    val slideThresholdPx = 18.dp.toPx()
-                    val deadline = SystemClock.uptimeMillis() + viewConfiguration.longPressTimeoutMillis
+                    val slideThresholdPx = 12.dp.toPx()
+                    val deadline = SystemClock.uptimeMillis() + HomeHoldActivationMs
                     var holdActivated = false
+                    var lastDx = 0f
                     selectedSlot = 0
 
                     try {
@@ -214,9 +208,16 @@ internal fun ExpandableHomeHoldPill(
                                 holdActivated = true
                                 isHolding = true
                                 down.consume()
+                                val inward = if (latestHomeOnRight) lastDx < -slideThresholdPx else lastDx > slideThresholdPx
+                                selectedSlot = if (inward) 1 else 0
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 scope.launch {
-                                    expandAnim.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 460f))
+                                    expandAnim.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = spring(dampingRatio = 0.78f, stiffness = 920f),
+                                    ) {
+                                        latestSetExtraWidth(HomePillExtraMax * value.coerceIn(0f, 1.05f))
+                                    }
                                 }
                                 continue
                             }
@@ -238,6 +239,7 @@ internal fun ExpandableHomeHoldPill(
                             val dx = change.position.x - initialX
                             val dy = change.position.y - initialY
                             if (!holdActivated) {
+                                lastDx = dx
                                 if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
                                     break
                                 }
@@ -255,7 +257,12 @@ internal fun ExpandableHomeHoldPill(
                         if (isHolding || expandAnim.value > 0f) {
                             isHolding = false
                             scope.launch {
-                                expandAnim.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 540f))
+                                expandAnim.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 1000f),
+                                ) {
+                                    latestSetExtraWidth(HomePillExtraMax * value.coerceIn(0f, 1.05f))
+                                }
                             }
                         }
                     }
@@ -264,18 +271,18 @@ internal fun ExpandableHomeHoldPill(
         contentAlignment = Alignment.Center,
     ) {
         val exp = expandAnim.value.coerceIn(0f, 1f)
-        if (exp < 0.25f) {
+        if (exp < 0.20f) {
             Icon(
                 imageVector = primaryIcon,
                 contentDescription = primaryLabel,
                 tint = contentColor,
                 modifier = Modifier
                     .size(24.dp)
-                    .graphicsLayer { alpha = (1f - exp / 0.25f).coerceIn(0f, 1f) },
+                    .graphicsLayer { alpha = (1f - exp / 0.20f).coerceIn(0f, 1f) },
             )
         }
-        if (exp > 0.05f) {
-            val contentAlpha = ((exp - 0.05f) / 0.45f).coerceIn(0f, 1f)
+        if (exp > 0.02f) {
+            val contentAlpha = ((exp - 0.02f) / 0.30f).coerceIn(0f, 1f)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
