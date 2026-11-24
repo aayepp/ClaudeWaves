@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.33] - 2026-11-24
+
+### Changed
+- **Fullmode center balance & evenly spaced controls:** aligned the Fullmode square cover horizon near `50%` screen height while clearing the status bar, adjusted the adaptive readability scrim stops to match across all themes, and redistributed vertical spacing evenly across Now Playing Minimal and Standard control rows (including clearer `Best part` pill separation above the seekbar) while keeping the bottom action dock anchored cleanly above the gesture bar.
+
 ## [1.0.32] - 2026-11-24
 
 ### Changed
