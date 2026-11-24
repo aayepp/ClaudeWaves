@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.36] - 2026-11-24
+
+### Fixed
+- **Fast lossless startup failover on broken CDN edges:** restored the 16 KB startup range probe (`STARTUP_PROBE_BYTES`) with a 2.5 s per-candidate probe cap in `MusicPlayer` so truncated 1-byte Akamai/Qobuz streams fail fast during startup instead of stalling ExoPlayer for ~24 s before switching to a working lossless candidate.
+- **Stuck tilted quality upgrade stamp on fast artwork swipe:** cleared `TierUpgradeBurst` state immediately on cancellation, track change, or `null` tier and waited for a resolved codec before setting the baseline tier in `QualityUpgradeBurst` and `NowPlayingComponents`, preventing frozen `"LOSSLESS!"` / `"HI-RES!"` stamps across all themes.
+
 ## [1.0.35] - 2026-11-24
 
 ### Fixed
