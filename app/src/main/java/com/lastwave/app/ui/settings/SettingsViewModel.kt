@@ -807,9 +807,6 @@ class SettingsViewModel @Inject constructor(
     fun setNowPlayingMinimalStyle(enabled: Boolean) = launchSettingsAction("update Now Playing style") {
         settingsPreferences.setNowPlayingMinimalStyle(enabled)
     }
-    fun setLiquidStudioStyle(enabled: Boolean) = launchSettingsAction("update Liquid Studio style") {
-        settingsPreferences.setLiquidStudioStyle(enabled)
-    }
     fun setRotatingBackgroundEnabled(enabled: Boolean) = launchSettingsAction("update rotating background") {
         settingsPreferences.setRotatingBackgroundEnabled(enabled)
     }

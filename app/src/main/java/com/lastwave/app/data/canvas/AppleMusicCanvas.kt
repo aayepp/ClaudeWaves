@@ -34,12 +34,28 @@ object AppleMusicCanvas {
 
     fun search(client: OkHttpClient, title: String, artist: String, album: String?): CanvasArtwork? {
         val bearer = token(client) ?: return null
+        return searchQuery(client, bearer, title, artist, album, queryAlbum = album)
+            ?: if (!album.isNullOrBlank()) {
+                // Retry without YouTube Music's album string (tour editions / singles can hide album motion art).
+                searchQuery(client, bearer, title, artist, album, queryAlbum = null)
+            } else {
+                null
+            }
+    }
 
+    private fun searchQuery(
+        client: OkHttpClient,
+        bearer: String,
+        title: String,
+        artist: String,
+        album: String?,
+        queryAlbum: String?,
+    ): CanvasArtwork? {
         val term = buildString {
             if (!title.contains(artist, ignoreCase = true)) append(artist).append(' ')
             append(title)
-            if (!album.isNullOrBlank() && !title.contains(album, ignoreCase = true)) {
-                append(' ').append(album)
+            if (!queryAlbum.isNullOrBlank() && !title.contains(queryAlbum, ignoreCase = true)) {
+                append(' ').append(queryAlbum)
             }
         }
 

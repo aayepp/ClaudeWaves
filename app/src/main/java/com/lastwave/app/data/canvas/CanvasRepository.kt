@@ -202,7 +202,7 @@ class CanvasRepository @Inject constructor(
                 { AppleMusicCanvas.searchAlbum(okHttpClient, name, credit) },
                 { TidalCanvas.searchAlbum(okHttpClient, name, credit) },
                 { CommunityCanvas.search(okHttpClient, name, credit, name) },
-            ) { it.matches(name, credit, name) }
+            ) { it.matches(name, credit, name, isAlbumLookup = true) }
         }
     }
 

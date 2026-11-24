@@ -29,8 +29,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import com.lastwave.app.ui.theme.LocalLiquidStudioStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -709,30 +707,9 @@ private fun FloatingNavBar(
     isVisible: () -> Boolean = { true },
 ) {
     val liquidGlass = LocalLiquidGlass.current
-    val liquidStudio = LocalLiquidStudioStyle.current
     val glassNavBounds = remember { mutableStateMapOf<Int, Rect>() }
     val dockInteraction = remember { MutableInteractionSource() }
     val searchInteraction = remember { MutableInteractionSource() }
-    val searchPressed by searchInteraction.collectIsPressedAsState()
-    val dockPressed by dockInteraction.collectIsPressedAsState()
-    val elasticSearchScale by animateFloatAsState(
-        targetValue = if (!liquidStudio) 1f else when {
-            searchPressed -> 0.86f
-            dockPressed -> 0.93f
-            else -> 1f
-        },
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 500f),
-        label = "elasticSearchScale",
-    )
-    val elasticDockScale by animateFloatAsState(
-        targetValue = if (!liquidStudio) 1f else when {
-            searchPressed -> 0.965f
-            dockPressed -> 0.985f
-            else -> 1f
-        },
-        animationSpec = spring(dampingRatio = 0.64f, stiffness = 500f),
-        label = "elasticDockScale",
-    )
     val comic = LocalComicTheme.current
     val glassActive = liquidGlass && isLiquidGlassBackdropSupported() && backdrop != null
     val sharedBackdrop = com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop.current as? com.lastwave.app.ui.theme.LayerBackdrop ?: backdrop
@@ -795,14 +772,7 @@ private fun FloatingNavBar(
                 ),
                 tonalElevation = if (liquidGlass) 0.dp else 6.dp,
                 shadowElevation = if (liquidGlass || comic) 0.dp else 12.dp,
-                modifier = Modifier.weight(1f).widthIn(max = 420.dp)
-                    .graphicsLayer {
-                        if (liquidStudio) {
-                            scaleX = elasticDockScale
-                            scaleY = elasticDockScale
-                        }
-                    }
-                    .trackBackdropBounds(dockBackdropBounds).waterDropJiggle(amplitude = 0.022f).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
+                modifier = Modifier.weight(1f).widthIn(max = 420.dp).trackBackdropBounds(dockBackdropBounds).waterDropJiggle(amplitude = 0.022f).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
                     .then(if (liquidGlass) Modifier.glassRim(DockShape) else Modifier),
             ) {
                 val latestSelectedIndex by androidx.compose.runtime.rememberUpdatedState(selectedIndex)
@@ -872,12 +842,6 @@ private fun FloatingNavBar(
                 shadowElevation = if (liquidGlass || comic) 0.dp else 12.dp,
                 interactionSource = searchInteraction,
                 modifier = Modifier.size(60.dp)
-                    .graphicsLayer {
-                        if (liquidStudio) {
-                            scaleX = elasticSearchScale
-                            scaleY = elasticSearchScale
-                        }
-                    }
                     .trackBackdropBounds(searchBackdropBounds)
                     .comicPanel(CircleShape, translucent = liquidGlass)
                     .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = searchInteraction)
@@ -1015,7 +979,6 @@ private fun FloatingNavItem(
 @Composable
 private fun NavSelectionPill(target: Rect?, backdrop: com.kyant.backdrop.Backdrop?) {
     val comic = LocalComicTheme.current
-    val liquidStudio = LocalLiquidStudioStyle.current
     val x = remember { Animatable(0f) }
     val width = remember { Animatable(0f) }
     val lift = remember { Animatable(0f) }
@@ -1035,24 +998,11 @@ private fun NavSelectionPill(target: Rect?, backdrop: com.kyant.backdrop.Backdro
         accelDeform = 0f
         // Fast glass spring turns the pill into lens glass immediately on launch.
         launch { glassPresence.animateTo(1f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 920f)) }
-        launch {
-            lift.animateTo(
-                1f,
-                if (liquidStudio) spring(dampingRatio = 0.62f, stiffness = 480f) else spring(dampingRatio = 0.65f, stiffness = 620f),
-            )
-        }
-        launch {
-            width.animateTo(
-                to.width,
-                if (liquidStudio) spring(dampingRatio = 0.68f, stiffness = 440f) else spring(dampingRatio = 0.8f, stiffness = 500f),
-            )
-        }
+        launch { lift.animateTo(1f, spring(dampingRatio = 0.65f, stiffness = 620f)) }
+        launch { width.animateTo(to.width, spring(dampingRatio = 0.8f, stiffness = 500f)) }
         var shedStarted = false
         val totalDistance = kotlin.math.abs(to.left - x.value).coerceAtLeast(1f)
-        x.animateTo(
-            to.left,
-            if (liquidStudio) spring(dampingRatio = 0.66f, stiffness = 460f) else spring(dampingRatio = 0.78f, stiffness = 360f),
-        ) {
+        x.animateTo(to.left, spring(dampingRatio = 0.78f, stiffness = 360f)) {
             val speed = kotlin.math.abs(velocity)
             val accel = speed - lastSpeed
             lastSpeed = speed

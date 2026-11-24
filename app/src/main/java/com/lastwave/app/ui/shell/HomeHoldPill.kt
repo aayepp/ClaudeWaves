@@ -124,7 +124,6 @@ internal fun ExpandableHomeHoldPill(
     val homeOnRight = LocalHomeOnRight.current
     val setExtraWidth = LocalSetHomePillExtraWidth.current
     val comic = LocalComicTheme.current
-    val liquidStudio = com.lastwave.app.ui.theme.LocalLiquidStudioStyle.current
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -174,12 +173,6 @@ internal fun ExpandableHomeHoldPill(
         modifier = modifier
             .height(CompactPillSize)
             .width(currentWidth)
-            .graphicsLayer {
-                if (liquidStudio) {
-                    val bounce = kotlin.math.sin(expandAnim.value.coerceIn(0f, 1f) * kotlin.math.PI.toFloat())
-                    scaleY = 1f + 0.045f * bounce
-                }
-            }
             .then(surfaceModifier)
             .clip(CircleShape)
             .semantics {
@@ -221,11 +214,7 @@ internal fun ExpandableHomeHoldPill(
                                 scope.launch {
                                     expandAnim.animateTo(
                                         targetValue = 1f,
-                                        animationSpec = if (liquidStudio) {
-                                            spring(dampingRatio = 0.68f, stiffness = 480f)
-                                        } else {
-                                            spring(dampingRatio = 0.78f, stiffness = 920f)
-                                        },
+                                        animationSpec = spring(dampingRatio = 0.78f, stiffness = 920f),
                                     ) {
                                         latestSetExtraWidth(HomePillExtraMax * value.coerceIn(0f, 1.05f))
                                     }
@@ -270,11 +259,7 @@ internal fun ExpandableHomeHoldPill(
                             scope.launch {
                                 expandAnim.animateTo(
                                     targetValue = 0f,
-                                    animationSpec = if (liquidStudio) {
-                                        spring(dampingRatio = 0.72f, stiffness = 520f)
-                                    } else {
-                                        spring(dampingRatio = 0.85f, stiffness = 1000f)
-                                    },
+                                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 1000f),
                                 ) {
                                     latestSetExtraWidth(HomePillExtraMax * value.coerceIn(0f, 1.05f))
                                 }

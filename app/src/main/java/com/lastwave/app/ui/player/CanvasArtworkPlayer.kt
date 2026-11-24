@@ -44,17 +44,29 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.lastwave.app.data.canvas.CANVAS_UA
 import com.lastwave.app.data.canvas.CanvasArtwork
 import com.lastwave.app.data.canvas.CanvasCache
 import kotlinx.coroutines.delay
+import okhttp3.OkHttpClient
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "CanvasArtworkPlayer"
 private const val REPAINT_TIMEOUT_MS = 700L
+private const val MIN_ACTIVE_TEXTURE_ALPHA = 0.002f
+
+private val canvasHttpClient: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+}
 
 /**
  * How a motion artwork clip fills its container bounds.
@@ -134,9 +146,8 @@ fun CanvasArtworkPlayer(
     }
 
     val player = remember {
-        val httpFactory = DefaultHttpDataSource.Factory()
+        val httpFactory = OkHttpDataSource.Factory(canvasHttpClient)
             .setUserAgent(CANVAS_UA)
-            .setAllowCrossProtocolRedirects(true)
         val upstream = DefaultDataSource.Factory(context, httpFactory)
         val cachedFactory = CanvasCache.dataSourceFactory(context, upstream)
 
@@ -148,12 +159,12 @@ fun CanvasArtworkPlayer(
                 repeatMode = Player.REPEAT_MODE_ONE
                 // Motion art is adaptive (HLS) with several resolutions: the default starts low and
                 // a short loop rarely climbs, so clips looked soft. Take the sharpest variant the
-                // display can show (the viewport size cap still applies).
+                // display can show (capped to 1080p SDR streams so 18.5 Mbps 10-bit HEVC doesn't stall).
                 trackSelectionParameters = trackSelectionParameters.buildUpon()
                     .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
                     .setForceHighestSupportedBitrate(true)
-                    // No 4K: sharp on any phone screen without straining the decoder.
-                    .setMaxVideoSize(2048, 2048)
+                    .setMaxVideoSize(1200, 1600)
+                    .setMaxVideoBitrate(6_000_000)
                     .build()
             }
     }
@@ -254,8 +265,13 @@ fun CanvasArtworkPlayer(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
                 isOpaque = false
-                this.alpha = 0f
+                // Keep initial alpha non-zero so HWUI still draws TextureView and allocates its SurfaceTexture.
+                this.alpha = MIN_ACTIVE_TEXTURE_ALPHA
+                textureView = this
                 player.setVideoTextureView(this)
+                addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                    applyContentTransform(clipAspect, currentContentMode, currentAlignPortraitTop)
+                }
 
                 val delegate = surfaceTextureListener
                 surfaceTextureListener = object : TextureView.SurfaceTextureListener {
@@ -263,9 +279,12 @@ fun CanvasArtworkPlayer(
 
                     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
                         delegate?.onSurfaceTextureAvailable(surface, width, height)
-                        if (!replacing) return
-                        replacing = false
-                        surfaceGeneration++
+                        if (replacing) {
+                            replacing = false
+                            surfaceGeneration++
+                        } else if (player.playbackState == Player.STATE_READY && !rendered) {
+                            player.seekTo(player.currentPosition)
+                        }
                     }
 
                     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
@@ -288,7 +307,6 @@ fun CanvasArtworkPlayer(
                     }
                 }
             }
-            textureView = texture
             FadingBottomFrame(viewContext).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -299,10 +317,13 @@ fun CanvasArtworkPlayer(
         },
         update = { frame ->
             val view = frame.getChildAt(0) as TextureView
-            view.alpha = if (contentMode == CanvasContentMode.FIT_PORTRAIT && clipAspect <= 0f) {
-                0f
+            val targetPresentation = presentationAlpha()
+            val fitPortraitUnready = contentMode == CanvasContentMode.FIT_PORTRAIT && clipAspect <= 0f
+            val rawAlpha = if (fitPortraitUnready) 0f else alpha * targetPresentation
+            view.alpha = if (!rendered && !fitPortraitUnready && targetPresentation > 0.01f) {
+                maxOf(rawAlpha, MIN_ACTIVE_TEXTURE_ALPHA)
             } else {
-                alpha * presentationAlpha()
+                rawAlpha
             }
             view.applyContentTransform(clipAspect, contentMode, alignPortraitTop)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

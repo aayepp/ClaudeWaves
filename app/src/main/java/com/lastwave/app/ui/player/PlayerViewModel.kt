@@ -699,7 +699,14 @@ class PlayerViewModel @Inject constructor(
                     if (track != null && enabled && track.mediaType != com.lastwave.app.playback.MediaType.PODCAST_EPISODE) {
                         _canvasState.value = canvasRepository.cached(track)
                         canvasJob = viewModelScope.launch {
-                            waitUntilAudible(track)
+                            val currentState = player.state.value
+                            val alreadyLoaded = (track.videoId.isNullOrBlank() ||
+                                currentState.current?.videoId == track.videoId) &&
+                                !currentState.isBuffering &&
+                                currentState.error == null
+                            if (!alreadyLoaded) {
+                                waitUntilAudible(track)
+                            }
                             MetadataLog.delayed("canvas", track.videoId)
                             delay(MetadataLog.SETTLE_MS)
                             if (currentCanvasTrackKey != key) {
@@ -809,11 +816,13 @@ class PlayerViewModel @Inject constructor(
     }
 
     private suspend fun waitUntilAudible(track: PlayableTrack) {
+        val matchesCurrent: (MusicPlayerState) -> Boolean = { state ->
+            val same = track.videoId.isNullOrBlank() || state.current?.videoId == track.videoId
+            same && state.isPlaying && !state.isBuffering && state.error == null
+        }
+        if (matchesCurrent(player.state.value)) return
         withTimeoutOrNull(8_000L) {
-            player.state.drop(1).first { state ->
-                val same = track.videoId.isNullOrBlank() || state.current?.videoId == track.videoId
-                same && state.isPlaying && !state.isBuffering && state.error == null
-            }
+            player.state.first(matchesCurrent)
         }
     }
 

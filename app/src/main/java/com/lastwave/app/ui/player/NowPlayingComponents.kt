@@ -368,7 +368,6 @@ internal fun BoxScope.FullScreenArtworkBackground(
                 // so frosted controls continue sampling real artwork colours while video plays above.
                 alpha = if (keepStaticHeroForGlass) heroAlpha else heroAlpha * heroCover,
                 mirrorExtend = true,
-                silkCrossfade = com.lastwave.app.ui.theme.LocalLiquidStudioStyle.current,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -376,16 +375,29 @@ internal fun BoxScope.FullScreenArtworkBackground(
         // Adaptive readability scrim using existing theme shade token (black in dark/glass, paper in Comic Light).
         if (!isLyricsTab) {
             val scrimStrength = readabilityAlpha.coerceIn(0f, 1f)
-            if (!showFullBleed && scrimStrength > 0.01f && queueWash < 0.99f) {
-                val scrimBrush = Brush.verticalGradient(
-                    0.00f to PlayerPalette.shade.copy(alpha = 0.62f),
-                    0.16f to PlayerPalette.shade.copy(alpha = 0.24f),
-                    0.32f to Color.Transparent,
-                    0.46f to PlayerPalette.shade.copy(alpha = 0.22f),
-                    0.60f to PlayerPalette.shade.copy(alpha = 0.68f),
-                    0.78f to PlayerPalette.shade.copy(alpha = 0.90f),
-                    1.00f to PlayerPalette.shade.copy(alpha = 0.96f),
-                )
+            if (scrimStrength > 0.01f && queueWash < 0.99f) {
+                val scrimBrush = if (showFullBleed && isNowPlaying) {
+                    Brush.verticalGradient(
+                        0.00f to PlayerPalette.shade.copy(alpha = 0.34f),
+                        0.12f to PlayerPalette.shade.copy(alpha = 0.08f),
+                        0.24f to Color.Transparent,
+                        0.50f to Color.Transparent,
+                        0.59f to PlayerPalette.shade.copy(alpha = 0.24f),
+                        0.73f to PlayerPalette.shade.copy(alpha = 0.44f),
+                        0.89f to PlayerPalette.shade.copy(alpha = 0.56f),
+                        1.00f to PlayerPalette.shade.copy(alpha = 0.64f),
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        0.00f to PlayerPalette.shade.copy(alpha = 0.62f),
+                        0.16f to PlayerPalette.shade.copy(alpha = 0.24f),
+                        0.32f to Color.Transparent,
+                        0.46f to PlayerPalette.shade.copy(alpha = 0.22f),
+                        0.60f to PlayerPalette.shade.copy(alpha = 0.68f),
+                        0.78f to PlayerPalette.shade.copy(alpha = 0.90f),
+                        1.00f to PlayerPalette.shade.copy(alpha = 0.96f),
+                    )
+                }
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -666,58 +678,48 @@ internal fun NowPlayingHeader(
             }
         }
 
-        if (com.lastwave.app.ui.theme.LocalLiquidStudioStyle.current && currentTab != FullPlayerTab.NOW_PLAYING) {
-            LiquidStudioHeaderTrackPill(
-                track = track,
-                tabLabel = if (currentTab == FullPlayerTab.LYRICS) "Lyrics" else "Queue",
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = if (showLyricsOffsetAction) 92.dp else 52.dp),
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(horizontal = if (showLyricsOffsetAction) 96.dp else 52.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = when (currentTab) {
+                    FullPlayerTab.NOW_PLAYING -> "NOW PLAYING"
+                    FullPlayerTab.LYRICS -> "LYRICS"
+                    FullPlayerTab.QUEUE -> "PLAYING QUEUE"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = PlayerPalette.ink.copy(alpha = 0.95f),
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.9.sp,
+                maxLines = 1,
             )
-        } else {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = if (showLyricsOffsetAction) 96.dp else 52.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Text(
-                    text = when (currentTab) {
-                        FullPlayerTab.NOW_PLAYING -> "NOW PLAYING"
-                        FullPlayerTab.LYRICS -> "LYRICS"
-                        FullPlayerTab.QUEUE -> "PLAYING QUEUE"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = PlayerPalette.ink.copy(alpha = 0.95f),
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.9.sp,
-                    maxLines = 1,
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    if (currentTab == FullPlayerTab.NOW_PLAYING) {
-                        val dotColor = MaterialTheme.colorScheme.primary
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(if (isPlaying) dotColor else PlayerPalette.ink.copy(alpha = 0.55f)),
-                        )
-                    }
-                    Text(
-                        text = if (currentTab == FullPlayerTab.LYRICS) {
-                            "${track.title} \u2022 ${track.artist}"
-                        } else {
-                            sourceLabel.takeIf { it.isNotBlank() } ?: "ClaudeWaves"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = PlayerPalette.ink.copy(alpha = 0.78f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                if (currentTab == FullPlayerTab.NOW_PLAYING) {
+                    val dotColor = MaterialTheme.colorScheme.primary
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(if (isPlaying) dotColor else PlayerPalette.ink.copy(alpha = 0.55f)),
                     )
                 }
+                Text(
+                    text = if (currentTab == FullPlayerTab.LYRICS) {
+                        "${track.title} \u2022 ${track.artist}"
+                    } else {
+                        sourceLabel.takeIf { it.isNotBlank() } ?: "ClaudeWaves"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PlayerPalette.ink.copy(alpha = 0.78f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
 
@@ -2589,53 +2591,6 @@ internal fun NowPlayingScreen(
     /** Four synced lyric lines under the sleeve (Settings › Lyrics under the cover). */
     lyricsPreview: Boolean = true,
 ) {
-    if (com.lastwave.app.ui.theme.LocalLiquidStudioStyle.current && !isVideoActive) {
-        LiquidStudioNowPlayingScreen(
-            track = track,
-            state = state,
-            progressState = progressState,
-            player = player,
-            lyricsState = lyricsState,
-            signalPath = signalPath,
-            usbDac = usbDac,
-            availability = availability,
-            isTablet = isTablet,
-            isVideoActive = isVideoActive,
-            isLiked = isLiked,
-            isCustomAudio = isCustomAudio,
-            isEqEnabled = isEqEnabled,
-            wavySeekbarEnabled = wavySeekbarEnabled,
-            playerActionDockEnabled = playerActionDockEnabled,
-            nowPlayingMinimalStyle = nowPlayingMinimalStyle,
-            windowActive = windowActive,
-            isDistractionFree = isDistractionFree,
-            primaryColor = primaryColor,
-            secondaryColor = secondaryColor,
-            tertiaryColor = tertiaryColor,
-            onToggleDistractionFree = onToggleDistractionFree,
-            onToggleLiked = onToggleLiked,
-            onDoubleTapLike = onDoubleTapLike,
-            onOpenArtist = onOpenArtist,
-            onToggleFullArtwork = onToggleFullArtwork,
-            onOpenAudioControls = onOpenAudioControls,
-            onOpenSignalPath = onOpenSignalPath,
-            onOpenOutputPicker = onOpenOutputPicker,
-            onOpenEqualizer = onOpenEqualizer,
-            onOpenLyrics = onOpenLyrics,
-            onOpenQueue = onOpenQueue,
-            onCloseVideo = onCloseVideo,
-            onEnterVideoFullscreen = onEnterVideoFullscreen,
-            modifier = modifier,
-            onToggleVideo = onToggleVideo,
-            downloadState = downloadState,
-            onDownload = onDownload,
-            showSleeve = showSleeve,
-            sleeveCanvas = sleeveCanvas,
-            pausedForTransition = pausedForTransition,
-            lyricsPreview = lyricsPreview,
-        )
-        return
-    }
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current

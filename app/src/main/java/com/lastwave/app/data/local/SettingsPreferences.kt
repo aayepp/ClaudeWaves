@@ -229,8 +229,6 @@ data class MiscSettings(
     val playerActionDockEnabled: Boolean = true,
     /** Minimal frameless Now Playing UI; off = standard ClaudeWaves layout. */
     val nowPlayingMinimalStyle: Boolean = false,
-    /** Liquid Studio unified style: glass morphing UI, 3D Cover Flow & elastic dock. */
-    val liquidStudioStyle: Boolean = false,
     val rotatingBackgroundEnabled: Boolean = true,
     /** When true, animates fluid rotating artwork in the lyrics background.
      *  When false (default), uses static blurred artwork background in the lyrics view. */
@@ -515,7 +513,6 @@ class SettingsPreferences @Inject constructor(
         val WAVY_SEEKBAR_ENABLED = booleanPreferencesKey("lw_wavy_seekbar_enabled")
         val PLAYER_ACTION_DOCK_ENABLED = booleanPreferencesKey("lw_player_action_dock_enabled")
         val NOW_PLAYING_MINIMAL_STYLE = booleanPreferencesKey("lw_now_playing_minimal_style")
-        val LIQUID_STUDIO_STYLE = booleanPreferencesKey("lw_liquid_studio_style")
         val ROTATING_BACKGROUND_ENABLED = booleanPreferencesKey("lw_rotating_background_enabled")
         val LYRICS_ROTATING_BACKGROUND_ENABLED = booleanPreferencesKey("lw_lyrics_rotating_background_enabled")
         val KEEP_LYRICS_SCREEN_AWAKE = booleanPreferencesKey("lw_keep_lyrics_screen_awake")
@@ -650,7 +647,6 @@ class SettingsPreferences @Inject constructor(
                 wavySeekbarEnabled = p.readSafely(Keys.WAVY_SEEKBAR_ENABLED) ?: true,
                 playerActionDockEnabled = p.readSafely(Keys.PLAYER_ACTION_DOCK_ENABLED) ?: true,
                 nowPlayingMinimalStyle = p.readSafely(Keys.NOW_PLAYING_MINIMAL_STYLE) ?: false,
-                liquidStudioStyle = p.readSafely(Keys.LIQUID_STUDIO_STYLE) ?: false,
                 rotatingBackgroundEnabled = p.readSafely(Keys.ROTATING_BACKGROUND_ENABLED) ?: true,
                 lyricsRotatingBackgroundEnabled = p.readSafely(Keys.LYRICS_ROTATING_BACKGROUND_ENABLED) ?: false,
                 keepLyricsScreenAwake = p.readSafely(Keys.KEEP_LYRICS_SCREEN_AWAKE) ?: false,
@@ -1212,10 +1208,6 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setNowPlayingMinimalStyle(enabled: Boolean) {
         dataStore.edit { it[Keys.NOW_PLAYING_MINIMAL_STYLE] = enabled }
-    }
-
-    suspend fun setLiquidStudioStyle(enabled: Boolean) {
-        dataStore.edit { it[Keys.LIQUID_STUDIO_STYLE] = enabled }
     }
 
     suspend fun setRotatingBackgroundEnabled(enabled: Boolean) {

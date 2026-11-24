@@ -51,7 +51,12 @@ data class CanvasArtwork(
      * same recording. A title that differs in any other way is a different song, and a canvas
      * for the wrong song is worse than no canvas at all.
      */
-    fun matches(wantTitle: String, wantArtist: String, wantAlbum: String?): Boolean {
+    fun matches(
+        wantTitle: String,
+        wantArtist: String,
+        wantAlbum: String?,
+        isAlbumLookup: Boolean = false,
+    ): Boolean {
         val titleOk = title == null || wantTitle.isBlank() || title.titleMatches(wantTitle)
 
         val titleArtists = splitArtists(wantArtist)
@@ -61,7 +66,7 @@ data class CanvasArtwork(
                 titleArtists.all { want -> ourArtists.any { it == want || it.contains(want) || want.contains(it) } })
 
         val albumOk = album.isNullOrBlank() || wantAlbum.isNullOrBlank() ||
-            album.normalizeForMatch() == wantAlbum.normalizeForMatch()
+            album.albumMatches(wantAlbum, wantTitle, isAlbumLookup = isAlbumLookup)
 
         return titleOk && artistOk && albumOk
     }
@@ -76,6 +81,57 @@ private val PACKAGING_WORDS = setOf(
     "album", "remix", "dub", "demo", "explicit", "clean", "reissue", "expanded",
     "original",
 )
+
+private val ALBUM_EDITION_WORDS = PACKAGING_WORDS + setOf(
+    "edition", "extended", "complete", "super", "special", "tour",
+    "platinum", "standard", "ep", "lp", "exclusive", "international",
+    "digital", "apple", "chapter", "part", "pt", "vol", "volume",
+)
+
+/**
+ * Strips parenthetical/bracketed/hyphenated edition tags from an album name
+ * (e.g. "After Hours (Deluxe)" -> "After Hours").
+ */
+private fun String.stripAlbumSuffix(): String =
+    substringBefore('(')
+        .substringBefore('[')
+        .substringBefore(" - ")
+        .trim()
+
+private fun String.albumMatches(
+    wantAlbum: String,
+    wantTitle: String,
+    isAlbumLookup: Boolean,
+): Boolean {
+    if (this.titleMatches(wantAlbum)) return true
+
+    val cleanOurs = stripAlbumSuffix().normalizeForMatch()
+    val cleanWant = wantAlbum.stripAlbumSuffix().normalizeForMatch()
+    if (cleanOurs.isNotEmpty() && cleanOurs == cleanWant) return true
+
+    fun sharesEditionPrefix(a: String, b: String): Boolean {
+        if (a.isEmpty() || b.isEmpty()) return false
+        val aWords = a.split(' ')
+        val bWords = b.split(' ')
+        val shorter = if (aWords.size <= bWords.size) a else b
+        val longer = if (aWords.size <= bWords.size) b else a
+        if (!longer.startsWith("$shorter ")) return false
+        val extra = longer.removePrefix(shorter).trim().split(' ').filter { it.isNotBlank() }
+        return extra.isNotEmpty() && extra.size <= 4 && extra.all { word ->
+            word in ALBUM_EDITION_WORDS || word.all { it.isDigit() }
+        }
+    }
+
+    if (sharesEditionPrefix(normalizeForMatch(), wantAlbum.normalizeForMatch())) return true
+    if (sharesEditionPrefix(cleanOurs, cleanWant)) return true
+
+    // YouTube Music often labels singles with the track title as album (e.g. title="Espresso",
+    // album="Espresso" / "Espresso - Single") while Apple Music hosts motion art on the album.
+    if (!isAlbumLookup && wantTitle.isNotBlank() && wantAlbum.titleMatches(wantTitle)) {
+        return true
+    }
+    return false
+}
 
 /**
  * Words that introduce a credit rather than describe the recording.

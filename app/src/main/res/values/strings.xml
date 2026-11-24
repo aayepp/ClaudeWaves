@@ -160,9 +160,6 @@
     <string name="settings_now_playing_minimal">Minimal Design</string>
     <string name="settings_now_playing_minimal_on">Clean frameless Now Playing controls, bare icons &amp; inline quality label</string>
     <string name="settings_now_playing_minimal_off">Standard ClaudeWaves Now Playing layout</string>
-    <string name="settings_liquid_studio_style">Liquid Studio Style</string>
-    <string name="settings_liquid_studio_style_on">Glass morphing controls, squircle ripple, 3D flip preview &amp; Click-Wheel queue</string>
-    <string name="settings_liquid_studio_style_off">Standard ClaudeWaves layout &amp; animations</string>
     <string name="menu_play_best_part">Play best part</string>
     <string name="player_best_part">Best part</string>
     <string name="menu_best_part_not_found">No best part found, playing from the start</string>

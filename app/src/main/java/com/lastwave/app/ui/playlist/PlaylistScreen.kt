@@ -117,7 +117,6 @@ import com.lastwave.app.ui.shell.FloatingNavDefaults
 import com.lastwave.app.ui.theme.ExpressivePillShape
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
-import com.lastwave.app.ui.theme.LocalLiquidStudioStyle
 import com.lastwave.app.ui.theme.glassCardBorder
 import com.lastwave.app.ui.theme.glassCardColor
 
@@ -408,7 +407,6 @@ fun PlaylistScreen(
             ) {
                 val columns = if (maxWidth >= 600.dp) 4 else 3
                 val gridRows = remember(gridEntries, columns) { gridEntries.chunked(columns) }
-                val liquidStudio = LocalLiquidStudioStyle.current
 
                 when {
                     state.isLoading && state.playlists.isEmpty() && !state.isGenerating -> {
@@ -421,36 +419,15 @@ fun PlaylistScreen(
                         contentPadding = PaddingValues(
                             start = 16.dp,
                             end = 16.dp,
-                            top = (if (liquidStudio) 8.dp else 14.dp) + headerInset,
+                            top = 14.dp + headerInset,
                             bottom = FloatingNavDefaults.contentBottomPadding(),
                         ),
-                        verticalArrangement = Arrangement.spacedBy(if (liquidStudio) 10.dp else 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         when (selectedSegment) {
                             LibrarySegment.ALL, LibrarySegment.PLAYLISTS -> {
                                 if (selectedSegment == LibrarySegment.ALL) {
-                                    if (liquidStudio && (filteredPlaylists.isNotEmpty() || effectiveSpotify.isNotEmpty())) {
-                                        item(key = "liquid_studio_cover_flow", contentType = "liquid_studio_cover_flow") {
-                                            LiquidStudioLibraryCoverFlow(
-                                                roomPlaylists = filteredPlaylists,
-                                                spotifyPlaylists = effectiveSpotify,
-                                                onOpenRoom = onOpenPlaylist,
-                                                onPlayRoomTrack = { pl, idx ->
-                                                    if (pl.tracks.isNotEmpty()) {
-                                                        musicPlayer.playQueue(
-                                                            pl.tracks.map(GeneratedTrack::toPlayableTrack),
-                                                            startIndex = idx.coerceIn(0, pl.tracks.lastIndex),
-                                                            sourceLabel = pl.title,
-                                                        )
-                                                    } else {
-                                                        onOpenPlaylist(pl.id)
-                                                    }
-                                                },
-                                                onOpenSpotify = onOpenFeedPlaylist,
-                                            )
-                                        }
-                                    }
                                     item(key = "quick_vault_grid", contentType = "quick_vault_grid") {
                                         LibraryQuickVaultGrid(
                                             likedCount = likedCount,

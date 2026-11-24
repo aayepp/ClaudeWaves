@@ -144,4 +144,56 @@ class CanvasMatchingTest {
             ),
         ).isFalse()
     }
+
+    @Test
+    fun testAlbumEditionVariantsAndSingleFallbackMatch() {
+        val appleDeluxe = CanvasArtwork(
+            url = "https://example.com/after-hours.m3u8",
+            title = "Blinding Lights",
+            artist = "The Weeknd",
+            album = "After Hours (Deluxe)",
+            source = CanvasSource.APPLE,
+        )
+        assertThat(
+            appleDeluxe.matches(
+                wantTitle = "Blinding Lights",
+                wantArtist = "The Weeknd",
+                wantAlbum = "After Hours",
+            ),
+        ).isTrue()
+
+        val appleSingle = CanvasArtwork(
+            url = "https://example.com/espresso.m3u8",
+            title = "Espresso",
+            artist = "Sabrina Carpenter",
+            album = "Short n' Sweet (Deluxe)",
+            source = CanvasSource.APPLE,
+        )
+        assertThat(
+            appleSingle.matches(
+                wantTitle = "Espresso",
+                wantArtist = "Sabrina Carpenter",
+                wantAlbum = "Espresso - Single",
+            ),
+        ).isTrue()
+
+        // Truly different album stays rejected.
+        assertThat(
+            appleDeluxe.matches(
+                wantTitle = "Blinding Lights",
+                wantArtist = "The Weeknd",
+                wantAlbum = "Starboy",
+            ),
+        ).isFalse()
+
+        // Explicit album lookups never fall back to title-as-album matching.
+        assertThat(
+            appleSingle.matches(
+                wantTitle = "Espresso",
+                wantArtist = "Sabrina Carpenter",
+                wantAlbum = "Espresso - Single",
+                isAlbumLookup = true,
+            ),
+        ).isFalse()
+    }
 }

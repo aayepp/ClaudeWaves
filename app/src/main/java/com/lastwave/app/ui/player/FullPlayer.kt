@@ -459,6 +459,9 @@ internal fun FullPlayer(
     // the same pixels. A disposed canvas reports 0, so the hero returns the
     // moment a track without a canvas starts.
     var canvasCover by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(activeCanvas, showFullBleed) {
+        if (activeCanvas == null || !showFullBleed) canvasCover = 0f
+    }
     // Keep header and back button visible when opening Lyrics on car head units / landscape tablets;
     // the user can still enter distraction-free fullscreen via the Fullscreen button in lyrics controls.
     var lyricsFullscreen by remember(currentTab) {
@@ -778,7 +781,7 @@ internal fun FullPlayer(
                     )
                 }
                 FullBleedReadabilityScrim(
-                    alpha = readabilityAlpha.coerceIn(0f, 1f) * (1f - queueWash) * fullBleedHeroAlpha,
+                    alpha = readabilityAlpha.coerceIn(0f, 1f) * (1f - queueWash) * fullBleedHeroAlpha * canvasCover.coerceIn(0f, 1f),
                     modifier = Modifier.matchParentSize(),
                 )
             }

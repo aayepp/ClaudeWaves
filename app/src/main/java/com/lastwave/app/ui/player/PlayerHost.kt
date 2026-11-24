@@ -4,7 +4,6 @@ package com.lastwave.app.ui.player
 
 import com.lastwave.app.ui.theme.comicPanel
 import com.lastwave.app.ui.theme.LocalComicTheme
-import com.lastwave.app.ui.theme.LocalLiquidStudioStyle
 import com.lastwave.app.ui.theme.NowPlayingPaletteScope
 import com.lastwave.app.data.local.HomeHoldShortcut
 import com.lastwave.app.ui.shell.ExpandableHomeHoldPill
@@ -636,7 +635,6 @@ fun PlayerHost(
         LocalSetHomePillExtraWidth provides { homePillExtraWidth = it },
         LocalHomeHoldShortcut provides HomeHoldShortcut.fromId(settings.homeHoldShortcut),
         LocalOnHomeHoldShortcut provides onExecuteHomeHoldShortcut,
-        LocalLiquidStudioStyle provides settings.liquidStudioStyle,
     ) {
         Box(
             Modifier
@@ -760,7 +758,6 @@ fun PlayerHost(
                             dockProgress,
                             pillOnRight = settings.homeButtonRight,
                             extraPillWidth = { homePillExtraWidth },
-                            elastic = settings.liquidStudioStyle,
                         ),
                 )
             }

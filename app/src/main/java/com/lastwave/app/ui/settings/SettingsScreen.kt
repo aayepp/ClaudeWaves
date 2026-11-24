@@ -1543,7 +1543,7 @@ fun SettingsScreen(
                         item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionLabel(stringResource(R.string.settings_section_experimental))
-                    SettingsGroup(rowCount = 17) { index, position ->
+                    SettingsGroup(rowCount = 16) { index, position ->
                         when (index) {
                             0 -> SettingsToggleCard(
                                 icon = Icons.Filled.Lyrics,
@@ -1779,21 +1779,6 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setNowPlayingMinimalStyle,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.now_playing_minimal"),
-                            )
-                            16 -> SettingsToggleCard(
-                                icon = Icons.Filled.AutoAwesome,
-                                iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                title = stringResource(R.string.settings_liquid_studio_style),
-                                subtitle = if (misc.liquidStudioStyle) {
-                                    stringResource(R.string.settings_liquid_studio_style_on)
-                                } else {
-                                    stringResource(R.string.settings_liquid_studio_style_off)
-                                },
-                                checked = misc.liquidStudioStyle,
-                                onCheckedChange = viewModel::setLiquidStudioStyle,
-                                position = position,
-                                isHighlighted = (highlightedSettingId == "appearance.liquid_studio_style"),
                             )
                         }
                     }

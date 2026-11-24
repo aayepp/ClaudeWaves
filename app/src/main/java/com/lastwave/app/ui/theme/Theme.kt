@@ -45,8 +45,6 @@ val LocalIsDarkTheme = staticCompositionLocalOf { true }
 val LocalHideNavTabs = staticCompositionLocalOf { false }
 /** Settings "Use Bold Font": every text, lyrics included, drawn heavier. */
 val LocalUseBoldFont = staticCompositionLocalOf { false }
-/** Settings "Liquid Studio Style": unified glass morphing UI, 3D Cover Flow & elastic dock. */
-val LocalLiquidStudioStyle = staticCompositionLocalOf { false }
 
 /** Custom default profile chosen during startup tutorial (shown across Home UI & Settings). */
 data class UserProfile(
