@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.34] - 2026-11-24
+
+### Changed
+- **Higher, evenly spaced Now Playing controls:** raised song title, `Best part` pill, seekbar, and transport controls with wider airy spacing in both Minimal and Standard styles while keeping the bottom action dock anchored cleanly above the gesture bar and matching Fullmode scrim stops across all themes.
+
+### Fixed
+- **Hi-Res tracks dropping to YouTube AAC on valid `HTTP 206` streams:** updated `MusicPlayer.isProviderReadyForStartup` to sniff audio container magic headers (`fLaC`, `ftyp`, `OggS`, `RIFF`, `ID3`, ADTS/MPEG) on the initial range chunk instead of demanding a full 16 KB read or rejecting `text/plain` CDN responses, added detailed probe diagnostics, retried the next addon candidate when a URL fails probe, and enabled one-shot mid-song Hi-Res recovery when `Best quality first` temporarily falls back to YouTube AAC.
+
 ## [1.0.33] - 2026-11-24
 
 ### Changed
