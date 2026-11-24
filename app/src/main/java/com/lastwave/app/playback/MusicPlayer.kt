@@ -6694,7 +6694,7 @@ class MusicPlayer @Inject constructor(
         val request = runCatching {
             okhttp3.Request.Builder().url(stream.url)
                 .apply { mediaRequestHeaders(stream).forEach { (name, value) -> header(name, value) } }
-                .header("Range", "bytes=0-4095")
+                .header("Range", "bytes=0-${STARTUP_PROBE_BYTES - 1}")
                 .build()
         }.getOrNull() ?: return false
         val startedAt = SystemClock.elapsedRealtime()
@@ -6719,9 +6719,9 @@ class MusicPlayer @Inject constructor(
                             if (!it.isSuccessful) return@use false
                             runCatching {
                                 val source = it.body?.source() ?: return@runCatching false
-                                if (!source.request(1L)) return@runCatching false
+                                if (!source.request(STARTUP_PROBE_BYTES)) return@runCatching false
                                 bytesRead = source.read(header, 0, header.size).coerceAtLeast(0)
-                                if (bytesRead <= 0) return@runCatching false
+                                if (bytesRead < 4) return@runCatching false
                                 if (hasAudioContainerHeader(header, bytesRead)) return@runCatching true
                                 val sub = type?.subtype?.lowercase().orEmpty()
                                 val isPaywallType = type?.type.equals("text", ignoreCase = true) ||
@@ -6876,7 +6876,9 @@ class MusicPlayer @Inject constructor(
             val candidate = awaitProvider() ?: return null
             if (!isStreamAllowedForQuality(candidate, requestedQuality, miscSnapshot)) return null
             if (isManifest(candidate)) return candidate.takeIf { acceptManifest }
-            if (candidate.url !in failedProbeUrls && isProviderReadyForStartup(candidate, probeTimeoutMs())) {
+            if (candidate.url !in failedProbeUrls &&
+                isProviderReadyForStartup(candidate, minOf(probeTimeoutMs(), 2_500L))
+            ) {
                 return candidate
             }
             failedProbeUrls.add(candidate.url)
@@ -6899,7 +6901,7 @@ class MusicPlayer @Inject constructor(
                         isStreamAllowedForQuality(backup, requestedQuality, miscSnapshot)
                     ) {
                         if (isManifest(backup)) return backup.takeIf { acceptManifest }
-                        if (isProviderReadyForStartup(backup, probeTimeoutMs())) return backup
+                        if (isProviderReadyForStartup(backup, minOf(probeTimeoutMs(), 2_500L))) return backup
                         failedProbeUrls.add(backup.url)
                         rememberFailedLosslessUrl(backup.url)
                     }

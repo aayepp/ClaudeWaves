@@ -60,19 +60,19 @@ private object TierBurstLatch {
  * without bursting, and a downgrade never bursts.
  */
 @Composable
-internal fun rememberTierUpgradeBurst(trackKey: String?, tier: AudioQualityTier): AudioQualityTier? {
+internal fun rememberTierUpgradeBurst(trackKey: String?, tier: AudioQualityTier?): AudioQualityTier? {
     var baseline by remember(trackKey) { mutableStateOf<AudioQualityTier?>(null) }
     var burst by remember(trackKey) { mutableStateOf<AudioQualityTier?>(null) }
     val haptics = LocalHapticFeedback.current
     LaunchedEffect(trackKey, tier) {
-        if (trackKey == null) return@LaunchedEffect
+        if (trackKey == null || tier == null) return@LaunchedEffect
         val from = baseline
         baseline = tier
         if (from == null || tier <= from || tier == AudioQualityTier.STANDARD) return@LaunchedEffect
         burst = tier
         if (TierBurstLatch.claim("$trackKey|$tier")) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         try {
-            delay(BURST_MS.toLong())
+            delay(BURST_MS.toLong() + 100L)
         } finally {
             if (burst == tier) burst = null
         }
@@ -85,14 +85,26 @@ internal fun rememberTierUpgradeBurst(trackKey: String?, tier: AudioQualityTier)
  * with action lines flying out, then fades back to the pill itself.
  */
 @Composable
-internal fun TierUpgradeBurst(tier: AudioQualityTier?, modifier: Modifier = Modifier) {
+internal fun TierUpgradeBurst(
+    tier: AudioQualityTier?,
+    trackKey: String? = null,
+    modifier: Modifier = Modifier,
+) {
     val progress = remember { Animatable(1f) }
     var shown by remember { mutableStateOf<AudioQualityTier?>(null) }
-    LaunchedEffect(tier) {
-        if (tier == null) return@LaunchedEffect
+    LaunchedEffect(trackKey, tier) {
+        if (tier == null) {
+            shown = null
+            progress.snapTo(1f)
+            return@LaunchedEffect
+        }
         shown = tier
         progress.snapTo(0f)
-        progress.animateTo(1f, tween(BURST_MS, easing = LinearEasing))
+        try {
+            progress.animateTo(1f, tween(BURST_MS, easing = LinearEasing))
+        } finally {
+            shown = null
+        }
     }
     val current = shown ?: return
     val p = progress.value

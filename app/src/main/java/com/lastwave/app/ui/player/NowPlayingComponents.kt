@@ -1023,8 +1023,11 @@ internal fun AudioInformationRow(
         OutputRouteButton(outputDisplay, onOpenOutputPicker)
         Box(contentAlignment = Alignment.Center) {
             NowPlayingQualityBadge(state, qualityTier, onOpenSignalPath)
+            val trackKey = state.current?.let { it.videoId ?: "${it.title}|${it.artist}" }
+            val resolvedQualityTier = qualityTier.takeIf { state.isLossless || !state.audioCodec.isNullOrBlank() }
             TierUpgradeBurst(
-                rememberTierUpgradeBurst(state.current?.let { it.videoId ?: "${it.title}|${it.artist}" }, qualityTier),
+                tier = rememberTierUpgradeBurst(trackKey, resolvedQualityTier),
+                trackKey = trackKey,
             )
         }
     }
