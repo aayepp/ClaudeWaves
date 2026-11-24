@@ -324,6 +324,7 @@ open class MainShellActivity : androidx.fragment.app.FragmentActivity() {
                             )
                         }
                         com.lastwave.app.ui.update.ChangelogHost(splashDismissed = !showSplash)
+                        com.lastwave.app.ui.update.BroadcastDialogHost(splashDismissed = !showSplash)
                     }
                 }
             }

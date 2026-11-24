@@ -36,19 +36,35 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
     @InstallIn(SingletonComponent::class)
     interface Deps {
         fun appUpdateManager(): AppUpdateManager
+        fun broadcastManager(): BroadcastManager
     }
 
     override suspend fun doWork(): Result {
-        val manager = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java).appUpdateManager()
+        val deps = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java)
+        val manager = deps.appUpdateManager()
         val version = try {
             manager.versionToAnnounce()
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
             null // Offline or GitHub hiccup: the next period tries again.
-        } ?: return Result.success()
-        notify(version)
-        // Tapping the notification opens the app; the dialog is waiting there.
-        manager.showDialog()
+        }
+        if (version != null) {
+            notify(version)
+            // Tapping the notification opens the app; the dialog is waiting there.
+            manager.showDialog()
+        }
+
+        val broadcasts = deps.broadcastManager()
+        val announcement = try {
+            broadcasts.messageToNotify()
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            null
+        }
+        if (announcement != null) {
+            notifyBroadcast(announcement)
+            broadcasts.showDialog()
+        }
         return Result.success()
     }
 
@@ -75,9 +91,35 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         notifications.notify(NOTIFICATION_ID, notification)
     }
 
+    @SuppressLint("MissingPermission") // areNotificationsEnabled() covers the runtime grant.
+    private fun notifyBroadcast(message: BroadcastMessage) {
+        val context = applicationContext
+        val notifications = NotificationManagerCompat.from(context)
+        if (!notifications.areNotificationsEnabled()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notifications.createNotificationChannel(
+                NotificationChannel(BROADCAST_CHANNEL_ID, context.getString(R.string.broadcast_channel), NotificationManager.IMPORTANCE_DEFAULT),
+            )
+        }
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        val open = PendingIntent.getActivity(context, 1, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val body = message.message.ifBlank { message.type.label }
+        val notification = NotificationCompat.Builder(context, BROADCAST_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_wave)
+            .setContentTitle(message.title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        notifications.notify(BROADCAST_NOTIFICATION_ID, notification)
+    }
+
     companion object {
         private const val CHANNEL_ID = "app_updates"
         private const val NOTIFICATION_ID = 4210
+        private const val BROADCAST_CHANNEL_ID = "app_broadcasts"
+        private const val BROADCAST_NOTIFICATION_ID = 4211
         private const val WORK_NAME = "app_update_check"
 
         /** Idempotent: KEEP leaves an existing schedule and its timing alone. */

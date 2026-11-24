@@ -597,8 +597,12 @@ fun SettingsScreen(
                     focusManager.clearFocus()
                     viewModel.clearSearch()
                     isSearchBarVisible = false
-                    activeTab = entry.parentTab
-                    highlightedSettingId = entry.id
+                    if (entry.id == "discord.presence") {
+                        onOpenDiscordSettings()
+                    } else {
+                        activeTab = entry.parentTab
+                        highlightedSettingId = entry.id
+                    }
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
@@ -2158,17 +2162,6 @@ fun SettingsScreen(
                             }
                         },
                     )
-                    // Discord Rich Presence: opens dedicated account login, live
-                    // card preview, YouTube Music link button & status controls.
-                    SettingsActionCard(
-                        icon = Icons.Filled.Public,
-                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        title = stringResource(R.string.set_discord_title),
-                        subtitle = discordSubtitle,
-                        onClick = onOpenDiscordSettings,
-                        isHighlighted = (highlightedSettingId == "discord.presence"),
-                    )
                 }
             }
                     }
@@ -2464,10 +2457,16 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                     }
 
+                    var showBroadcastAdmin by remember { mutableStateOf(false) }
+                    if (showBroadcastAdmin) {
+                        BroadcastAdminSheet(onDismiss = { showBroadcastAdmin = false })
+                    }
+
                     AboutCard(
                         versionName = appVersionName(context),
                         appIcon = theme?.appIcon ?: AppIcon.DEFAULT,
                         onOpenChangelog = viewModel::openChangelog,
+                        onSecretAdminTrigger = { showBroadcastAdmin = true },
                     )
 
                     var showGesturesSheet by remember { mutableStateOf(false) }

@@ -197,6 +197,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -417,8 +418,11 @@ internal fun AboutCard(
     versionName: String,
     appIcon: AppIcon = AppIcon.DEFAULT,
     onOpenChangelog: () -> Unit = {},
+    onSecretAdminTrigger: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    var logoTapCount by remember { mutableIntStateOf(0) }
+    var lastLogoTapMs by remember { mutableLongStateOf(0L) }
     Card(
         shape = CardOuterShape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -432,7 +436,19 @@ internal fun AboutCard(
                 Modifier
                     .size(72.dp)
                     .clip(CircleShape)
-                    .background(colorResource(appIcon.backgroundRes)),
+                    .background(colorResource(appIcon.backgroundRes))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        logoTapCount = if (now - lastLogoTapMs <= 3_500L) logoTapCount + 1 else 1
+                        lastLogoTapMs = now
+                        if (logoTapCount >= 7) {
+                            logoTapCount = 0
+                            onSecretAdminTrigger()
+                        }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
