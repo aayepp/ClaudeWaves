@@ -79,14 +79,15 @@ half4 main(float2 fragCoord) {
     float dist = length(delta);
     float2 dir = dist > 0.5 ? delta / dist : float2(0.0, 0.0);
 
-    float inv2S = 1.0 / (2.0 * uSigma * uSigma);
+    float s = max(uSigma, 1.0);
+    float inv2S = 1.0 / (2.0 * s * s);
     float d0 = dist - uR0;
     float g0 = exp(-(d0 * d0) * inv2S);
-    float slope0 = -(d0 / uSigma) * g0;
+    float slope0 = -(d0 / s) * g0;
 
     float d1 = dist - uR1;
     float g1 = exp(-(d1 * d1) * inv2S);
-    float slope1 = -(d1 / uSigma) * g1;
+    float slope1 = -(d1 / s) * g1;
 
     float disp = slope0 * uAmp0 + slope1 * uAmp1;
     float ca = (g0 + g1) * uCa;
@@ -96,14 +97,14 @@ half4 main(float2 fragCoord) {
     half4 srcR = uContent.eval(fragCoord - dir * (disp - ca));
 
     half txtA = max(srcG.a, max(srcB.a, srcR.a));
-    half ringStrength = clamp(half(g0 * uRingAlpha0 + g1 * uRingAlpha1), 0.0h, 0.45h);
-    half prism = half(dir.y * 0.5 + 0.5);
-    half3 ringCol = half3(mix(uCool, uWarm, float(prism)));
+    float ringF = clamp(g0 * uRingAlpha0 + g1 * uRingAlpha1, 0.0, 0.45);
+    float prism = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+    half3 ringCol = half3(mix(uCool, uWarm, prism));
 
-    half3 haloPremul = ringCol * ringStrength;
-    half3 txtPremul = half3(srcR.r, srcG.g, srcB.b);
-    half3 outRgb = txtPremul + haloPremul * (1.0h - txtA);
-    half outA = txtA + ringStrength * (1.0h - txtA);
+    half ringA = half(ringF);
+    half invTxtA = half(1.0) - txtA;
+    half3 outRgb = half3(srcR.r, srcG.g, srcB.b) + (ringCol * ringA) * invTxtA;
+    half outA = txtA + ringA * invTxtA;
     return half4(outRgb, outA);
 }
 """
@@ -126,18 +127,18 @@ private class LiquidRippleShaderHolder {
         cool: Color,
         warm: Color,
     ): ComposeRenderEffect? {
-        shader.setFloatUniform("uCenter", cx, cy)
-        shader.setFloatUniform("uR0", r0)
-        shader.setFloatUniform("uR1", r1)
-        shader.setFloatUniform("uAmp0", amp0)
-        shader.setFloatUniform("uAmp1", amp1)
-        shader.setFloatUniform("uSigma", sigma)
-        shader.setFloatUniform("uCa", ca)
-        shader.setFloatUniform("uRingAlpha0", ringAlpha0)
-        shader.setFloatUniform("uRingAlpha1", ringAlpha1)
-        shader.setFloatUniform("uCool", cool.red, cool.green, cool.blue)
-        shader.setFloatUniform("uWarm", warm.red, warm.green, warm.blue)
         return runCatching {
+            shader.setFloatUniform("uCenter", cx, cy)
+            shader.setFloatUniform("uR0", r0)
+            shader.setFloatUniform("uR1", r1)
+            shader.setFloatUniform("uAmp0", amp0)
+            shader.setFloatUniform("uAmp1", amp1)
+            shader.setFloatUniform("uSigma", sigma)
+            shader.setFloatUniform("uCa", ca)
+            shader.setFloatUniform("uRingAlpha0", ringAlpha0)
+            shader.setFloatUniform("uRingAlpha1", ringAlpha1)
+            shader.setFloatUniform("uCool", cool.red, cool.green, cool.blue)
+            shader.setFloatUniform("uWarm", warm.red, warm.green, warm.blue)
             RenderEffect.createRuntimeShaderEffect(shader, "uContent").asComposeRenderEffect()
         }.getOrNull()
     }
@@ -273,9 +274,10 @@ fun DetailSonarRevealOverlay(
     val useAgsl = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isComic
     val shaderHolder = remember(useAgsl) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && useAgsl) {
-            LiquidRippleShaderHolder()
+            runCatching { LiquidRippleShaderHolder() }.getOrNull()
         } else null
     }
+    val agslActive = shaderHolder != null
 
     val infiniteTransition = rememberInfiniteTransition(label = "detailSonarPulse")
     val pulseCycleState: State<Float> = infiniteTransition.animateFloat(
@@ -301,7 +303,7 @@ fun DetailSonarRevealOverlay(
                     val p = if (isLoading) 0f else state.progress
                     val ringFade = if (isLoading) 1f else (1f - (p / 0.58f).coerceIn(0f, 1f))
                     val refractStrength = if (isLoading) 1f else (1f - (p / 0.38f).coerceIn(0f, 1f))
-                    if (ringFade <= 0.005f) {
+                    if (size.width <= 1f || size.height <= 1f || ringFade <= 0.005f) {
                         renderEffect = null
                     } else {
                         compositingStrategy = CompositingStrategy.Offscreen
@@ -337,7 +339,7 @@ fun DetailSonarRevealOverlay(
                 }
             },
     ) {
-        if (!useAgsl) {
+        if (!agslActive) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val p = if (isLoading) 0f else state.progress
                 val ringFade = if (isLoading) 1f else (1f - (p / 0.58f).coerceIn(0f, 1f))
@@ -400,11 +402,11 @@ fun DetailSonarRevealOverlay(
                 .onSizeChanged { flyingTitleSize = it }
                 .graphicsLayer {
                     val p = if (isLoading) 0f else state.progress
-                    val waveAmp = if (useAgsl) 0f else (1f - p)
+                    val waveAmp = if (agslActive) 0f else (1f - p)
                     val wRad = pulseCycleState.value * 2f * PI.toFloat()
                     val swayX = cos(wRad) * 2.5f * this.density * waveAmp
                     val bobY = sin(wRad) * 3.5f * this.density * waveAmp
-                    val breath = if (useAgsl) 1f else (1f + 0.025f * sin(wRad - 0.6f) * waveAmp)
+                    val breath = if (agslActive) 1f else (1f + 0.025f * sin(wRad - 0.6f) * waveAmp)
                     val flyingScale = lerpFloat(1.14f, 1f, p) * breath
                     val targetTopLeft = state.heroTitleTopLeft
                     transformOrigin = TransformOrigin(0f, 0f)

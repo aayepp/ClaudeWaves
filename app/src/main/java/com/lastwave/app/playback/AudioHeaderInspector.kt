@@ -5,7 +5,11 @@ import android.net.Uri
 import com.lastwave.app.playback.dsd.DsdNativeDecimator
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
+import java.io.SequenceInputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import kotlin.math.pow
 
 data class LocalAudioInspection(
@@ -46,16 +50,43 @@ object AudioHeaderInspector {
     fun inspect(context: Context, urlOrUri: String, mimeHint: String? = null): AudioHeaderInfo? {
         return runCatching {
             val lower = urlOrUri.lowercase()
-            val openStream: () -> InputStream? = {
-                if (urlOrUri.startsWith("content://")) {
-                    context.contentResolver.openInputStream(Uri.parse(urlOrUri))
-                } else {
-                    val path = urlOrUri.removePrefix("file://")
-                    File(path).takeIf { it.isFile && it.canRead() }?.inputStream()
+            val hint = mimeHint ?: lower
+            if (urlOrUri.startsWith("content://")) {
+                val uri = Uri.parse(urlOrUri)
+                val pfd = runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
+                if (pfd != null) {
+                    pfd.use { fd ->
+                        val size = fd.statSize
+                        FileInputStream(fd.fileDescriptor).use { fis ->
+                            val ch = fis.channel
+                            val rewindable = size >= 12L && runCatching { ch.position(0); true }.getOrDefault(false)
+                            if (rewindable) {
+                                return@runCatching if (isMp4Channel(ch, size)) {
+                                    inspectMp4Reader(ChannelMp4Reader(ch, size))
+                                } else {
+                                    ch.position(0)
+                                    inspectStream(fis, hint)
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-            openStream()?.use { stream ->
-                inspectStream(stream, mimeHint ?: lower)
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    inspectStream(stream, hint)
+                }
+            } else {
+                val path = urlOrUri.removePrefix("file://")
+                val file = File(path).takeIf { it.isFile && it.canRead() } ?: return@runCatching null
+                FileInputStream(file).use { fis ->
+                    val ch = fis.channel
+                    val size = file.length()
+                    if (isMp4Channel(ch, size)) {
+                        inspectMp4Reader(ChannelMp4Reader(ch, size))
+                    } else {
+                        ch.position(0)
+                        inspectStream(fis, hint)
+                    }
+                }
             }
         }.getOrNull()
     }
@@ -141,16 +172,25 @@ object AudioHeaderInspector {
                     durationMs = header.durationMs ?: fileDurationMs ?: knownDurationMs?.takeIf { it > 0L },
                 )
             }
-            if (bitDepth == null) bitDepth = header.bitDepth?.takeIf { it > 0 }
-            if (samplingRateKHz == null) {
-                samplingRateKHz = header.sampleRateHz?.takeIf { it > 0 }?.div(1000.0)
+            if (header.containerLabel == "ALAC") {
+                effectiveMime = "audio/alac"
+            }
+            // Prefer container header facts on lossless codecs because Android MediaMetadataRetriever
+            // often omits BITS_PER_SAMPLE or reports 16-bit on 24-bit ALAC files.
+            val headerDepth = header.bitDepth?.takeIf { it > 0 }
+            if (bitDepth == null || (header.isLossless && headerDepth != null)) {
+                if (headerDepth != null) bitDepth = headerDepth
+            }
+            val headerRateKHz = header.sampleRateHz?.takeIf { it > 0 }?.div(1000.0)
+            if (samplingRateKHz == null || (header.isLossless && headerRateKHz != null)) {
+                if (headerRateKHz != null) samplingRateKHz = headerRateKHz
             }
             if (bitrateKbps == null) bitrateKbps = header.bitrateKbps?.takeIf { it > 0 }
             if (fileDurationMs == null) fileDurationMs = header.durationMs?.takeIf { it > 0L }
         }
 
         val m = effectiveMime.lowercase()
-        val isAlac = header?.containerLabel == "ALAC" || decodedLower.endsWith(".alac")
+        val isAlac = header?.containerLabel == "ALAC" || m.contains("alac") || decodedLower.endsWith(".alac")
         val isAiff = header?.containerLabel == "AIFF" || m.contains("aiff") ||
             decodedLower.endsWith(".aiff") || decodedLower.endsWith(".aif") || decodedLower.endsWith(".aifc")
         val isWav = header?.containerLabel == "WAV" || m.contains("wav") ||
@@ -165,22 +205,24 @@ object AudioHeaderInspector {
             else -> "FLAC"
         }
         val resolvedBadge = when {
-            m.contains("eac3") || m.contains("ec-3") || m.contains("ac3") || m.contains("ac-3") ||
+            header?.containerLabel == "DOLBY" || m.contains("eac3") || m.contains("ec-3") ||
+                m.contains("ac3") || m.contains("ac-3") ||
                 decodedLower.endsWith(".ac3") || decodedLower.endsWith(".ec3") || decodedLower.endsWith(".eac3") -> "DOLBY"
-            m.contains("ac4") || decodedLower.endsWith(".ac4") -> "DOLBY AC-4"
+            header?.containerLabel == "DOLBY AC-4" || m.contains("ac4") || decodedLower.endsWith(".ac4") -> "DOLBY AC-4"
             isLossless -> {
                 val d = bitDepth?.takeIf { it > 0 }
                 val r = samplingRateKHz?.takeIf { it > 0.0 }
                 when {
+                    isAlac && d != null && r != null -> "ALAC $d/${formatSampleRateKHz(r)}kHz"
                     d != null && r != null -> "$d/${formatSampleRateKHz(r)}kHz"
                     r != null -> "${formatSampleRateKHz(r)}kHz $containerName"
                     (d ?: 0) > 16 -> "HI-RES $containerName"
                     else -> containerName
                 }
             }
-            m.contains("opus") -> "OPUS"
+            header?.containerLabel == "OPUS" || m.contains("opus") -> "OPUS"
             m.contains("ogg") || decodedLower.endsWith(".ogg") || decodedLower.endsWith(".oga") -> "OGG"
-            m.contains("mp4") || m.contains("m4a") || m.contains("aac") ||
+            header?.containerLabel == "AAC" || m.contains("mp4") || m.contains("m4a") || m.contains("aac") ||
                 decodedLower.endsWith(".m4a") || decodedLower.endsWith(".aac") -> "AAC"
             m.contains("mp3") || m.contains("mpeg") || decodedLower.endsWith(".mp3") || decodedLower.endsWith(".mp2") -> "MP3"
             m.contains("matroska") || decodedLower.endsWith(".mka") || decodedLower.endsWith(".webm") -> "MKA"
@@ -240,7 +282,7 @@ object AudioHeaderInspector {
 
         // 5. FLAC (including optional leading ID3v2)
         if (fourCc == "fLaC" || (head[0] == 'I'.code.toByte() && head[1] == 'D'.code.toByte() && head[2] == '3'.code.toByte() && hint.contains("flac"))) {
-            val combined = java.io.SequenceInputStream(ByteArrayInputStream(head), input)
+            val combined = SequenceInputStream(ByteArrayInputStream(head), input)
             val info = readFlacStreamInfo(combined)
             if (info != null) {
                 val sr = info.sampleRateHz ?: 0
@@ -257,9 +299,11 @@ object AudioHeaderInspector {
             }
         }
 
-        // 6. MP4 / M4A / ALAC ('ftyp' at offset 4)
+        // 6. MP4 / M4A / ALAC ('ftyp' at offset 4) — walk atoms beyond the 16 KB prefix
+        // because moov often sits after mdat or embedded cover art in udta/meta.
         if (head.size >= 24 && String(head, 4, 4, Charsets.US_ASCII) == "ftyp") {
-            return parseMp4AlacHeader(head)
+            val combined = SequenceInputStream(ByteArrayInputStream(head), input)
+            return inspectMp4Reader(StreamMp4Reader(combined))
         }
 
         return null
@@ -454,36 +498,319 @@ object AudioHeaderInspector {
         )
     }
 
-    internal fun parseMp4AlacHeader(buf: ByteArray): AudioHeaderInfo? {
-        // Scan buffered atoms for the 24-byte ALACSpecificConfig inside an 'alac' atom.
+    internal fun parseMp4AlacHeader(buf: ByteArray): AudioHeaderInfo? =
+        parseMp4AlacRange(buf, startIndex = 8, endIndex = buf.size)
+
+    private fun parseMp4AlacRange(buf: ByteArray, startIndex: Int, endIndex: Int): AudioHeaderInfo? {
+        // Scan buffered slice for the 24-byte ALACSpecificConfig inside an 'alac' FullBox atom.
         // Layout: [size(4)][alac(4)][version+flags(4)] +
         //   alacSpecificConfig: frameLength(4), compatibleVersion(1), bitDepth(1),
         //   pb(1), mb(1), kb(1), numChannels(1), maxRun(2), maxFrameBytes(4),
         //   avgBitRate(4), sampleRate(4) -> total 24 bytes after version+flags.
-        val needle = byteArrayOf('a'.code.toByte(), 'l'.code.toByte(), 'a'.code.toByte(), 'c'.code.toByte())
-        var i = 8
-        while (i + 32 <= buf.size) {
-            if (buf[i] == needle[0] && buf[i + 1] == needle[1] && buf[i + 2] == needle[2] && buf[i + 3] == needle[3]) {
-                val atomSize = beU32(buf, i - 4)
-                if (atomSize in 36..64 && i + 32 <= buf.size) {
-                    val cfg = i + 8
-                    val version = buf[i + 4].toInt() and 0xFF
-                    if (version == 0 && cfg + 24 <= buf.size) {
-                        val depth = buf[cfg + 5].toInt() and 0xFF
-                        val ch = buf[cfg + 9].toInt() and 0xFF
-                        val avgBitRate = beU32(buf, cfg + 16).toInt()
-                        val sr = beU32(buf, cfg + 20).toInt()
-                        if (depth in 16..32 && ch in 1..8 && sr in 8_000..384_000) {
-                            return AudioHeaderInfo(
-                                containerLabel = "ALAC",
-                                sampleRateHz = sr,
-                                bitDepth = depth,
-                                channels = ch,
-                                bitrateKbps = (avgBitRate / 1000).takeIf { it > 0 },
-                                isLossless = true,
-                            )
+        val limit = minOf(endIndex, buf.size)
+        var i = startIndex.coerceAtLeast(4)
+        while (i + 32 <= limit) {
+            if (buf[i] == 'a'.code.toByte() && buf[i + 1] == 'l'.code.toByte() &&
+                buf[i + 2] == 'a'.code.toByte() && buf[i + 3] == 'c'.code.toByte()
+            ) {
+                parseAlacConfigAt(buf, i, limit)?.let { return it }
+            }
+            i++
+        }
+        return null
+    }
+
+    private fun parseAlacConfigAt(buf: ByteArray, typeOffset: Int, limit: Int): AudioHeaderInfo? {
+        if (typeOffset < 4 || typeOffset + 32 > limit) return null
+        val atomSize = beU32(buf, typeOffset - 4)
+        if (atomSize !in 36..64) return null
+        val version = buf[typeOffset + 4].toInt() and 0xFF
+        val cfg = typeOffset + 8
+        if (version != 0 || cfg + 24 > limit) return null
+        val depth = buf[cfg + 5].toInt() and 0xFF
+        val ch = buf[cfg + 9].toInt() and 0xFF
+        val avgBitRate = beU32(buf, cfg + 16).toInt()
+        val sr = beU32(buf, cfg + 20).toInt()
+        if (depth !in 16..32 || ch !in 1..8 || sr !in 8_000..384_000) return null
+        return AudioHeaderInfo(
+            containerLabel = "ALAC",
+            sampleRateHz = sr,
+            bitDepth = depth,
+            channels = ch,
+            bitrateKbps = (avgBitRate / 1000).takeIf { it > 0 },
+            isLossless = true,
+        )
+    }
+
+    private interface Mp4Reader {
+        val length: Long
+        fun position(): Long
+        fun seekOrSkipTo(targetPos: Long): Boolean
+        fun readExact(dst: ByteArray, len: Int): Boolean
+    }
+
+    private class ChannelMp4Reader(
+        private val ch: FileChannel,
+        override val length: Long,
+    ) : Mp4Reader {
+        override fun position(): Long = ch.position()
+
+        override fun seekOrSkipTo(targetPos: Long): Boolean {
+            if (targetPos < 0L || targetPos > length) return false
+            ch.position(targetPos)
+            return true
+        }
+
+        override fun readExact(dst: ByteArray, len: Int): Boolean {
+            val buf = ByteBuffer.wrap(dst, 0, len)
+            while (buf.hasRemaining()) {
+                if (ch.read(buf) <= 0) return false
+            }
+            return true
+        }
+    }
+
+    private class StreamMp4Reader(private val stream: InputStream) : Mp4Reader {
+        private var pos = 0L
+        private val skipScratch = ByteArray(4096)
+        override val length: Long = Long.MAX_VALUE
+
+        override fun position(): Long = pos
+
+        override fun seekOrSkipTo(targetPos: Long): Boolean {
+            var remaining = targetPos - pos
+            if (remaining < 0L) return false
+            while (remaining > 0L) {
+                val skipped = stream.skip(remaining)
+                if (skipped > 0L) {
+                    pos += skipped
+                    remaining -= skipped
+                } else {
+                    val toRead = minOf(remaining, skipScratch.size.toLong()).toInt()
+                    val n = stream.read(skipScratch, 0, toRead)
+                    if (n <= 0) return false
+                    pos += n
+                    remaining -= n
+                }
+            }
+            return true
+        }
+
+        override fun readExact(dst: ByteArray, len: Int): Boolean {
+            var total = 0
+            while (total < len) {
+                val n = stream.read(dst, total, len - total)
+                if (n <= 0) return false
+                total += n
+                pos += n
+            }
+            return true
+        }
+    }
+
+    private class Mp4WalkState {
+        var durationMs: Long? = null
+        var lossless: AudioHeaderInfo? = null
+        var lossy: AudioHeaderInfo? = null
+    }
+
+    private fun isMp4Channel(ch: FileChannel, size: Long): Boolean {
+        if (size < 12L) return false
+        ch.position(0)
+        val head = ByteArray(12)
+        val ok = ChannelMp4Reader(ch, size).readExact(head, 12)
+        ch.position(0)
+        return ok && String(head, 4, 4, Charsets.US_ASCII) == "ftyp"
+    }
+
+    private fun inspectMp4Reader(reader: Mp4Reader): AudioHeaderInfo? {
+        val state = Mp4WalkState()
+        walkMp4Container(reader, reader.length, depth = 0, state = state)
+        val best = state.lossless ?: state.lossy ?: return null
+        return if (best.durationMs == null && state.durationMs != null) {
+            best.copy(durationMs = state.durationMs)
+        } else {
+            best
+        }
+    }
+
+    private fun walkMp4Container(
+        reader: Mp4Reader,
+        limitPos: Long,
+        depth: Int,
+        state: Mp4WalkState,
+    ) {
+        if (depth > 8) return
+        val hdr = ByteArray(8)
+        var boxesSeen = 0
+        while (reader.position() + 8L <= limitPos && boxesSeen < 512) {
+            val boxStart = reader.position()
+            if (!reader.readExact(hdr, 8)) return
+            boxesSeen++
+            val size32 = beU32(hdr, 0)
+            val type = String(hdr, 4, 4, Charsets.US_ASCII)
+            val headerLen: Long
+            val boxSize: Long
+            when (size32) {
+                0L -> {
+                    if (reader.length == Long.MAX_VALUE) return
+                    boxSize = limitPos - boxStart
+                    headerLen = 8L
+                }
+                1L -> {
+                    val ext = ByteArray(8)
+                    if (!reader.readExact(ext, 8)) return
+                    boxSize = beU64(ext, 0)
+                    headerLen = 16L
+                }
+                else -> {
+                    boxSize = size32
+                    headerLen = 8L
+                }
+            }
+            if (boxSize < headerLen) return
+            val nextPos = boxStart + boxSize
+            val payloadSize = boxSize - headerLen
+            val containerEnd = minOf(nextPos, limitPos)
+
+            when (type) {
+                // Handle synthetic top-level or standalone 'alac' config box directly
+                "alac" -> {
+                    if (payloadSize in 28L..64L) {
+                        val payload = ByteArray(payloadSize.toInt())
+                        if (reader.readExact(payload, payload.size)) {
+                            val fullBox = ByteArray(8 + payload.size)
+                            System.arraycopy(hdr, 0, fullBox, 0, 8)
+                            System.arraycopy(payload, 0, fullBox, 8, payload.size)
+                            parseAlacConfigAt(fullBox, typeOffset = 4, limit = fullBox.size)?.let {
+                                state.lossless = it
+                                return
+                            }
                         }
                     }
+                }
+                "mvhd" -> {
+                    if (payloadSize >= 20L) {
+                        val cap = minOf(payloadSize, 64L).toInt()
+                        val buf = ByteArray(cap)
+                        if (reader.readExact(buf, cap)) {
+                            parseMvhdDurationMs(buf)?.let { state.durationMs = it }
+                        }
+                    }
+                }
+                "moov", "trak", "mdia", "minf", "stbl" -> {
+                    walkMp4Container(reader, containerEnd, depth + 1, state)
+                    if (state.lossless != null && state.durationMs != null) return
+                }
+                "stsd" -> {
+                    if (payloadSize >= 16L) {
+                        val cap = minOf(payloadSize, 64L * 1024L).toInt()
+                        val buf = ByteArray(cap)
+                        if (reader.readExact(buf, cap)) {
+                            parseStsdBox(buf)?.let { parsed ->
+                                if (parsed.isLossless) {
+                                    state.lossless = parsed
+                                } else if (state.lossy == null) {
+                                    state.lossy = parsed
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (reader.position() != nextPos && !reader.seekOrSkipTo(nextPos)) return
+        }
+    }
+
+    private fun parseMvhdDurationMs(buf: ByteArray): Long? {
+        if (buf.size < 20) return null
+        val version = buf[0].toInt() and 0xFF
+        val timescale: Long
+        val duration: Long
+        when (version) {
+            0 -> {
+                timescale = beU32(buf, 12)
+                duration = beU32(buf, 16)
+                if (duration == 0xFFFF_FFFFL) return null
+            }
+            1 -> {
+                if (buf.size < 32) return null
+                timescale = beU32(buf, 20)
+                duration = beU64(buf, 24)
+            }
+            else -> return null
+        }
+        if (timescale <= 0L || duration <= 0L) return null
+        return (duration * 1000L) / timescale
+    }
+
+    private fun parseStsdBox(buf: ByteArray): AudioHeaderInfo? {
+        if (buf.size < 16) return null
+        val entryCount = minOf(beU32(buf, 4), 16L).toInt()
+        var pos = 8
+        var lossyFallback: AudioHeaderInfo? = null
+        for (idx in 0 until entryCount) {
+            if (pos + 8 > buf.size) break
+            val entrySizeLong = beU32(buf, pos)
+            if (entrySizeLong < 8L || pos + entrySizeLong > buf.size) break
+            val entrySize = entrySizeLong.toInt()
+            val entryEnd = pos + entrySize
+            val codecId = String(buf, pos + 4, 4, Charsets.US_ASCII)
+            val entryChannels = if (pos + 26 <= entryEnd) beU16(buf, pos + 24).takeIf { it in 1..16 } else null
+            val entryBits = if (pos + 28 <= entryEnd) beU16(buf, pos + 26).takeIf { it in 8..32 } else null
+            val entrySr = if (pos + 34 <= entryEnd) beU16(buf, pos + 32).takeIf { it in 8_000..65_535 } else null
+
+            when (codecId) {
+                "alac" -> {
+                    val nested = parseMp4AlacRange(buf, startIndex = pos + 16, endIndex = entryEnd)
+                    if (nested != null) return nested
+                    return AudioHeaderInfo(
+                        containerLabel = "ALAC",
+                        sampleRateHz = entrySr,
+                        bitDepth = entryBits,
+                        channels = entryChannels,
+                        isLossless = true,
+                    )
+                }
+                "fLaC" -> {
+                    val flacInfo = findMp4DfLaStreamInfo(buf, pos + 16, entryEnd)
+                    return AudioHeaderInfo(
+                        containerLabel = "FLAC",
+                        sampleRateHz = flacInfo?.sampleRateHz ?: entrySr,
+                        bitDepth = flacInfo?.bitDepth ?: entryBits,
+                        channels = flacInfo?.channels ?: entryChannels,
+                        isLossless = true,
+                    )
+                }
+                "ec-3", "ac-3" -> if (lossyFallback == null) {
+                    lossyFallback = AudioHeaderInfo("DOLBY", sampleRateHz = entrySr, channels = entryChannels, isLossless = false)
+                }
+                "ac-4" -> if (lossyFallback == null) {
+                    lossyFallback = AudioHeaderInfo("DOLBY AC-4", sampleRateHz = entrySr, channels = entryChannels, isLossless = false)
+                }
+                "Opus" -> if (lossyFallback == null) {
+                    lossyFallback = AudioHeaderInfo("OPUS", sampleRateHz = entrySr ?: 48_000, channels = entryChannels, isLossless = false)
+                }
+                "mp4a" -> if (lossyFallback == null) {
+                    lossyFallback = AudioHeaderInfo("AAC", sampleRateHz = entrySr, channels = entryChannels, isLossless = false)
+                }
+            }
+            pos = entryEnd
+        }
+        return lossyFallback
+    }
+
+    private fun findMp4DfLaStreamInfo(buf: ByteArray, start: Int, end: Int): FlacStreamInfo? {
+        var i = start.coerceAtLeast(0)
+        val limit = minOf(end, buf.size)
+        while (i + 46 <= limit) {
+            if (buf[i] == 'd'.code.toByte() && buf[i + 1] == 'f'.code.toByte() &&
+                buf[i + 2] == 'L'.code.toByte() && buf[i + 3] == 'a'.code.toByte()
+            ) {
+                val blockType = buf[i + 8].toInt() and 0x7F
+                if (blockType == 0) {
+                    parseFlacStreamInfoBody(buf, i + 12)?.let { return it }
                 }
             }
             i++

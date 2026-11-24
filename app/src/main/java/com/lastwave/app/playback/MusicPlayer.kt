@@ -1918,10 +1918,13 @@ class MusicPlayer @Inject constructor(
                             sampleMime.contains("mha1") || sampleMime.contains("mhm1") -> "SPATIAL AUDIO"
                             sampleMime.contains("opus") -> "OPUS"
                             sampleMime.contains("flac") -> "FLAC"
+                            sampleMime.contains("alac") -> "ALAC"
                             sampleMime.contains("mp4a") || sampleMime.contains("aac") -> "AAC"
                             sampleMime.contains("mp3") || sampleMime.contains("mpeg") -> "MP3"
                             else -> null
                         }
+                        val alacDepth = if (detectedCodec == "ALAC") extractAlacBitDepth(format) else null
+                        val detectedLossless = detectedCodec == "FLAC" || detectedCodec == "ALAC"
                         val bitrate = format.bitrate.takeIf { it > 0 }?.let { (it + 500) / 1000 }
                         _state.update { snapshot ->
                             var updated = snapshot
@@ -1948,11 +1951,12 @@ class MusicPlayer @Inject constructor(
                                 ?.let(preparedStreams::get)?.url
                                 ?.let { runCatching { renditionDepthFromStreamUrl(it) }.getOrNull() }
                             val sourceDepth = manifestDepth
+                                ?: alacDepth
                                 ?: resolveDepthForDisplay(
                                     updated.bitDepth,
                                     updated.samplingRateKHz ?: (if (rateHz > 0) rateHz / 1000.0 else null),
                                 ) ?: parseQualityFromCodec(updated.audioCodec)?.substringBefore('/')?.toIntOrNull()
-                              ?: if ((detectedCodec == "FLAC" || updated.isLossless) && rateHz > 48_000) 24 else null
+                              ?: if ((detectedLossless || updated.isLossless) && rateHz > 48_000) 24 else null
                             if (isSpatialAudioCodec(detectedCodec)) {
                                 updated = updated.copy(audioCodec = detectedCodec, isLossless = false)
                             } else if (!isSpatialAudioCodec(updated.audioCodec) && detectedCodec != null) {
@@ -1961,26 +1965,32 @@ class MusicPlayer @Inject constructor(
                                     detectedCodec == "FLAC" && rateHz > 0 && sourceDepth != null -> {
                                         "$sourceDepth/${formatSampleRateKHz(rateHz / 1000.0)}kHz"
                                     }
-                                    detectedCodec == "FLAC" &&
-                                        ((sourceDepth ?: 0) > 16 || rateHz > 48_000) -> "HI-RES FLAC"
+                                    detectedCodec == "ALAC" && rateHz > 0 && sourceDepth != null -> {
+                                        "ALAC $sourceDepth/${formatSampleRateKHz(rateHz / 1000.0)}kHz"
+                                    }
+                                    detectedLossless && ((sourceDepth ?: 0) > 16 || rateHz > 48_000) -> {
+                                        "HI-RES $detectedCodec"
+                                    }
                                     else -> detectedCodec
                                 }
-                                val finalCodec = if (detectedCodec == "FLAC") {
-                                    if (detectedBadge == "FLAC" && currentIsExplicit && updated.audioCodec?.contains("/") == true) {
+                                val finalCodec = if (detectedLossless) {
+                                    if (detectedBadge == detectedCodec && currentIsExplicit && updated.audioCodec?.contains("/") == true) {
                                         updated.audioCodec
                                     } else {
                                         detectedBadge
                                     }
-                                } else if (currentIsExplicit && updated.audioCodec != "FLAC" && updated.audioCodec != "HI-RES FLAC" && updated.audioCodec != "LOSSLESS") {
+                                } else if (currentIsExplicit && updated.audioCodec != "FLAC" && updated.audioCodec != "ALAC" &&
+                                    updated.audioCodec != "HI-RES FLAC" && updated.audioCodec != "HI-RES ALAC" && updated.audioCodec != "LOSSLESS"
+                                ) {
                                     updated.audioCodec
                                 } else {
                                     detectedBadge
                                 }
                                 updated = updated.copy(
                                     audioCodec = finalCodec,
-                                    bitDepth = manifestDepth ?: updated.bitDepth ?: sourceDepth,
-                                    bitrateKbps = if (detectedCodec == "FLAC") (updated.bitrateKbps ?: bitrate) else (updated.bitrateKbps ?: bitrate ?: if (detectedCodec == "OPUS") 160 else null),
-                                    isLossless = detectedCodec == "FLAC",
+                                    bitDepth = manifestDepth ?: alacDepth ?: updated.bitDepth ?: sourceDepth,
+                                    bitrateKbps = if (detectedLossless) (updated.bitrateKbps ?: bitrate) else (updated.bitrateKbps ?: bitrate ?: if (detectedCodec == "OPUS") 160 else null),
+                                    isLossless = detectedLossless,
                                 )
                             }
                             android.util.Log.i("MusicPlayer", "AudioInputFormatChanged: mime=${format.sampleMimeType}, rate=${rateHz}Hz, bitrate=${format.bitrate}, detectedCodec=$detectedCodec -> qualityPill=[codec=${updated.audioCodec}, depth=${updated.bitDepth}, bitrate=${updated.bitrateKbps}kbps, rate=${updated.samplingRateKHz}kHz]")
@@ -10003,3 +10013,17 @@ internal val SEARCH_TITLE_VARIANT = Regex(
     RegexOption.IGNORE_CASE,
 )
 internal val SEARCH_TITLE_NON_CHARACTER = Regex("[^\\p{L}\\p{N}]+")
+
+/** Extracts source bit depth from Media3 `audio/alac` CSD (`ALACSpecificConfig` 24/28/36-byte atom). */
+private fun extractAlacBitDepth(format: androidx.media3.common.Format): Int? {
+    for (buf in format.initializationData) {
+        val depth = when {
+            buf.size == 24 -> buf[5].toInt() and 0xFF
+            buf.size == 28 && buf[0].toInt() == 0 -> buf[9].toInt() and 0xFF
+            buf.size >= 36 && String(buf, 4, 4, Charsets.US_ASCII) == "alac" -> buf[17].toInt() and 0xFF
+            else -> null
+        }
+        if (depth != null && depth in 16..32) return depth
+    }
+    return null
+}
