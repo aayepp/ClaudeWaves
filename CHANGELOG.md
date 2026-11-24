@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.30] - 2026-11-24
+
+### Changed
+- **Mirror-extended Fullmode artwork:** uncropped `1:1` cover seamlessly extended top and bottom with vertically-mirrored blurred reflections, `420ms` track crossfades, automatic `ytimg.com` 4:3 letterbox bar cropping, and a lighter readability veil so cover colors shine through behind controls across all themes.
+- **2-ripple AGSL liquid refraction loading:** refined Artist and Album detail loading to two calm decelerating water waves using an Android 13+ AGSL refraction shader that gently ripples across the centered title (with smooth 2-wave fallbacks on older Android versions and Comic Pop).
+- **Snappier Hold-Home 2nd shortcut:** shortened hold activation from `400ms` to `150ms`, tightened the inward slide threshold to `12dp`, sped up springs, and synchronized MiniPlayer width shifting with zero frame lag.
+
 ## [1.0.29] - 2026-11-24
 
 ### Changed
