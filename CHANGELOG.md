@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.31] - 2026-11-24
+
+### Fixed
+- **Seamless Fullmode mirror artwork:** aligned top and bottom vertical reflections flush (`0dp` seam) and replaced abrupt boxed blur edges with multi-tier progressive `BlurredEdgeTreatment.Unbounded` blur across Android 12+ and smooth pre-blurred fallbacks on older Android versions across all themes.
+- **Artist & Album page crash on Android 13+:** removed invalid `h` float literal suffixes from the 2-ripple AGSL `RuntimeShader` and added guarded initialization/uniform error handling with automatic Canvas fallback so opening artist and album pages never crashes.
+- **Offline local ALAC `.m4a` misdetected as AAC:** replaced the 16 KB header-prefix scan in `AudioHeaderInspector` with a seekable/streaming MP4 atom walker (`moov -> trak -> mdia -> minf -> stbl -> stsd -> alac` and `mvhd`) and added `audio/alac` + `ALACSpecificConfig` bit-depth extraction in `MusicPlayer.onAudioInputFormatChanged` so local ALAC files accurately report `ALAC` (e.g., `24/44.1kHz` Hi-Res Lossless) in badges and Signal Path.
+
 ## [1.0.30] - 2026-11-24
 
 ### Changed
