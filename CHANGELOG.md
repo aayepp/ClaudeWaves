@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.35] - 2026-11-24
+
+### Fixed
+- **Dead lossless CDN URL exclusion & recovery:** cached broken lossless stream URLs that fail startup probe or ExoPlayer transport open (such as `EOFException` / `unexpected end of stream` on a broken edge asset) in a 5-minute TTL exclusion map across `findPreparedStreamFor`, retries, and background upgrades, and armed one-shot `Best quality first` recovery in `onPlayerError` so playback skips the dead URL and tries the next addon candidate or provider instead of staying stuck on YouTube AAC.
+
 ## [1.0.34] - 2026-11-24
 
 ### Changed
