@@ -1,5 +1,6 @@
 package com.lastwave.app.ui.player
 
+import android.os.Build
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -7,36 +8,35 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.Placeable
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Dp
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lastwave.app.data.lyrics.LyricLine
 import com.lastwave.app.playback.PlaybackProgressState
@@ -102,21 +102,13 @@ internal fun NowPlayingLyricsPreview(
     }
     val currentStyle = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall
     val otherStyle = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium
-    val veilColor = PlayerPalette.shade
-    val isDarkBackdrop = veilColor.luminance() < 0.5f
+    val haloColor = PlayerPalette.shade
+    val inkColor = PlayerPalette.ink
+    // Float cleanly over Fullmode artwork with zero container box; per-glyph blurred halo ensures readability.
     val containerModifier = if (overArtwork) {
         modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.verticalGradient(
-                    0.00f to Color.Transparent,
-                    0.20f to veilColor.copy(alpha = if (isDarkBackdrop) 0.46f else 0.70f),
-                    0.78f to veilColor.copy(alpha = if (isDarkBackdrop) 0.62f else 0.78f),
-                    1.00f to Color.Transparent,
-                ),
-            )
             .clickable(onClick = onOpenLyrics)
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
     } else {
         modifier.clickable(onClick = onOpenLyrics)
     }
@@ -143,35 +135,125 @@ internal fun NowPlayingLyricsPreview(
                     val line = lines.getOrNull(i) ?: continue
                     val isCurrent = i == active
                     val base = if (isCurrent) currentStyle else otherStyle
-                    BasicText(
+                    LyricPreviewLine(
                         text = line.text.ifBlank { "♪" },
-                        style = base.copy(
-                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                            color = PlayerPalette.ink.copy(
-                                alpha = if (isCurrent) 1f else if (overArtwork) 0.72f else 0.48f,
-                            ),
-                            textAlign = TextAlign.Center,
-                            shadow = if (overArtwork) {
-                                Shadow(
-                                    color = veilColor.copy(alpha = if (isDarkBackdrop) 0.92f else 0.85f),
-                                    offset = Offset(0f, 1.5f),
-                                    blurRadius = 10f,
-                                )
-                            } else {
-                                null
-                            },
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        autoSize = TextAutoSize.StepBased(
-                            minFontSize = base.fontSize * 0.85f,
-                            maxFontSize = base.fontSize,
-                            stepSize = 0.5.sp,
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
+                        baseStyle = base,
+                        isCurrent = isCurrent,
+                        overArtwork = overArtwork,
+                        inkColor = inkColor,
+                        haloColor = haloColor,
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LyricPreviewLine(
+    text: String,
+    baseStyle: TextStyle,
+    isCurrent: Boolean,
+    overArtwork: Boolean,
+    inkColor: Color,
+    haloColor: Color,
+) {
+    val autoSize = TextAutoSize.StepBased(
+        minFontSize = baseStyle.fontSize * 0.85f,
+        maxFontSize = baseStyle.fontSize,
+        stepSize = 0.5.sp,
+    )
+    val weight = when {
+        isCurrent -> FontWeight.Bold
+        overArtwork -> FontWeight.SemiBold
+        else -> FontWeight.Medium
+    }
+
+    if (!overArtwork) {
+        BasicText(
+            text = text,
+            style = baseStyle.copy(
+                fontWeight = weight,
+                color = inkColor.copy(alpha = if (isCurrent) 1f else 0.48f),
+                textAlign = TextAlign.Center,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = autoSize,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
+    }
+
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            BasicText(
+                text = text,
+                style = baseStyle.copy(
+                    fontWeight = weight,
+                    color = haloColor.copy(alpha = if (isCurrent) 0.78f else 0.62f),
+                    textAlign = TextAlign.Center,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = autoSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .blur(7.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded),
+            )
+            BasicText(
+                text = text,
+                style = baseStyle.copy(
+                    fontWeight = weight,
+                    color = haloColor.copy(alpha = if (isCurrent) 0.86f else 0.70f),
+                    textAlign = TextAlign.Center,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = autoSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(y = 0.5.dp)
+                    .blur(2.5.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded),
+            )
+        } else {
+            BasicText(
+                text = text,
+                style = baseStyle.copy(
+                    fontWeight = weight,
+                    color = haloColor.copy(alpha = 0.02f),
+                    textAlign = TextAlign.Center,
+                    shadow = Shadow(
+                        color = haloColor.copy(alpha = if (isCurrent) 0.88f else 0.74f),
+                        offset = Offset(0f, 1.5f),
+                        blurRadius = 18f,
+                    ),
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = autoSize,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        BasicText(
+            text = text,
+            style = baseStyle.copy(
+                fontWeight = weight,
+                color = inkColor.copy(alpha = if (isCurrent) 1f else 0.84f),
+                textAlign = TextAlign.Center,
+                shadow = Shadow(
+                    color = haloColor.copy(alpha = if (isCurrent) 0.95f else 0.82f),
+                    offset = Offset(0f, 1.5f),
+                    blurRadius = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 8f else 14f,
+                ),
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = autoSize,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }

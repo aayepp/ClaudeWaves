@@ -3245,7 +3245,7 @@ internal fun NowPlayingScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                             .height(LYRIC_PREVIEW_HEIGHT + 12.dp)
                             .graphicsLayer { alpha = lyricsTextAlpha },
                     )
