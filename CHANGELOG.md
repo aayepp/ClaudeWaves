@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.38] - 2026-11-25
+
+### Added
+- **Liquid Studio Style (optional toggle in Settings > Appearance & Visuals):** full-screen proportioned glass Now Playing with RGB squircle liquid ripple on track switch, floating frosted Title Pill that glides to the header on Lyrics/Queue, morphing thick-to-slim Liquid Glass seekbar, interactive 3D Cover Flow Queue with tactile rotary Click-Wheel dial, Library 3D Cover Flow carousel with 180° card-flip quick preview, elastic synchronized bottom dock, and silky Fullmode crossfade across all themes (Dark/Light Liquid Glass, AMOLED, non-glass, and Comic Pop Light/Dark). Turning it off keeps the classic ClaudeWaves UI unchanged.
+- **Bottom Floating Liquid Glass Toast Pills:** replaced plain system toasts for player actions (Downloads completed, Liked songs, Add to Playlist, EQ/download feedback) with swipe-to-dismiss floating glass pills across all themes, with tap-to-open Downloads on download completion.
+
+### Changed
+- **Seamless Fullmode open/close transition to MiniPlayer:** unified the Fullmode artwork card to shrink straight down center axis into the resting MiniPlayer pill with early chrome fade while keeping normal sleeve ArtworkFlight untouched.
+
+### Fixed
+- **Animated Album Canvas in Fullmode:** mounted the hardware `TextureView` outside offscreen `liquidGlassSource` capture, preserved square canvas `fallbackUrl` when `tallUrl` fails, refreshed ExoPlayer media sources cleanly on track switch, and guarded first-frame rendering so animated canvases play reliably in Fullmode.
+
 ## [1.0.37] - 2026-11-24
 
 ### Changed

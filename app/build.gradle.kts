@@ -268,8 +268,8 @@ android {
         buildConfigField("boolean", "VIVO_ORIGIN", vivoOrigin.toString())
         minSdk = (project.findProperty("minSdk") as? String)?.toIntOrNull() ?: 28
         targetSdk = 35
-        versionCode = 148
-        versionName = "1.0.37"
+        versionCode = 149
+        versionName = "1.0.38"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         (project.findProperty("targetAbis") as? String)?.let { prop ->
