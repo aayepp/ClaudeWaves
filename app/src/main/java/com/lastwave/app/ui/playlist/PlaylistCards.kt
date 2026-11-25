@@ -54,12 +54,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -593,6 +599,9 @@ internal fun LibraryInlineTrackRow(
 ) {
     val isDark = LocalIsDarkTheme.current
     val isComic = LocalComicTheme.current
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { 26.dp.toPx() }
+    var rowBounds by remember { mutableStateOf<Rect?>(null) }
     val dividerColor = if (isComic) {
         MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     } else {
@@ -604,7 +613,20 @@ internal fun LibraryInlineTrackRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 58.dp)
-                .clickable(onClick = onClick)
+                .onGloballyPositioned { rowBounds = it.boundsInRoot() }
+                .clickable(
+                    onClick = {
+                        dropController?.triggerFromBounds(
+                            title = title,
+                            artist = artist,
+                            artworkUrl = artworkUrl,
+                            rowBoundsInRoot = rowBounds,
+                            kind = LiquidDropKind.PLAY,
+                            thumbOffsetPx = thumbOffsetPx,
+                        )
+                        onClick()
+                    },
+                )
                 .padding(vertical = 8.dp, horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

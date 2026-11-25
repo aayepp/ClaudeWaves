@@ -5,6 +5,7 @@ package com.lastwave.app.ui.player
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.graphics.drawscope.scale
 import com.lastwave.app.playback.AudioQualityTier
@@ -133,6 +134,7 @@ import coil.compose.AsyncImage
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.Add
@@ -631,6 +633,8 @@ internal fun MiniPlayer(
     // full-bleed on screens without a nav bar (song lists, album, playlist), which
     // made it wider than everywhere else.
     val shape = RoundedCornerShape(100)
+    val dropController = LocalMiniPlayerDropController.current
+    val isComic = LocalComicTheme.current
     val positionedModifier = modifier
         .windowInsetsPadding(
             WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
@@ -652,6 +656,9 @@ internal fun MiniPlayer(
                 translationX = dragX.value
                 translationY = dragY.value.coerceAtLeast(0f)
                 alpha = (1f - (abs(dragX.value) + dragY.value.coerceAtLeast(0f)) / (threshold * 4f)).coerceIn(0.55f, 1f)
+                val bounce = dropController?.miniBounce ?: 0f
+                scaleX = 1f + 0.028f * bounce
+                scaleY = 1f - 0.038f * bounce
             }
             .onGloballyPositioned { pullGesture.coords = it }
             .pointerInput(track.videoId, track.title, pull) {
@@ -690,6 +697,67 @@ internal fun MiniPlayer(
             },
         contentAlignment = Alignment.Center,
     ) {
+        val m3SurfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawWithContent {
+                    // Draw smooth cubic-Bezier metaball mound rising out of the MiniPlayer top edge on liquid drop impact.
+                    val crownH = dropController?.crownHeightPx ?: 0f
+                    if (crownH > 0.5f && size.width > 40f) {
+                        val impactX = ((dropController?.impactXFraction ?: 0.5f) * size.width)
+                            .coerceIn(36.dp.toPx(), size.width - 36.dp.toPx())
+                        val spread = maxOf(28.dp.toPx(), 42.dp.toPx() - crownH * 0.35f)
+                        val left = (impactX - spread).coerceAtLeast(24.dp.toPx())
+                        val right = (impactX + spread).coerceAtMost(size.width - 24.dp.toPx())
+                        val mid = (left + right) * 0.5f
+                        val k = (mid - left) * 0.58f
+                        val peakY = -crownH
+                        val crownPath = Path().apply {
+                            moveTo(left, 2f)
+                            cubicTo(left + k * 0.72f, 2f, mid - k * 0.65f, peakY, mid, peakY)
+                            cubicTo(mid + k * 0.65f, peakY, right - k * 0.72f, 2f, right, 2f)
+                            close()
+                        }
+                        val fillBrush = when {
+                            isComic -> Brush.verticalGradient(
+                                colors = listOf(m3SurfaceColor, m3SurfaceColor),
+                                startY = peakY,
+                                endY = 4f,
+                            )
+                            isGlass && miniUseLightInk -> Brush.verticalGradient(
+                                colors = listOf(Color(0xFF424752), Color(0xFF282B33)),
+                                startY = peakY,
+                                endY = 4f,
+                            )
+                            isGlass -> Brush.verticalGradient(
+                                colors = listOf(Color(0xFFF6F8FB), Color(0xFFE6EBF2)),
+                                startY = peakY,
+                                endY = 4f,
+                            )
+                            else -> Brush.verticalGradient(
+                                colors = listOf(m3SurfaceColor, m3SurfaceColor),
+                                startY = peakY,
+                                endY = 4f,
+                            )
+                        }
+                        drawPath(path = crownPath, brush = fillBrush)
+                        val rimPath = Path().apply {
+                            moveTo(left, 2f)
+                            cubicTo(left + k * 0.72f, 2f, mid - k * 0.65f, peakY, mid, peakY)
+                            cubicTo(mid + k * 0.65f, peakY, right - k * 0.72f, 2f, right, 2f)
+                        }
+                        val rimColor = when {
+                            isComic -> com.lastwave.app.ui.theme.ComicInk
+                            isGlass && miniUseLightInk -> Color.White.copy(alpha = 0.75f)
+                            isGlass -> Color.Black.copy(alpha = 0.22f)
+                            else -> Color.White.copy(alpha = 0.35f)
+                        }
+                        drawPath(path = rimPath, color = rimColor, style = Stroke(width = 1.6.dp.toPx()))
+                    }
+                    drawContent()
+                },
+        ) {
         if (isGlass) {
             Surface(
                 shape = shape,
@@ -704,7 +772,12 @@ internal fun MiniPlayer(
                 )
                 .clickable(interactionSource = barInteraction, indication = comicIndicationOrNull(), onClick = onExpand),
             ) {
-                Column {
+                Box(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.graphicsLayer {
+                        alpha = (1f - (dropController?.queueBannerProgress ?: 0f)).coerceIn(0f, 1f)
+                    },
+                ) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 10.dp)
                             .collapseVerticalPadding(8.dp, 2.5.dp, compactProgress),
@@ -803,6 +876,14 @@ internal fun MiniPlayer(
                     }
                     MiniPlayerProgress(progressState)
                 }
+                MiniPlayerImpactAndQueueOverlay(
+                    dropController = dropController,
+                    textColor = miniGlassInk,
+                    isGlass = true,
+                    isComic = false,
+                    modifier = Modifier.matchParentSize(),
+                )
+                }
             }
         } else {
             // Material 3 / Comic Pop Mini-Player
@@ -819,7 +900,14 @@ internal fun MiniPlayer(
                     .comicPanel(miniCardShape)
                     .clickable(interactionSource = barInteraction, indication = comicIndicationOrNull(), onClick = onExpand),
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Box(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = (1f - (dropController?.queueBannerProgress ?: 0f)).coerceIn(0f, 1f)
+                        },
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -935,6 +1023,80 @@ internal fun MiniPlayer(
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
+                MiniPlayerImpactAndQueueOverlay(
+                    dropController = dropController,
+                    textColor = MaterialTheme.colorScheme.onSurface,
+                    isGlass = false,
+                    isComic = isComic,
+                    modifier = Modifier.matchParentSize(),
+                )
+                }
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun MiniPlayerImpactAndQueueOverlay(
+    dropController: MiniPlayerDropController?,
+    textColor: Color,
+    isGlass: Boolean,
+    isComic: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (dropController == null) return
+    val ripple = dropController.impactRipple
+    val queueMorph = dropController.queueBannerProgress
+    val accent = MaterialTheme.colorScheme.primary
+
+    if (ripple in 0.01f..0.99f) {
+        Canvas(modifier) {
+            val impactX = (dropController.impactXFraction * size.width).coerceIn(16.dp.toPx(), size.width - 16.dp.toPx())
+            val maxR = size.width * 0.55f
+            val r = androidx.compose.ui.util.lerp(10.dp.toPx(), maxR, ripple)
+            val fade = (1f - ripple) * (1f - ripple)
+            drawCircle(
+                color = (if (isGlass) Color(0xFF9CEEFF) else accent).copy(alpha = 0.42f * fade),
+                radius = r,
+                center = Offset(impactX, 4.dp.toPx()),
+                style = Stroke(width = androidx.compose.ui.util.lerp(2.6.dp.toPx(), 0.8.dp.toPx(), ripple)),
+            )
+        }
+    }
+
+    if (queueMorph > 0.01f) {
+        val bannerBg = when {
+            isComic -> MaterialTheme.colorScheme.primaryContainer
+            isGlass -> Color(0xFF3EE6B4).copy(alpha = 0.22f * queueMorph)
+            else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.94f)
+        }
+        val bannerContent = when {
+            isComic || !isGlass -> MaterialTheme.colorScheme.onPrimaryContainer
+            else -> textColor
+        }
+        Box(
+            modifier = modifier
+                .graphicsLayer { alpha = queueMorph.coerceIn(0f, 1f) }
+                .background(bannerBg),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null,
+                    tint = if (isGlass && !isComic) Color(0xFF72F5CC) else bannerContent,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    text = "Added to Queue",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = bannerContent,
+                )
             }
         }
     }

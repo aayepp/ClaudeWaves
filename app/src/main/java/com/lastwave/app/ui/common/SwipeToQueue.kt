@@ -15,16 +15,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -33,6 +38,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.lastwave.app.playback.PlayableTrack
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import com.lastwave.app.ui.player.LocalMusicPlayer
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -57,13 +64,19 @@ fun SwipeToQueue(
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val dir = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
-    val thresholdPx = with(LocalDensity.current) { 80.dp.toPx() }
+    val thresholdPx = with(density) { 80.dp.toPx() }
+    val thumbOffsetPx = with(density) { 42.dp.toPx() }
     val offset = remember { Animatable(0f) }
     val currentTrack by rememberUpdatedState(track)
+    val dropController = LocalMiniPlayerDropController.current
+    var rowBounds by remember { mutableStateOf<Rect?>(null) }
 
     Box(
-        modifier.pointerInput(dir, thresholdPx) {
+        modifier
+            .onGloballyPositioned { rowBounds = it.boundsInRoot() }
+            .pointerInput(dir, thresholdPx) {
             var armed = false
             detectHorizontalDragGestures(
                 onDragStart = { armed = false },
@@ -82,8 +95,21 @@ fun SwipeToQueue(
                 },
                 onDragEnd = {
                     if (armed) {
-                        player.addToQueue(currentTrack())
-                        Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+                        val queued = currentTrack()
+                        player.addToQueue(queued)
+                        if (dropController != null) {
+                            dropController.triggerFromBounds(
+                                title = queued.title,
+                                artist = queued.artist,
+                                artworkUrl = queued.artworkUrl,
+                                rowBoundsInRoot = rowBounds,
+                                kind = LiquidDropKind.QUEUE,
+                                thumbOffsetPx = thumbOffsetPx,
+                                horizontalShiftPx = offset.value * dir * 0.65f,
+                            )
+                        } else {
+                            Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+                        }
                     }
                     scope.launch { offset.animateTo(0f) }
                 },

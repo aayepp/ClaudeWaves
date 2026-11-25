@@ -397,6 +397,7 @@ private fun DiscoverCard(
         onClick = onPlay,
         badgeTitle = track.name,
         badgeArtist = track.artist,
+        dropArtworkUrl = track.artworkUrl,
         modifier = modifier,
         leading = {
             Box(modifier = Modifier.size(52.dp)) {

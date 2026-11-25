@@ -20,7 +20,11 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.constrainHeight
@@ -1310,14 +1314,28 @@ private fun QuickPickTrackRow(
     onMenuClick: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { (horizontalPadding + 24.dp).toPx() }
+    var rowBounds by remember { mutableStateOf<Rect?>(null) }
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else Color.Transparent,
         border = null,
         modifier = Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { rowBounds = it.boundsInRoot() }
             .combinedClickable(
-                onClick = onClick,
+                onClick = {
+                    dropController?.triggerFromBounds(
+                        title = track.title,
+                        artist = ArtistHelper.primaryArtist(track.artist),
+                        artworkUrl = track.artworkUrl,
+                        rowBoundsInRoot = rowBounds,
+                        kind = LiquidDropKind.PLAY,
+                        thumbOffsetPx = thumbOffsetPx,
+                    )
+                    onClick()
+                },
                 onLongClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onLongClick()

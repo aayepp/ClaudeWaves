@@ -410,6 +410,7 @@ private fun TrackSectionList(
                 onLongClick = { menuTrack = track },
                 badgeTitle = track.title,
                 badgeArtist = track.artist,
+                dropArtworkUrl = track.artworkUrl,
                 modifier = Modifier.padding(horizontal = 16.dp),
                 leading = {
                     Box(

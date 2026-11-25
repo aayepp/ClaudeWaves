@@ -107,7 +107,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.geometry.Rect
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.lastwave.app.R
@@ -650,6 +656,8 @@ fun ArtistDetailScreen(
                             val isPlayingThis = playbackState.isPlaying &&
                                 playbackState.current?.title.equals(track.title, ignoreCase = true) &&
                                 playbackState.current?.artist.equals(track.artist, ignoreCase = true)
+                            val dropController = LocalMiniPlayerDropController.current
+                            val artistThumbOffsetPx = with(LocalDensity.current) { 42.dp.toPx() }
 
                             SwipeToQueue(
                                 { track },
@@ -660,14 +668,24 @@ fun ArtistDetailScreen(
                                     .detailRevealContent(revealState),
                                 shape = RoundedCornerShape(16.dp),
                             ) {
+                                var rowBounds by remember { mutableStateOf<Rect?>(null) }
                                 Surface(
                                     shape = RoundedCornerShape(16.dp),
                                     color = if (isPlayingThis) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                                     else MaterialTheme.colorScheme.surfaceContainerLow,
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .onGloballyPositioned { rowBounds = it.boundsInRoot() }
                                         .clickable {
                                             haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                            dropController?.triggerFromBounds(
+                                                title = track.title,
+                                                artist = track.artist,
+                                                artworkUrl = track.artworkUrl,
+                                                rowBoundsInRoot = rowBounds,
+                                                kind = LiquidDropKind.PLAY,
+                                                thumbOffsetPx = artistThumbOffsetPx,
+                                            )
                                             viewModel.playAll(startIndex = index, order = sortedSongs)
                                         },
                                 ) {

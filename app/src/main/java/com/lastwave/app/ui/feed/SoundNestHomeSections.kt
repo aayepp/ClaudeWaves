@@ -71,13 +71,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import com.lastwave.app.playback.toPlayableTrack
+import com.lastwave.app.ui.common.SwipeToQueue
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -1278,13 +1286,21 @@ internal fun RecommendedSongRow(
 ) {
     val comic = LocalComicTheme.current
     val haptics = LocalHapticFeedback.current
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { (horizontalPadding + 30.dp).toPx() }
+    var rowBounds by remember { mutableStateOf<Rect?>(null) }
     val thumbShape = RoundedCornerShape(10.dp)
     val rowShape = RoundedCornerShape(14.dp)
 
+    SwipeToQueue(
+        track = { item.track.toPlayableTrack() },
+        modifier = modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+        shape = rowShape,
+    ) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = horizontalPadding)
+            .onGloballyPositioned { rowBounds = it.boundsInRoot() }
             .clip(rowShape)
             .then(
                 if (item.isCurrent) {
@@ -1301,6 +1317,14 @@ internal fun RecommendedSongRow(
                 indication = comicIndicationOrNull(),
                 onClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    dropController?.triggerFromBounds(
+                        title = item.track.title,
+                        artist = item.track.artist,
+                        artworkUrl = item.track.artworkUrl,
+                        rowBoundsInRoot = rowBounds,
+                        kind = LiquidDropKind.PLAY,
+                        thumbOffsetPx = thumbOffsetPx,
+                    )
                     item.onClick()
                 },
                 onLongClick = {
@@ -1359,6 +1383,7 @@ internal fun RecommendedSongRow(
                 modifier = Modifier.size(19.dp),
             )
         }
+    }
     }
 }
 

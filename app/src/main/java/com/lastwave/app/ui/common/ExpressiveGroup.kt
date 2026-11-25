@@ -36,11 +36,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.lastwave.app.ui.comic.clip
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
@@ -319,14 +326,19 @@ fun ExpressiveGroupTrackRow(
     trailing: (@Composable () -> Unit)? = null,
     /** Swipe the row toward the end edge to queue this song; null turns swiping off. */
     queueTrack: (() -> com.lastwave.app.playback.PlayableTrack)? = null,
+    dropArtworkUrl: String? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberGroupPressScale(interactionSource)
     val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val thumbOffsetPx = with(density) { 42.dp.toPx() }
+    val dropController = LocalMiniPlayerDropController.current
+    var rowBounds by remember { mutableStateOf<Rect?>(null) }
     val shape = groupShape(position)
     val playingContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
 
-    SwipeToQueue(queueTrack, modifier.fillMaxWidth(), shape) {
+    SwipeToQueue(queueTrack, modifier.fillMaxWidth().onGloballyPositioned { rowBounds = it.boundsInRoot() }, shape) {
         Card(
             shape = shape,
             colors = CardDefaults.cardColors(
@@ -342,7 +354,20 @@ fun ExpressiveGroupTrackRow(
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = androidx.compose.material3.ripple(),
-                    onClick = onClick,
+                    onClick = {
+                        if (dropController != null) {
+                            val dropTrack = queueTrack?.invoke()
+                            dropController.triggerFromBounds(
+                                title = dropTrack?.title ?: badgeTitle ?: title,
+                                artist = dropTrack?.artist ?: badgeArtist ?: subtitle,
+                                artworkUrl = dropTrack?.artworkUrl ?: dropArtworkUrl,
+                                rowBoundsInRoot = rowBounds,
+                                kind = LiquidDropKind.PLAY,
+                                thumbOffsetPx = thumbOffsetPx,
+                            )
+                        }
+                        onClick()
+                    },
                     onLongClick = onLongClick?.let {
                         {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)

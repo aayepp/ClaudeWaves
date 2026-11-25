@@ -79,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.lastwave.app.ui.comic.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -103,6 +104,8 @@ import com.lastwave.app.playback.MusicPlayerState
 import com.lastwave.app.playback.PlayableTrack
 import com.lastwave.app.ui.navigation.ArtistAlbumNavigator
 import com.lastwave.app.ui.player.CompactStreamQualityBadge
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import com.lastwave.app.ui.player.LocalMusicPlayer
 import com.lastwave.app.ui.player.LocalAddToPlaylist
 import com.lastwave.app.ui.player.PlayerCastMenuRow
@@ -881,7 +884,14 @@ fun TrackContextMenuSheet(
                             onDismiss()
                         }
                     }
-                    add { pos -> MenuActionRow(Icons.Filled.QueueMusic, stringResource(R.string.menu_add_queue), position = pos) { musicPlayer.addToQueue(playable); onDismiss() } }
+                    add { pos ->
+                        val dropController = LocalMiniPlayerDropController.current
+                        MenuActionRow(Icons.Filled.QueueMusic, stringResource(R.string.menu_add_queue), position = pos) {
+                            musicPlayer.addToQueue(playable)
+                            dropController?.triggerDrop(playable, Offset.Unspecified, LiquidDropKind.QUEUE)
+                            onDismiss()
+                        }
+                    }
                     add { pos ->
                         Card(
                             shape = groupShape(pos),

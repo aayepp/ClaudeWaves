@@ -589,6 +589,7 @@ fun PlayerHost(
     var homePillExtraWidth by remember { mutableStateOf(0.dp) }
     // While docking, the card slides down over the fading bar, not under it.
     val chromeDocking by remember { derivedStateOf { chromeCollapse.progress() > 0f } }
+    val dropController = remember { MiniPlayerDropController() }
     val lifecycleOwner = LocalLifecycleOwner.current
     var activeToastPill by remember { mutableStateOf<PlayerToastEvent?>(null) }
     LaunchedEffect(viewModel) {
@@ -633,6 +634,7 @@ fun PlayerHost(
         LocalBackdropContrastCoordinator provides backdropContrastCoordinator,
         LocalLikeNudge provides likeNudge,
         LocalArtworkFlight provides artworkFlight,
+        LocalMiniPlayerDropController provides dropController,
         LocalHomeOnRight provides settings.homeButtonRight,
         LocalSetHomePillExtraWidth provides { homePillExtraWidth = it },
         LocalHomeHoldShortcut provides HomeHoldShortcut.fromId(settings.homeHoldShortcut),
@@ -1039,6 +1041,15 @@ fun PlayerHost(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .zIndex(10f),
+            )
+            MiniPlayerLiquidDropOverlay(
+                controller = dropController,
+                miniCardBounds = { miniCardBounds },
+                hostOrigin = { hostOrigin },
+                expanded = expanded,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(9f),
             )
         }
     }

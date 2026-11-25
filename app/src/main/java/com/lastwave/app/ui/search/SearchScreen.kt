@@ -81,10 +81,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.lastwave.app.ui.comic.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import com.lastwave.app.R
@@ -114,6 +118,8 @@ import com.lastwave.app.ui.common.TrackMiniTraySheet
 import com.lastwave.app.ui.common.safeDrawingBottomPadding
 import com.lastwave.app.ui.common.safeHorizontalContentPadding
 import com.lastwave.app.ui.common.adaptiveContentWidth
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import com.lastwave.app.ui.player.LocalMiniPlayerScrollClearance
 
 import androidx.compose.foundation.background
@@ -497,14 +503,32 @@ fun SearchScreen(
                                         val isItemPlaying = (state.tab == SearchTab.TRACKS || state.tab == SearchTab.LOCAL || state.tab == SearchTab.PODCASTS) && playbackState.isPlaying &&
                                             playbackState.current?.title.equals(item.name, ignoreCase = true) &&
                                             (item.artist.isNullOrBlank() || playbackState.current?.artist.equals(item.artist, ignoreCase = true))
+                                        val isOfflinePlaylist = state.tab == SearchTab.LOCAL && item.entityId?.startsWith("offline_playlist:") == true
+                                        val canSwipeQueue = state.tab == SearchTab.TRACKS || (state.tab == SearchTab.LOCAL && !isOfflinePlaylist)
+                                        val isPlayableItem = state.tab == SearchTab.TRACKS || state.tab == SearchTab.PODCASTS || (state.tab == SearchTab.LOCAL && !isOfflinePlaylist)
+                                        val dropController = LocalMiniPlayerDropController.current
+                                        val searchThumbOffsetPx = with(LocalDensity.current) { 38.dp.toPx() }
+                                        var rowBounds by remember { mutableStateOf<Rect?>(null) }
 
                                         // Only songs queue; artists, albums and playlists open instead.
-                                        SwipeToQueue(if (state.tab == SearchTab.TRACKS) ({ item.toPlayableTrack() }) else null) {
+                                        SwipeToQueue(if (canSwipeQueue) ({ item.toPlayableTrack() }) else null) {
                                             SearchResultRow(
                                                 item = item,
                                                 tab = state.tab,
                                                 isPlaying = isItemPlaying,
+                                                modifier = Modifier.onGloballyPositioned { rowBounds = it.boundsInRoot() },
                                                 onClick = {
+                                                    if (isPlayableItem) {
+                                                        val playable = item.toPlayableTrack(podcast = state.tab == SearchTab.PODCASTS)
+                                                        dropController?.triggerFromBounds(
+                                                            title = playable.title,
+                                                            artist = playable.artist,
+                                                            artworkUrl = playable.artworkUrl,
+                                                            rowBoundsInRoot = rowBounds,
+                                                            kind = LiquidDropKind.PLAY,
+                                                            thumbOffsetPx = searchThumbOffsetPx,
+                                                        )
+                                                    }
                                                     when (state.tab) {
                                                         SearchTab.ARTISTS -> onOpenArtist(item.name, item.entityId)
                                                         SearchTab.ALBUMS -> onOpenAlbum(item.name, item.artist.orEmpty(), item.entityId)
