@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.41] - 2026-11-25
+
+### Changed
+- **Transparent Now Playing glass pills:** removed per-song artwork tint washes and solid button backgrounds across Now Playing controls (`Play/Pause`, `Like`, `EQ`, `Output`, top bar buttons, bottom dock, and `VolumeSlider`), so Liquid Glass pills stay crystal-clear and reflect only the real artwork underneath (while preserving Comic Pop styling and full Light/Dark/AMOLED/No-Glass legibility).
+
+### Fixed
+- **Seamless Fullmode open/close transition:** removed the duplicate zoomed cover overlay and asymmetric `pow` morph curve in `PlayerHost` so Fullmode now expands and shrinks smoothly with the `MiniPlayer` pill in the exact same linear macOS-Dock container morph as Normal artwork mode.
+
 ## [1.0.40] - 2026-11-25
 
 ### Added
