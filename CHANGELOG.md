@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.46] - 2026-11-26
+
+### Changed
+- **Living water globule everywhere:** extended the `DropRowBoundsHolder` zero-recomposition liquid drop animation to every remaining song list and playable song card across the app (`Stats` track/history rows, `Downloads` songs/artists/albums, `Home Feed` cards & Continue Listening, `Community Playlist` preview rows, `Genres`, `Friend Profile`, `Library` playlist preview rows, `Local` square grid cards, and `Podcast` episode rows).
+- **Centered, pixel-aligned droplet & metaball crest:** replaced the parabolic arc with a cubic-Bézier gravity dive (`sampleGravityDrop`) that pulls the droplet inward off the left edge into open view, lands near center (`46%` for play / `50%` for queue) safely clear of curved bezels, and locks `controller.impactXFraction` and the concave liquid bridge pixel-for-pixel directly onto the rising MiniPlayer crest.
+
+### Fixed
+- **Complete, unbroken glass & MiniPlayer outlines everywhere:** replaced the diagonal `Highlight.Default` and `0.08f` / `Color.Transparent` rim fade-outs across `drawGlassSurfaceOverlay`, `miniPlayerLiquidGlass`, `drawInteractiveGlass`, `glassRim`, `MiniPlayer` (Home & Queue across Dark/Light Glass, AMOLED, M3 No-Glass), `NavSelectionPill`, and `PlayerToastPill` with continuous 3-stop optical rims, and lifted glass `MiniPlayerProgress` `2.5.dp` clear of the bottom rim.
+
 ## [1.0.45] - 2026-11-26
 
 ### Added
