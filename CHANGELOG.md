@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.47] - 2026-11-26
+
+### Changed
+- **Liquid peel-off droplet launch:** replaced the paused two-stage launch animation with a continuous single-curve Liquid Peel-Off (`samplePeelTrajectory`) that morphs the song cover from rounded-square into the Living Water Globule (`cornerBlend`) with a tap ripple ring and glistening liquid peel neck with zero mid-air freeze.
+- **Clean MiniPlayer rim (Home & Queue):** removed the bottom `MiniPlayerProgress` bar across Liquid Glass, Material 3, AMOLED, and Comic Pop themes so the outer optical outline stays completely unbroken without overlapping lines.
+- **Crystal crown splash & internal pill-clipped ripple:** upgraded droplet impact to a 7-teardrop gravity splash plus 2 micro shimmer sparks (`CRYSTAL_SPLASH_SPECS` + `drawSplashTeardrop`) rising from the MiniPlayer crest, paired with a pill-clipped radial bloom and double harmonic shockwave ripple (`MiniPlayerImpactAndQueueOverlay`) strictly contained inside the capsule.
+
+### Fixed
+- **Adaptive split landscape update & announcement dialogs:** added `rememberDialogLayoutMetrics` and `UpdateSplitHeroPane` across `AppUpdateDialog`, `ChangelogDialog` (`WhatsNewDialog` & `ChangelogViewerDialog`), and `BroadcastDialog` so Android Player / landscape screens switch cleanly to a 2-column split panel with scrollable notes and pinned bottom action buttons that never get pushed off-screen.
+
 ## [1.0.46] - 2026-11-26
 
 ### Changed
