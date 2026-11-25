@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.42] - 2026-11-25
+
+### Added
+- **3D water droplet & metaball merge to MiniPlayer:** added a continuous 3D glass water droplet animation across all song lists (`Playlist`, `Album`, `Artist`, `Search`, `Feed`, `Local`) and the track menu `Add to Queue` action — tapping a track launches a glossy droplet (with upright cover optics, internal caustic glow, trailing crystal micro-beads, and a close-contact cubic-Bézier metaball merge + elastic MiniPlayer bounce), while swiping right to queue adds symmetrical splash beads and morphs the MiniPlayer pill temporarily into an `Added to Queue` banner across Light, Dark, AMOLED, Liquid Glass, No-Glass, and Comic Pop themes.
+
 ## [1.0.41] - 2026-11-25
 
 ### Changed
