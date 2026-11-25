@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.43] - 2026-11-25
+
+### Added
+- **Floating UI & Player jelly wobble physics:** upgraded the shared `waterDropJiggle` interaction engine with localized touch-point `TransformOrigin` pivots, damped X/Y squash-and-stretch harmonics, and directional `rotationZ` tilt across the Floating Bottom Nav Bar, Search pill, Now Playing transparent glass pills (`Play/Pause`, `Previous`/`Next`, `Like`, bottom dock, and utility pills), Floating Toast Pill jelly pop-in, and `MiniPlayer` swipe-skip settle / direct tap feedback across Light, Dark, AMOLED, Liquid Glass, No-Glass, and Comic Pop themes.
+
+### Fixed
+- **Water droplet flight visibility & pacing:** added a `200ms` elastic pop-out phase at the song row (`66.dp` droplet diameter), lengthened the gravity arc to `700ms` (Play) / `780ms` (Add to Queue) with natural `CubicBezierEasing` and `crossfadeMs = 0` instant artwork visibility, extended the metaball crown & concave liquid neck merge window, and added a `680ms` wobbly jelly impact rebound on `MiniPlayer`.
+
 ## [1.0.42] - 2026-11-25
 
 ### Added
