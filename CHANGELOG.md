@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.40] - 2026-11-25
+
+### Added
+- **Liquid Glass interactive motion:** added tilt-driven specular glint reflections across Liquid Glass surfaces, finger-tracking specular spotlights with rim flares on press/drag, spring-animated translucent Liquid Glass droplet thumbs while scrubbing seekbars and the in-app volume slider, and a traveling specular edge sweep during the mini-player to full-player transition (with matching Comic Pop and No-Glass fallbacks).
+
+### Changed
+- **Discord Rich Presence compact status:** updated the Discord member-list activity name across both IPC and Gateway transports (plus the Discord Settings preview card) to display `ClaudeWaves · Artist - Title` within Discord's 128-character limit.
+- **Rich in-app notice cards & storage hardening:** upgraded notice dialogs with 16:9 banner headers, Markdown formatting, and full Light/Dark/Comic Pop/Liquid Glass styling, encrypted local credentials with Android Keystore AES-256-GCM, excluded private DataStore/secret files from cloud backup and device transfers, and scoped `FileProvider` sharing paths.
+
 ## [1.0.39] - 2026-11-25
 
 ### Removed
