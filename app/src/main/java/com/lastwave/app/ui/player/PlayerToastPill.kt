@@ -3,6 +3,8 @@ package com.lastwave.app.ui.player
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -74,7 +76,11 @@ import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.ui.theme.liquidGlassContainerColor
 import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
 import com.lastwave.app.ui.theme.trackBackdropBounds
+import com.lastwave.app.ui.theme.waterDropJiggle
 import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.sin
 
 enum class PlayerToastKind {
     DOWNLOADED,
@@ -152,12 +158,24 @@ internal fun PlayerToastPillHost(
                 label = "toastPillSwitch",
             ) { event ->
                 var dragOffsetY by remember(event.id) { mutableFloatStateOf(0f) }
+                val popWobble = remember(event.id) { Animatable(0f) }
+                LaunchedEffect(event.id) {
+                    popWobble.snapTo(0f)
+                    popWobble.animateTo(1f, tween(durationMillis = 560, easing = LinearEasing))
+                }
                 Box(
                     modifier = Modifier
                         .graphicsLayer {
-                            translationY = dragOffsetY
+                            val bt = popWobble.value
+                            val jelly = if (bt in 0.001f..0.999f) sin(bt * 4.0f * PI.toFloat()) * exp(-2.8f * bt) else 0f
+                            val tilt = if (bt in 0.001f..0.999f) -1.6f * sin(bt * 3.0f * PI.toFloat()) * exp(-3.0f * bt) else 0f
+                            translationY = dragOffsetY + 4.dp.toPx() * jelly
+                            scaleX = 1f + 0.055f * jelly
+                            scaleY = 1f - 0.085f * jelly
+                            rotationZ = tilt
                             alpha = (1f - dragOffsetY / 160f).coerceIn(0.45f, 1f)
                         }
+                        .waterDropJiggle(amplitude = 0.05f, tiltDegrees = 1.8f, dipDp = 3.dp)
                         .pointerInput(event.id) {
                             detectVerticalDragGestures(
                                 onDragEnd = {

@@ -1947,7 +1947,7 @@ internal fun SecondaryActionRow(
     ) {
         val dockModifier = dockWidthModifier
             .height(dockHeight)
-            .let { if (!isComic) it.waterDropJiggle(amplitude = 0.018f) else it }
+            .waterDropJiggle(amplitude = 0.048f, tiltDegrees = 2.0f, dipDp = 3.dp)
 
         // Keep outer container unclipped so the lifted lens can swell past the rail like Home UI.
         Box(modifier = dockModifier) {

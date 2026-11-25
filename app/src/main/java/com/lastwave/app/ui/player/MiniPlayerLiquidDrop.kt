@@ -1,6 +1,7 @@
 package com.lastwave.app.ui.player
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -54,7 +55,6 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
-import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -91,6 +91,9 @@ class MiniPlayerDropController {
         internal set
 
     var miniBounce by mutableFloatStateOf(0f)
+        internal set
+
+    var miniWobbleTilt by mutableFloatStateOf(0f)
         internal set
 
     var impactRipple by mutableFloatStateOf(0f)
@@ -174,7 +177,7 @@ private fun sampleParabolaDrop(
     bulgeX: Float,
     arcLiftPx: Float,
 ): ParabolaSample {
-    val u = t.coerceIn(0f, 1f).toDouble().pow(0.90).toFloat()
+    val u = t.coerceIn(0f, 1f)
     val cx = (start.x + end.x) * 0.5f + bulgeX
     val cy = minOf(start.y, end.y) - arcLiftPx
     val omt = 1f - u
@@ -183,7 +186,7 @@ private fun sampleParabolaDrop(
     val vx = 2f * omt * (cx - start.x) + 2f * u * (end.x - cx)
     val vy = 2f * omt * (cy - start.y) + 2f * u * (end.y - cy)
     val speed = hypot(vx, vy)
-    val stretch = 1f + ((speed / 2400f) * sin(u * PI.toFloat()) * 0.16f).coerceIn(0f, 0.16f)
+    val stretch = 1f + ((speed / 2100f) * sin(u * PI.toFloat()) * 0.20f).coerceIn(0f, 0.20f)
     return ParabolaSample(x = x, y = y, angleRad = atan2(vy, vx), stretch = stretch)
 }
 
@@ -201,6 +204,7 @@ internal fun MiniPlayerLiquidDropOverlay(
             LaunchedEffect(expanded) {
                 controller.crownHeightPx = 0f
                 controller.miniBounce = 0f
+                controller.miniWobbleTilt = 0f
                 controller.impactRipple = 0f
                 controller.queueBannerProgress = 0f
                 controller.clearIfMatches(drop?.id ?: -1L)
@@ -220,9 +224,10 @@ internal fun MiniPlayerLiquidDropOverlay(
         val hostWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
         val hostHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
         val thumbOffsetPx = with(density) { 42.dp.toPx() }
-        val maxCrownPx = with(density) { 17.dp.toPx() }
-        val dropRestRadiusPx = with(density) { 26.dp.toPx() }
-        val bridgeMaxGapPx = with(density) { 64.dp.toPx() }
+        val maxCrownPx = with(density) { 24.dp.toPx() }
+        val dropRestRadiusPx = with(density) { 33.dp.toPx() }
+        val bridgeMaxGapPx = with(density) { 92.dp.toPx() }
+        val popLiftPx = with(density) { 18.dp.toPx() }
 
         val origin = hostOrigin()
         val miniRect = miniCardBounds()
@@ -236,6 +241,9 @@ internal fun MiniPlayerLiquidDropOverlay(
                 )
             }
         }
+        val flightStart = remember(drop.id, start) {
+            Offset(start.x, (start.y - popLiftPx).coerceAtLeast(36f))
+        }
         val target = remember(drop.id, miniRect, hostWidthPx, hostHeightPx) {
             if (miniRect != null && miniRect.width > 20f) {
                 val tx = if (drop.kind == LiquidDropKind.PLAY) {
@@ -248,12 +256,13 @@ internal fun MiniPlayerLiquidDropOverlay(
                 Offset(hostWidthPx * 0.5f, hostHeightPx - with(density) { 104.dp.toPx() })
             }
         }
-        val arcBulgeX = remember(drop.id, start, target) {
-            val dir = if (target.x >= start.x) 1f else -1f
-            dir * with(density) { 36.dp.toPx() }
+        val arcBulgeX = remember(drop.id, flightStart, target) {
+            val dir = if (target.x >= flightStart.x) 1f else -1f
+            dir * with(density) { 44.dp.toPx() }
         }
-        val arcLiftPx = with(density) { 34.dp.toPx() }
+        val arcLiftPx = with(density) { 56.dp.toPx() }
 
+        val popAnim = remember(drop.id) { Animatable(0f) }
         val flightAnim = remember(drop.id) { Animatable(0f) }
         val splashAnim = remember(drop.id) { Animatable(0f) }
         var bridgeStrength by remember(drop.id) { mutableFloatStateOf(0f) }
@@ -270,21 +279,35 @@ internal fun MiniPlayerLiquidDropOverlay(
             controller.impactXFraction = frac
             controller.crownHeightPx = 0f
             controller.miniBounce = 0f
+            controller.miniWobbleTilt = 0f
             controller.impactRipple = 0f
             bridgeStrength = 0f
 
-            val flightMs = if (drop.kind == LiquidDropKind.PLAY) 390 else 450
+            // Stage 1 — Snappy elastic pop-out right at the song row so eyes lock onto the 3D droplet
+            popAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 200,
+                    easing = CubicBezierEasing(0.22f, 1.35f, 0.36f, 1.0f),
+                ),
+            )
+
+            // Stage 2 — Graceful gravity arc down into the MiniPlayer pill
+            val flightMs = if (drop.kind == LiquidDropKind.PLAY) 700 else 780
             flightAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = flightMs, easing = FastOutSlowInEasing),
+                animationSpec = tween(
+                    durationMillis = flightMs,
+                    easing = CubicBezierEasing(0.26f, 0.0f, 0.78f, 0.96f),
+                ),
             ) {
                 val ft = value
-                if (ft >= 0.70f) {
-                    val ct = ((ft - 0.70f) / 0.30f).coerceIn(0f, 1f)
+                if (ft >= 0.56f) {
+                    val ct = ((ft - 0.56f) / 0.44f).coerceIn(0f, 1f)
                     controller.crownHeightPx = maxCrownPx * sin(ct * PI.toFloat())
                 }
-                if (ft >= 0.80f) {
-                    val bt = ((ft - 0.80f) / 0.20f).coerceIn(0f, 1f)
+                if (ft >= 0.68f) {
+                    val bt = ((ft - 0.68f) / 0.32f).coerceIn(0f, 1f)
                     bridgeStrength = sin(bt * PI.toFloat())
                 }
             }
@@ -295,31 +318,45 @@ internal fun MiniPlayerLiquidDropOverlay(
                 if (drop.kind == LiquidDropKind.QUEUE) HapticFeedbackType.Confirm else HapticFeedbackType.TextHandleMove,
             )
 
+            // Stage 3 — Impact elastic jelly wobble, ripple shockwave & splash beads
+            val tiltSide = when {
+                frac < 0.42f -> -1f
+                frac > 0.58f -> 1f
+                else -> -0.55f
+            }
             val bounceJob = launch {
                 val anim = Animatable(0f)
-                anim.animateTo(1f, tween(durationMillis = 320, easing = LinearEasing)) {
+                anim.animateTo(1f, tween(durationMillis = 680, easing = LinearEasing)) {
                     val bt = value
-                    controller.miniBounce = sin(bt * 2.5f * PI.toFloat()) * exp(-4.2f * bt)
-                    controller.crownHeightPx = (maxCrownPx * 0.42f) * sin(bt * 3.0f * PI.toFloat()) * exp(-4.6f * bt)
-                    controller.impactRipple = (bt * 1.15f).coerceIn(0f, 1f)
+                    controller.miniBounce = sin(bt * 4.0f * PI.toFloat()) * exp(-2.6f * bt)
+                    controller.miniWobbleTilt = tiltSide * 2.6f * sin(bt * 3.0f * PI.toFloat()) * exp(-2.8f * bt)
+                    controller.crownHeightPx = (maxCrownPx * 0.55f) * sin(bt * 4.0f * PI.toFloat()) * exp(-3.2f * bt)
+                    controller.impactRipple = (bt * 1.45f).coerceIn(0f, 1f)
                 }
                 controller.miniBounce = 0f
+                controller.miniWobbleTilt = 0f
                 controller.crownHeightPx = 0f
                 controller.impactRipple = 0f
             }
 
             val splashJob = launch {
-                splashAnim.animateTo(1f, tween(durationMillis = 230, easing = FastOutSlowInEasing))
+                splashAnim.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = 380,
+                        easing = CubicBezierEasing(0.18f, 0.85f, 0.32f, 1.0f),
+                    ),
+                )
             }
 
             if (drop.kind == LiquidDropKind.QUEUE) {
                 val bannerAnim = Animatable(controller.queueBannerProgress)
-                bannerAnim.animateTo(1f, tween(durationMillis = 190, easing = FastOutSlowInEasing)) {
+                bannerAnim.animateTo(1f, tween(durationMillis = 220, easing = FastOutSlowInEasing)) {
                     controller.queueBannerProgress = value
                 }
-                delay(1150L)
+                delay(1350L)
                 if (controller.activeDrop?.id == drop.id) {
-                    bannerAnim.animateTo(0f, tween(durationMillis = 240, easing = FastOutSlowInEasing)) {
+                    bannerAnim.animateTo(0f, tween(durationMillis = 260, easing = FastOutSlowInEasing)) {
                         controller.queueBannerProgress = value
                     }
                 }
@@ -330,28 +367,44 @@ internal fun MiniPlayerLiquidDropOverlay(
             controller.clearIfMatches(drop.id)
         }
 
+        val pt = popAnim.value
         val ft = flightAnim.value
-        val sample = sampleParabolaDrop(ft, start, target, arcBulgeX, arcLiftPx)
+        val sample = if (ft <= 0.001f) {
+            ParabolaSample(
+                x = start.x,
+                y = lerp(start.y, flightStart.y, pt.coerceIn(0f, 1.15f)),
+                angleRad = 0f,
+                stretch = 1f,
+            )
+        } else {
+            sampleParabolaDrop(ft, flightStart, target, arcBulgeX, arcLiftPx)
+        }
         val dropRadiusPx = when {
-            ft < 0.20f -> lerp(dropRestRadiusPx * 0.62f, dropRestRadiusPx, (ft / 0.20f).coerceIn(0f, 1f))
-            ft > 0.80f -> lerp(dropRestRadiusPx, dropRestRadiusPx * 0.48f, ((ft - 0.80f) / 0.20f).coerceIn(0f, 1f))
+            ft <= 0.001f -> lerp(dropRestRadiusPx * 0.64f, dropRestRadiusPx, pt)
+            ft > 0.84f -> lerp(dropRestRadiusPx, dropRestRadiusPx * 0.62f, ((ft - 0.84f) / 0.16f).coerceIn(0f, 1f))
             else -> dropRestRadiusPx
         }
-        val dropAlpha = if (isImpactTriggered) 0f else if (ft > 0.88f) (1f - (ft - 0.88f) / 0.12f).coerceIn(0f, 1f) else 1f
+        val dropAlpha = if (isImpactTriggered) {
+            0f
+        } else if (ft > 0.91f) {
+            (1f - (ft - 0.91f) / 0.09f).coerceIn(0f, 1f)
+        } else {
+            (pt * 2.5f).coerceIn(0f, 1f)
+        }
         val dropDpSize = with(density) { (dropRadiusPx * 2f).toDp() }
 
         // Background Canvas: trailing crystal water beads, close-contact concave metaball bridge & impact splash beads
         Canvas(modifier = Modifier.fillMaxSize()) {
             // 1) 3 trailing shimmering water micro-beads along the arc
-            if (!isImpactTriggered && ft in 0.06f..0.90f) {
+            if (!isImpactTriggered && ft in 0.05f..0.92f) {
                 val trailLags = floatArrayOf(0.048f, 0.098f, 0.148f)
-                val trailRadiiDp = floatArrayOf(5.8f, 4.0f, 2.7f)
-                val trailOffX = floatArrayOf(-4f, 5f, -2f)
+                val trailRadiiDp = floatArrayOf(7.2f, 5.0f, 3.4f)
+                val trailOffX = floatArrayOf(-5f, 6f, -3f)
                 for (i in trailLags.indices) {
                     val bt = ft - trailLags[i]
-                    if (bt in 0.04f..0.88f) {
-                        val pos = sampleParabolaDrop(bt, start, target, arcBulgeX, arcLiftPx)
-                        val fade = sin(((bt - 0.04f) / 0.84f).coerceIn(0f, 1f) * PI.toFloat())
+                    if (bt in 0.04f..0.90f) {
+                        val pos = sampleParabolaDrop(bt, flightStart, target, arcBulgeX, arcLiftPx)
+                        val fade = sin(((bt - 0.04f) / 0.86f).coerceIn(0f, 1f) * PI.toFloat())
                         drawMicroWaterBead(
                             center = Offset(pos.x + trailOffX[i].dp.toPx(), pos.y),
                             radiusPx = trailRadiiDp[i].dp.toPx(),
@@ -418,21 +471,29 @@ internal fun MiniPlayerLiquidDropOverlay(
             if (isImpactTriggered && splashAnim.value in 0.01f..0.99f) {
                 val st = splashAnim.value
                 val fade = (1f - st) * (1f - st)
-                val arcH = 26.dp.toPx() * sin(st * PI.toFloat())
-                val spreadL = lerp(12.dp.toPx(), 42.dp.toPx(), st)
-                val spreadR = lerp(14.dp.toPx(), 46.dp.toPx(), st)
+                val arcH = 36.dp.toPx() * sin(st * PI.toFloat())
+                val spreadL = lerp(14.dp.toPx(), 52.dp.toPx(), st)
+                val spreadR = lerp(16.dp.toPx(), 56.dp.toPx(), st)
                 drawMicroWaterBead(
                     center = Offset(target.x - spreadL, target.y - arcH),
-                    radiusPx = lerp(4.6.dp.toPx(), 1.8.dp.toPx(), st),
+                    radiusPx = lerp(6.0.dp.toPx(), 2.2.dp.toPx(), st),
                     alpha = fade,
                     accentTint = accent,
                     isGlass = isGlass,
                     isComic = isComic,
                 )
                 drawMicroWaterBead(
-                    center = Offset(target.x + spreadR, target.y - arcH * 0.82f),
-                    radiusPx = lerp(4.0.dp.toPx(), 1.5.dp.toPx(), st),
+                    center = Offset(target.x + spreadR, target.y - arcH * 0.84f),
+                    radiusPx = lerp(5.2.dp.toPx(), 1.8.dp.toPx(), st),
                     alpha = fade,
+                    accentTint = accent,
+                    isGlass = isGlass,
+                    isComic = isComic,
+                )
+                drawMicroWaterBead(
+                    center = Offset(target.x - lerp(4.dp.toPx(), 18.dp.toPx(), st), target.y - arcH * 1.18f),
+                    radiusPx = lerp(3.6.dp.toPx(), 1.2.dp.toPx(), st),
+                    alpha = fade * 0.9f,
                     accentTint = accent,
                     isGlass = isGlass,
                     isComic = isComic,
@@ -491,6 +552,7 @@ internal fun MiniPlayerLiquidDropOverlay(
                         artist = drop.artist,
                         embeddedUrl = drop.artworkUrl,
                         fallbackIcon = Icons.Filled.MusicNote,
+                        crossfadeMs = 0,
                         modifier = Modifier.fillMaxSize(),
                     )
                     // 3D Water refraction optics: internal lower caustic, upper specular dome & chromatic rim

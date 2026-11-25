@@ -53,6 +53,7 @@ fun ArtworkImage(
     decodeSizePx: Int? = 384,
     alignment: Alignment = Alignment.Center,
     transformations: List<Transformation> = emptyList(),
+    crossfadeMs: Int = 120,
     artworkViewModel: ArtworkViewModel = LocalArtworkViewModel.current ?: hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -105,7 +106,7 @@ fun ArtworkImage(
     var highResCacheHit by remember(displayUrl, mobileDataUrl, isCellular, decodeSizePx, transformations) {
         mutableStateOf<Boolean?>(null)
     }
-    val useMobileVariant = isCellular && !localCover &&
+    val useMobileVariant = crossfadeMs > 0 && isCellular && !localCover &&
         !displayUrl.isNullOrBlank() && !mobileDataUrl.isNullOrBlank() && mobileDataUrl != displayUrl
     LaunchedEffect(displayUrl, mobileDataUrl, isCellular, localCover, context) {
         val cachedUrl = displayUrl
@@ -129,13 +130,13 @@ fun ArtworkImage(
     val retainedPainter = lastSuccessfulPainter
     Box(modifier = modifier, contentAlignment = alignment) {
         if (!requestUrl.isNullOrBlank()) {
-            val model = remember(requestUrl, decodeSizePx, transformations, context) {
+            val model = remember(requestUrl, decodeSizePx, transformations, crossfadeMs, context) {
                 val builder = ImageRequest.Builder(context)
                     .data(requestUrl)
                     .diskCacheKey(requestUrl)
                     .precision(coil.size.Precision.INEXACT)
                     .allowHardware(transformations.isEmpty())
-                    .crossfade(120)
+                    .apply { if (crossfadeMs > 0) crossfade(crossfadeMs) else crossfade(false) }
                 if (decodeSizePx != null) builder.size(decodeSizePx)
                 if (transformations.isNotEmpty()) builder.transformations(transformations)
                 builder.build()

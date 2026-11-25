@@ -337,6 +337,7 @@ import com.lastwave.app.ui.theme.rememberLayerBackdrop
 import com.lastwave.app.ui.theme.trackBackdropBounds
 import android.graphics.Bitmap
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
@@ -348,7 +349,9 @@ import java.nio.IntBuffer
 import kotlin.time.Duration.Companion.seconds
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.roundToInt
 
 
@@ -620,9 +623,19 @@ internal fun MiniPlayer(
     val dragScope = rememberCoroutineScope()
     val dragX = remember(track.videoId, track.title) { Animatable(0f) }
     val dragY = remember(track.videoId, track.title) { Animatable(0f) }
+    val swipeWobble = remember { Animatable(1f) }
+    var swipeTiltDir by remember { mutableFloatStateOf(0f) }
     fun settleDrag() {
+        val releaseDragX = dragX.value
         dragScope.launch { dragX.animateTo(0f, ExpressiveMotion.spatialDefault()) }
         dragScope.launch { dragY.animateTo(0f, ExpressiveMotion.spatialDefault()) }
+        if (abs(releaseDragX) > 12f) {
+            swipeTiltDir = if (releaseDragX < 0f) -2.2f else 2.2f
+            dragScope.launch {
+                swipeWobble.snapTo(0f)
+                swipeWobble.animateTo(1f, tween(durationMillis = 560, easing = LinearEasing))
+            }
+        }
     }
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
     // An upward drag hands the gesture to [pull] (the sheet follows the finger). Positions are
@@ -653,12 +666,35 @@ internal fun MiniPlayer(
                 },
             )
             .graphicsLayer {
+                val sw = swipeWobble.value
+                val swipeBounce = if (sw in 0.001f..0.999f) sin(sw * 4.0f * PI.toFloat()) * exp(-2.8f * sw) * 0.72f else 0f
+                val swipeTilt = if (sw in 0.001f..0.999f) swipeTiltDir * sin(sw * 3.0f * PI.toFloat()) * exp(-3.0f * sw) else 0f
+                val bounce = (dropController?.miniBounce ?: 0f) + swipeBounce
+                val wobbleTilt = (dropController?.miniWobbleTilt ?: 0f) + swipeTilt
+                val impactX = if (abs(dropController?.miniBounce ?: 0f) > 0.001f) {
+                    dropController?.impactXFraction ?: 0.5f
+                } else if (swipeTiltDir < 0f) {
+                    0.25f
+                } else {
+                    0.75f
+                }
                 translationX = dragX.value
-                translationY = dragY.value.coerceAtLeast(0f)
+                translationY = dragY.value.coerceAtLeast(0f) + (8.dp.toPx() * bounce)
                 alpha = (1f - (abs(dragX.value) + dragY.value.coerceAtLeast(0f)) / (threshold * 4f)).coerceIn(0.55f, 1f)
-                val bounce = dropController?.miniBounce ?: 0f
-                scaleX = 1f + 0.028f * bounce
-                scaleY = 1f - 0.038f * bounce
+                if (abs(bounce) > 0.001f || abs(wobbleTilt) > 0.001f) {
+                    transformOrigin = TransformOrigin(
+                        pivotFractionX = impactX.coerceIn(0.15f, 0.85f),
+                        pivotFractionY = 0.65f,
+                    )
+                    scaleX = 1f + 0.068f * bounce
+                    scaleY = 1f - 0.115f * bounce
+                    rotationZ = wobbleTilt
+                } else {
+                    transformOrigin = TransformOrigin.Center
+                    scaleX = 1f
+                    scaleY = 1f
+                    rotationZ = 0f
+                }
             }
             .onGloballyPositioned { pullGesture.coords = it }
             .pointerInput(track.videoId, track.title, pull) {
@@ -707,7 +743,7 @@ internal fun MiniPlayer(
                     if (crownH > 0.5f && size.width > 40f) {
                         val impactX = ((dropController?.impactXFraction ?: 0.5f) * size.width)
                             .coerceIn(36.dp.toPx(), size.width - 36.dp.toPx())
-                        val spread = maxOf(28.dp.toPx(), 42.dp.toPx() - crownH * 0.35f)
+                        val spread = maxOf(34.dp.toPx(), 48.dp.toPx() - crownH * 0.30f)
                         val left = (impactX - spread).coerceAtLeast(24.dp.toPx())
                         val right = (impactX + spread).coerceAtMost(size.width - 24.dp.toPx())
                         val mid = (left + right) * 0.5f
@@ -770,6 +806,7 @@ internal fun MiniPlayer(
                         Modifier.liquidGlass(backdrop, luminance, shape, tintColor = resolvedMiniTint)
                     } else Modifier
                 )
+                .waterDropJiggle(amplitude = 0.036f, tiltDegrees = 1.8f, dipDp = 3.dp)
                 .clickable(interactionSource = barInteraction, indication = comicIndicationOrNull(), onClick = onExpand),
             ) {
                 Box(Modifier.fillMaxWidth()) {
@@ -896,7 +933,7 @@ internal fun MiniPlayer(
                 shadowElevation = if (LocalComicTheme.current) 0.dp else 6.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .waterDropJiggle(amplitude = 0.022f)
+                    .waterDropJiggle(amplitude = 0.036f, tiltDegrees = 1.8f, dipDp = 3.dp)
                     .comicPanel(miniCardShape)
                     .clickable(interactionSource = barInteraction, indication = comicIndicationOrNull(), onClick = onExpand),
             ) {
@@ -1057,10 +1094,10 @@ private fun MiniPlayerImpactAndQueueOverlay(
             val r = androidx.compose.ui.util.lerp(10.dp.toPx(), maxR, ripple)
             val fade = (1f - ripple) * (1f - ripple)
             drawCircle(
-                color = (if (isGlass) Color(0xFF9CEEFF) else accent).copy(alpha = 0.42f * fade),
+                color = (if (isGlass) Color(0xFF9CEEFF) else accent).copy(alpha = 0.58f * fade),
                 radius = r,
                 center = Offset(impactX, 4.dp.toPx()),
-                style = Stroke(width = androidx.compose.ui.util.lerp(2.6.dp.toPx(), 0.8.dp.toPx(), ripple)),
+                style = Stroke(width = androidx.compose.ui.util.lerp(3.4.dp.toPx(), 1.0.dp.toPx(), ripple)),
             )
         }
     }

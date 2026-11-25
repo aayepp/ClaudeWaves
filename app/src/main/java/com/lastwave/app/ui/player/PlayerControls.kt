@@ -326,6 +326,7 @@ import com.lastwave.app.ui.theme.LocalLiquidGlassOverlayBackdrop
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.Backdrop
 import com.lastwave.app.ui.theme.rememberLayerBackdrop
+import com.lastwave.app.ui.theme.waterDropJiggle
 import android.graphics.Bitmap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -406,6 +407,7 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
             shadowElevation = 0.dp,
             modifier = Modifier
                 .size(sideSize)
+                .waterDropJiggle(amplitude = 0.075f, tiltDegrees = 2.6f, dipDp = 3.dp)
                 .graphicsLayer {
                     scaleX = prevScale
                     scaleY = prevScale
@@ -444,6 +446,7 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
             modifier = Modifier
                 .width(pillWidth)
                 .height(if (isTranslucent) 56.dp else 60.dp)
+                .waterDropJiggle(amplitude = 0.068f, tiltDegrees = 1.8f, dipDp = 3.5.dp)
                 .graphicsLayer {
                     scaleX = playScale
                     scaleY = playScale
@@ -483,6 +486,7 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
             shadowElevation = 0.dp,
             modifier = Modifier
                 .size(sideSize)
+                .waterDropJiggle(amplitude = 0.075f, tiltDegrees = 2.6f, dipDp = 3.dp)
                 .graphicsLayer {
                     scaleX = nextScale
                     scaleY = nextScale
@@ -529,6 +533,7 @@ glassModifier = Modifier.liquidGlassChrome(CircleShape, LocalLiquidGlass.current
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         modifier = modifier
+            .waterDropJiggle(amplitude = 0.068f, tiltDegrees = 2.2f, dipDp = 2.5.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -672,7 +677,7 @@ internal fun DividedUtilityPill(
         contentColor = foreground,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        modifier = modifier,
+        modifier = modifier.waterDropJiggle(amplitude = 0.055f, tiltDegrees = 2.4f, dipDp = 2.5.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),

@@ -37,6 +37,7 @@ import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
 import com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported
 import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.ui.theme.liquidGlassContainerColor
+import com.lastwave.app.ui.theme.waterDropJiggle
 
 private val UnlikedColor get() = PlayerPalette.ink.copy(alpha = 0.85f)
 private val LikedBg get() = PlayerPalette.ink.copy(alpha = 0.92f)
@@ -103,6 +104,7 @@ internal fun PlayerLikeButton(
         modifier = modifier
             .likeSparkles(tapMotion, likedTint)
             .size(size)
+            .waterDropJiggle(amplitude = 0.082f, tiltDegrees = 2.8f, dipDp = 3.dp)
             .semantics {
                 selected = liked
                 contentDescription = if (liked) "Unlike song" else "Like song"

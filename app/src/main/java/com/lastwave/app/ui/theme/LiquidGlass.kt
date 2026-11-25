@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
@@ -544,10 +545,12 @@ class GlassInteraction(
     private val animationScope: CoroutineScope,
 ) {
     private val pressSpec = spring(dampingRatio = 0.72f, stiffness = 240f, visibilityThreshold = 0.001f)
-    private val jiggleDownSpec = spring(dampingRatio = 0.42f, stiffness = 210f, visibilityThreshold = 0.001f)
-    private val jiggleUpSpec = spring(dampingRatio = 0.40f, stiffness = 190f, visibilityThreshold = 0.001f)
+    private val jiggleDownSpec = spring(dampingRatio = 0.34f, stiffness = 260f, visibilityThreshold = 0.001f)
+    private val jiggleUpSpec = spring(dampingRatio = 0.32f, stiffness = 230f, visibilityThreshold = 0.001f)
+    private val tiltSpec = spring(dampingRatio = 0.36f, stiffness = 240f, visibilityThreshold = 0.001f)
     private val pressAnimation = Animatable(0f, 0.001f)
     private val jiggleAnimation = Animatable(0f, 0.001f)
+    private val tiltAnimation = Animatable(0f, 0.001f)
     private val rippleAnimation = Animatable(1f, 0.001f)
 
     /** 0f at rest, animating to 1f while pressed. Read in draw/effect/layer blocks. */
@@ -556,6 +559,9 @@ class GlassInteraction(
     /** Smooth velocity-driven water-droplet wobble (starts from 0 with zero frame-0 snap). */
     val jiggleProgress: Float get() = jiggleAnimation.value
 
+    /** Directional tilt harmonic anchored to the touch point (-1f..1f). */
+    val tiltProgress: Float get() = tiltAnimation.value
+
     /** Expanding water ripple ring (0f at touch down → 1f faded out). */
     val rippleProgress: Float get() = rippleAnimation.value
 
@@ -563,10 +569,20 @@ class GlassInteraction(
     var touchPosition by mutableStateOf(Offset.Zero)
         private set
 
+    /** Normalized horizontal touch fraction (0f..1f) for localized tilt pivot. */
+    var touchFractionX by mutableFloatStateOf(0.5f)
+        private set
+
     private fun triggerJiggle(velocity: Float, spec: androidx.compose.animation.core.SpringSpec<Float>) {
         animationScope.launch {
             // Velocity-driven from current position (no snapTo) so motion begins seamlessly from rest.
             jiggleAnimation.animateTo(0f, spec, initialVelocity = velocity)
+        }
+    }
+
+    private fun triggerTilt(velocity: Float) {
+        animationScope.launch {
+            tiltAnimation.animateTo(0f, tiltSpec, initialVelocity = velocity)
         }
     }
 
@@ -582,20 +598,30 @@ class GlassInteraction(
             inspectDragGestures(
                 onDragStart = { down ->
                     touchPosition = down.position
+                    val w = size.width.toFloat().coerceAtLeast(1f)
+                    touchFractionX = (down.position.x / w).coerceIn(0f, 1f)
+                    val side = ((touchFractionX - 0.5f) * 2f).let { if (abs(it) < 0.16f) 0.45f else it.coerceIn(-1f, 1f) }
                     animationScope.launch { pressAnimation.animateTo(1f, pressSpec) }
-                    triggerJiggle(6.5f, jiggleDownSpec)
+                    triggerJiggle(7.5f, jiggleDownSpec)
+                    triggerTilt(side * 6.0f)
                     triggerRipple()
                 },
                 onDragEnd = {
+                    val side = ((touchFractionX - 0.5f) * 2f).let { if (abs(it) < 0.16f) 0.45f else it.coerceIn(-1f, 1f) }
                     animationScope.launch { pressAnimation.animateTo(0f, pressSpec) }
-                    triggerJiggle(-5.5f, jiggleUpSpec)
+                    triggerJiggle(-6.8f, jiggleUpSpec)
+                    triggerTilt(-side * 5.2f)
                 },
                 onDragCancel = {
+                    val side = ((touchFractionX - 0.5f) * 2f).let { if (abs(it) < 0.16f) 0.45f else it.coerceIn(-1f, 1f) }
                     animationScope.launch { pressAnimation.animateTo(0f, pressSpec) }
-                    triggerJiggle(-3.8f, jiggleUpSpec)
+                    triggerJiggle(-4.2f, jiggleUpSpec)
+                    triggerTilt(-side * 3.0f)
                 },
             ) { change, _ ->
                 touchPosition = change.position
+                val w = size.width.toFloat().coerceAtLeast(1f)
+                touchFractionX = (change.position.x / w).coerceIn(0f, 1f)
             }
         }
 }
@@ -607,12 +633,16 @@ fun rememberGlassInteraction(): GlassInteraction {
 }
 
 /**
- * Water-drop jelly jiggle modifier (volume-preserving X/Y squash & stretch oscillation on
- * press and release). Uses observe-only pointer inspection so clicks & drags stay intact,
- * and works across every theme (Liquid Glass, Light/Dark/AMOLED, and Comic Pop).
+ * Water-drop jelly jiggle modifier (volume-preserving X/Y squash & stretch + localized touch-pivot
+ * tilt oscillation on press and release). Uses observe-only pointer inspection so clicks & drags
+ * stay intact, and works across every theme (Liquid Glass, Light/Dark/AMOLED, and Comic Pop).
  */
 @Composable
-fun Modifier.waterDropJiggle(amplitude: Float = 0.042f): Modifier {
+fun Modifier.waterDropJiggle(
+    amplitude: Float = 0.052f,
+    tiltDegrees: Float = 2.0f,
+    dipDp: Dp = 3.5.dp,
+): Modifier {
     val interaction = rememberGlassInteraction()
     val isDark = LocalIsDarkTheme.current
     val isComic = LocalComicTheme.current
@@ -621,8 +651,23 @@ fun Modifier.waterDropJiggle(amplitude: Float = 0.042f): Modifier {
         .graphicsLayer {
             val wobble = interaction.jiggleProgress
             val press = interaction.pressProgress
-            scaleX = 1f + press * (amplitude * 0.45f) + wobble * amplitude
-            scaleY = 1f + press * (amplitude * 0.35f) - wobble * (amplitude * 0.88f)
+            val tilt = interaction.tiltProgress
+            if (abs(wobble) > 0.001f || press > 0.001f || abs(tilt) > 0.001f) {
+                transformOrigin = TransformOrigin(
+                    pivotFractionX = interaction.touchFractionX.coerceIn(0.18f, 0.82f),
+                    pivotFractionY = 0.55f,
+                )
+                scaleX = 1f - press * (amplitude * 0.45f) + wobble * amplitude
+                scaleY = 1f - press * (amplitude * 0.65f) - wobble * (amplitude * 1.15f)
+                translationY = dipDp.toPx() * (press * 0.65f + wobble * 0.55f)
+                rotationZ = tilt * tiltDegrees
+            } else {
+                transformOrigin = TransformOrigin.Center
+                scaleX = 1f
+                scaleY = 1f
+                translationY = 0f
+                rotationZ = 0f
+            }
         }
         .drawWithContent {
             drawContent()

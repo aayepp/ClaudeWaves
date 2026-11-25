@@ -226,7 +226,7 @@ private fun LiquidNavigationBarContent(
                 .fillMaxWidth().height(railHeight)
                 .trackBackdropBounds(dockBounds)
                 .testTag("liquid_navigation_bar")
-                .waterDropJiggle(amplitude = 0.022f)
+                .waterDropJiggle(amplitude = 0.045f, tiltDegrees = 2.1f, dipDp = 3.5.dp)
                 .railShadow(),
         ) {
             val tabWidth = (maxWidth - 8.dp) / count
@@ -398,7 +398,7 @@ private fun LiquidNavigationBarContent(
             Modifier.size(railHeight)
                 .trackBackdropBounds(searchBounds)
                 .testTag("liquid_navigation_search")
-                .waterDropJiggle(amplitude = 0.038f)
+                .waterDropJiggle(amplitude = 0.072f, tiltDegrees = 2.2f, dipDp = 3.dp)
                 .shadow(8.dp, CircleShape, clip = false,
                     ambientColor = Color.Black.copy(alpha = 0.10f),
                     spotColor = Color.Black.copy(alpha = 0.14f))

@@ -772,7 +772,7 @@ private fun FloatingNavBar(
                 ),
                 tonalElevation = if (liquidGlass) 0.dp else 6.dp,
                 shadowElevation = if (liquidGlass || comic) 0.dp else 12.dp,
-                modifier = Modifier.weight(1f).widthIn(max = 420.dp).trackBackdropBounds(dockBackdropBounds).waterDropJiggle(amplitude = 0.022f).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
+                modifier = Modifier.weight(1f).widthIn(max = 420.dp).trackBackdropBounds(dockBackdropBounds).waterDropJiggle(amplitude = 0.045f, tiltDegrees = 2.1f, dipDp = 3.5.dp).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
                     .then(if (liquidGlass) Modifier.glassRim(DockShape) else Modifier),
             ) {
                 val latestSelectedIndex by androidx.compose.runtime.rememberUpdatedState(selectedIndex)
@@ -843,6 +843,7 @@ private fun FloatingNavBar(
                 interactionSource = searchInteraction,
                 modifier = Modifier.size(60.dp)
                     .trackBackdropBounds(searchBackdropBounds)
+                    .waterDropJiggle(amplitude = 0.072f, tiltDegrees = 2.2f, dipDp = 3.dp)
                     .comicPanel(CircleShape, translucent = liquidGlass)
                     .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = searchInteraction)
                     .then(if (liquidGlass) Modifier.glassRim() else Modifier),
