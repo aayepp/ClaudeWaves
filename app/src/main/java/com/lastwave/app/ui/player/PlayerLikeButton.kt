@@ -72,15 +72,15 @@ internal fun PlayerLikeButton(
     val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val background by animateColorAsState(
         targetValue = when {
-            liked -> LikedBg
             isGlassActive && !isComic -> Color.Transparent
+            liked -> LikedBg
             else -> UnlikedBg
         },
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "heartBackground",
     )
 
-    val likedTint = LikedHeartTint
+    val likedTint = if (isGlassActive && !isComic) LikedHeartRedOnDark else LikedHeartTint
     val foreground by animateColorAsState(
         targetValue = if (liked) likedTint else UnlikedColor,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),

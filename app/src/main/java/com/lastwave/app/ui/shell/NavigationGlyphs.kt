@@ -27,8 +27,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.lastwave.app.ui.player.kick
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import com.lastwave.app.ui.theme.inkHalo
@@ -49,11 +47,20 @@ private fun TabIcon(item: LiquidNavigationItem, play: () -> Float, tint: Color, 
     else Icon(item.icon, contentDescription = null, tint = tint, modifier = modifier)
 }
 
-/** The glyph over a blurred copy of itself in [halo], so it reads on any backdrop. */
+/** The glyph over a crisp contrast halo copy of itself in [halo], zero GPU blur passes per hop frame. */
 @Composable
 private fun HaloTabIcon(item: LiquidNavigationItem, play: () -> Float, tint: Color, halo: Color, modifier: Modifier) {
     Box(modifier) {
-        TabIcon(item, play, halo, Modifier.matchParentSize().blur(3.dp, BlurredEdgeTreatment.Unbounded))
+        TabIcon(
+            item,
+            play,
+            halo.copy(alpha = halo.alpha * 0.72f),
+            Modifier.matchParentSize().graphicsLayer {
+                scaleX = 1.08f
+                scaleY = 1.08f
+                translationY = 0.75.dp.toPx()
+            },
+        )
         TabIcon(item, play, tint, Modifier.matchParentSize())
     }
 }

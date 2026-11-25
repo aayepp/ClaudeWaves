@@ -88,6 +88,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -285,6 +286,7 @@ import com.lastwave.app.playback.MusicPlayer
 import com.lastwave.app.playback.MusicPlayerState
 import com.lastwave.app.playback.PlaybackChromeState
 import com.lastwave.app.playback.formatSampleRateKHz
+import com.lastwave.app.playback.resolveAudioQualityTier
 import com.lastwave.app.playback.withoutProgress
 import com.lastwave.app.playback.isSpatialAudioCodec
 import com.lastwave.app.playback.qualityBadgeLabel
@@ -323,6 +325,7 @@ import com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported
 import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
 import com.lastwave.app.ui.theme.LocalLiquidGlassTint
 import com.lastwave.app.ui.theme.LocalLiquidGlassOverlayBackdrop
+import com.lastwave.app.ui.theme.LocalLiveVideoOverlayAlpha
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.Backdrop
 import com.lastwave.app.ui.theme.rememberLayerBackdrop
@@ -343,6 +346,11 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+
+private class QueueDropBoundsHolder {
+    var hostOrigin: Offset = Offset.Zero
+    var miniCardBounds: Rect? = null
+}
 
 @Composable
 internal fun FullPlayer(
@@ -662,6 +670,18 @@ internal fun FullPlayer(
     // Single backdrop, sibling source below â€” never nest glass inside its own capture.
     val playerBackdrop = rememberLayerBackdrop()
     val fullGlass = LocalLiquidGlass.current && isLiquidGlassBackdropSupported()
+    val latestShowFullBleed by rememberUpdatedState(showFullBleed)
+    val latestHasActiveCanvas by rememberUpdatedState(activeCanvas != null)
+    val latestIsNowPlaying by rememberUpdatedState(currentTab == FullPlayerTab.NOW_PLAYING)
+    val liveVideoOverlayAlpha = remember {
+        {
+            if (latestShowFullBleed && latestHasActiveCanvas && latestIsNowPlaying) {
+                canvasCover.coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+        }
+    }
 
     if (videoFullscreenActive) {
         BackHandler { isVideoFullscreen = false }
@@ -681,6 +701,7 @@ internal fun FullPlayer(
         LocalLiquidGlassBackdrop provides if (fullGlass) playerBackdrop else null,
         LocalLiquidGlassOverlayBackdrop provides if (fullGlass) playerBackdrop else null,
         LocalLiquidGlassTint provides Color.Unspecified,
+        LocalLiveVideoOverlayAlpha provides liveVideoOverlayAlpha,
     ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -750,7 +771,7 @@ internal fun FullPlayer(
                     heroAlpha = fullBleedHeroAlpha,
                     queueWash = queueWash,
                     canvasCover = canvasCover,
-                    keepStaticHeroForGlass = fullGlass,
+                    keepStaticHeroForGlass = fullGlass && (activeCanvas == null || canvasCover < 0.98f),
                     ambientColor = ambientColor,
                     ambientCompanion = ambientCompanion,
                     ambientDeep = ambientDeep,
@@ -949,23 +970,107 @@ internal fun FullPlayer(
                         }
 
                         FullPlayerTab.QUEUE -> {
+                            val queueDropController = remember { MiniPlayerDropController() }
+                            val queueDropBounds = remember { QueueDropBoundsHolder() }
+                            val queueQualityTier = remember(
+                                state.audioCodec,
+                                state.isLossless,
+                                state.samplingRateKHz,
+                                state.bitDepth,
+                            ) {
+                                resolveAudioQualityTier(
+                                    state.audioCodec,
+                                    state.isLossless,
+                                    state.samplingRateKHz,
+                                    state.bitDepth,
+                                )
+                            }
+                            val queueChromeState = remember(
+                                state.current,
+                                state.sourceLabel,
+                                state.isPlaying,
+                                state.isBuffering,
+                                state.queue.size,
+                                state.currentIndex,
+                                state.shuffleEnabled,
+                                state.deckBlendTelemetry,
+                                state.isCrossfading,
+                                queueQualityTier,
+                            ) {
+                                PlaybackChromeState(
+                                    current = state.current,
+                                    sourceLabel = state.sourceLabel,
+                                    isPlaying = state.isPlaying,
+                                    isBuffering = state.isBuffering,
+                                    queueSize = state.queue.size,
+                                    currentIndex = state.currentIndex,
+                                    shuffleEnabled = state.shuffleEnabled,
+                                    deckBlendTelemetry = state.deckBlendTelemetry,
+                                    isCrossfading = state.isCrossfading,
+                                    qualityTier = queueQualityTier,
+                                )
+                            }
                             PredictiveBackScreen(
                                 enabled = currentTab == FullPlayerTab.QUEUE,
                                 backgroundColor = Color.Transparent,
                                 onBack = { onTabChange(FullPlayerTab.NOW_PLAYING) },
                             ) {
-                                QueuePanel(
-                                    state = state,
-                                    player = player,
-                                    bottomPadding = tabBottomInset,
-                                    ambientColor = ambientColor,
-                                    ambientCompanion = ambientCompanion,
-                                    ambientDeep = ambientDeep,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .adaptiveContentWidth(maxWidth = if (isTabletLandscape) 960.dp else 720.dp)
-                                        .padding(horizontal = 12.dp),
-                                )
+                                CompositionLocalProvider(LocalMiniPlayerDropController provides queueDropController) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .onGloballyPositioned { coords ->
+                                                if (coords.isAttached) {
+                                                    queueDropBounds.hostOrigin = coords.boundsInRoot().topLeft
+                                                }
+                                            },
+                                    ) {
+                                        QueuePanel(
+                                            state = state,
+                                            player = player,
+                                            bottomPadding = tabBottomInset + 96.dp,
+                                            ambientColor = ambientColor,
+                                            ambientCompanion = ambientCompanion,
+                                            ambientDeep = ambientDeep,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .adaptiveContentWidth(maxWidth = if (isTabletLandscape) 960.dp else 720.dp)
+                                                .padding(horizontal = 12.dp),
+                                        )
+                                        MiniPlayer(
+                                            state = queueChromeState,
+                                            progressState = progressState,
+                                            isLiked = isLiked,
+                                            onToggleLiked = onToggleLiked,
+                                            onExpand = { onTabChange(FullPlayerTab.NOW_PLAYING) },
+                                            onToggle = player::togglePlayPause,
+                                            onPrevious = player::previous,
+                                            onNext = player::next,
+                                            onClose = { onTabChange(FullPlayerTab.NOW_PLAYING) },
+                                            bottomPadding = 12.dp,
+                                            backdrop = if (fullGlass) playerBackdrop else null,
+                                            onCardBounds = { rootBounds ->
+                                                queueDropBounds.miniCardBounds = rootBounds
+                                            },
+                                            adaptiveInk = false,
+                                            defaultUseLightInk = PlayerPalette.shade.luminance() < 0.5f,
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .zIndex(10f),
+                                        )
+                                        MiniPlayerLiquidDropOverlay(
+                                            controller = queueDropController,
+                                            miniCardBounds = {
+                                                queueDropBounds.miniCardBounds?.translate(-queueDropBounds.hostOrigin)
+                                            },
+                                            hostOrigin = { queueDropBounds.hostOrigin },
+                                            expanded = false,
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .zIndex(25f),
+                                        )
+                                    }
+                                }
                             }
                         }
 

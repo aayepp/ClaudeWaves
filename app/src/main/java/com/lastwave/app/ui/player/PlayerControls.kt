@@ -392,6 +392,11 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
     ) {
         val pillWidth = (maxWidth - sideSize * 2 - gapSize * 2)
             .coerceIn(112.dp, if (isTranslucent) 180.dp else 188.dp)
+        val comic = LocalComicTheme.current
+        val isPillGlassActive = LocalLiquidGlass.current &&
+            isLiquidGlassBackdropSupported() &&
+            LocalLiquidGlassBackdrop.current != null
+        val pillShape = RoundedCornerShape(100)
         Row(
             horizontalArrangement = Arrangement.spacedBy(gapSize, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
@@ -401,7 +406,7 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
             onClick = hapticClick(action = player::previous),
             interactionSource = prevInteraction,
             shape = CircleShape,
-            color = liquidGlassContainerColor(if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.40f)),
+            color = if (!comic && isPillGlassActive) Color.Transparent else liquidGlassContainerColor(if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.40f)),
             contentColor = if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.94f) else MaterialTheme.colorScheme.onSurface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
@@ -417,18 +422,6 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
                 Icon(Icons.Filled.SkipPrevious, "Previous", Modifier.size(if (isTranslucent) 28.dp else 31.dp))
             }
         }
-        val pillShape = RoundedCornerShape(100)
-        val comic = LocalComicTheme.current
-        // Single source of truth for "glass is actually refracting": the
-        // container helper returns Transparent only when setting + device
-        // capability + backdrop all hold. The old contentColor checked only
-        // the *setting*, so setting-ON with an inactive effect (incapable
-        // device, missing backdrop) rendered a white icon on the solid-white
-        // fallback below â€” the "whole white" play button. Gating content on
-        // the same active flag closes that mismatch for every path.
-        val isPillGlassActive = LocalLiquidGlass.current &&
-            isLiquidGlassBackdropSupported() &&
-            LocalLiquidGlassBackdrop.current != null
         LiquidGlassSurface(
             glassModifier = Modifier.liquidGlassChrome(pillShape, LocalLiquidGlass.current, LiquidGlassPreset.FloatingControls, interactionSource = playInteraction),
             onClick = hapticClick(if (state.isPlaying) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn, player::togglePlayPause),
@@ -437,7 +430,11 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
             // Fallback matches the sibling prev/next buttons (14% white veil,
             // never solid white): on the full player's dark scrim the white
             // icon stays readable with or without refraction.
-            color = if (comic) ComicAccent else liquidGlassContainerColor(if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.14f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)),
+            color = when {
+                comic -> ComicAccent
+                isPillGlassActive -> Color.Transparent
+                else -> liquidGlassContainerColor(if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.14f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f))
+            },
             contentColor = if (comic) ComicInk else if (isPillGlassActive) {
                 if (isTranslucent) PlayerPalette.ink else MaterialTheme.colorScheme.primary
             } else if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.94f) else MaterialTheme.colorScheme.onPrimary,
@@ -480,7 +477,7 @@ internal fun MainControls(state: MusicPlayerState, player: MusicPlayer, isTransl
             onClick = hapticClick(action = player::next),
             interactionSource = nextInteraction,
             shape = CircleShape,
-            color = liquidGlassContainerColor(if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.40f)),
+            color = if (!comic && isPillGlassActive) Color.Transparent else liquidGlassContainerColor(if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.40f)),
             contentColor = if (isTranslucent) PlayerPalette.ink.copy(alpha = 0.94f) else MaterialTheme.colorScheme.onSurface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
@@ -512,17 +509,28 @@ internal fun PlayerModeButton(
     modifier: Modifier = Modifier,
     haptic: HapticFeedbackType = if (active) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn,
 ) {
+    val isComic = LocalComicTheme.current
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
         if (pressed) 0.92f else 1f, ExpressiveMotion.spatialSpring(), label = "modePress",
     )
     val container by animateColorAsState(
-        if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f)
-        else liquidGlassContainerColor(background), label = "modeContainer",
+        when {
+            !isComic && isGlassActive -> Color.Transparent
+            active -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f)
+            else -> liquidGlassContainerColor(background)
+        },
+        label = "modeContainer",
     )
     val content by animateColorAsState(
-        if (active) MaterialTheme.colorScheme.onPrimaryContainer else foreground, label = "modeContent",
+        when {
+            !isComic && isGlassActive -> if (active) MaterialTheme.colorScheme.primary else foreground
+            active -> MaterialTheme.colorScheme.onPrimaryContainer
+            else -> foreground
+        },
+        label = "modeContent",
     )
     LiquidGlassSurface(
 glassModifier = Modifier.liquidGlassChrome(CircleShape, LocalLiquidGlass.current, LiquidGlassPreset.PlayerControls, interactionSource = interaction),
@@ -653,7 +661,9 @@ internal fun DividedUtilityPill(
     onToggleVideo: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val container = liquidGlassContainerColor(background)
+    val isComic = LocalComicTheme.current
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
+    val container = if (!isComic && isGlassActive) Color.Transparent else liquidGlassContainerColor(background)
     val speakerInteraction = remember { MutableInteractionSource() }
     val videoInteraction = remember { MutableInteractionSource() }
     val speakerPressed by speakerInteraction.collectIsPressedAsState()
@@ -1055,13 +1065,15 @@ internal fun DeckWaveform(
 @Composable
 internal fun YouTubeLikeButton(liked: Boolean?, onClick: () -> Unit, size: androidx.compose.ui.unit.Dp) {
     if (liked == null) return
+    val isComic = LocalComicTheme.current
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     LiquidGlassSurface(
         glassModifier = Modifier.liquidGlassChrome(CircleShape, LocalLiquidGlass.current, LiquidGlassPreset.PlayerControls, interactionSource = interaction),
         onClick = onClick,
         interactionSource = interaction,
         shape = CircleShape,
-        color = liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f)),
+        color = if (!isComic && isGlassActive) Color.Transparent else liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f)),
         contentColor = PlayerPalette.ink.copy(alpha = if (liked) 1f else 0.85f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -1119,8 +1131,10 @@ private fun PlayerPanelButton(
     modifier: Modifier = Modifier,
 ) {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isComic = LocalComicTheme.current
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     // Comic Pop marks the queue door in cyan; other themes keep both buttons alike.
-    val comicAccent = accent && LocalComicTheme.current
+    val comicAccent = accent && isComic
     LiquidGlassSurface(
         glassModifier = Modifier.liquidGlassChrome(CircleShape, LocalLiquidGlass.current, LiquidGlassPreset.PlayerControls, interactionSource = source),
         onClick = hapticClick(action = onClick),
@@ -1128,6 +1142,7 @@ private fun PlayerPanelButton(
         shape = CircleShape,
         color = when {
             comicAccent -> ComicCyan
+            !isComic && isGlassActive -> Color.Transparent
             isTranslucent -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
             else -> liquidGlassContainerColor(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.40f))
         },

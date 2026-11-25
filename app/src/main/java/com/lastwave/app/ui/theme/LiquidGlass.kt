@@ -54,6 +54,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.Outline
@@ -61,9 +62,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
@@ -201,14 +204,29 @@ val LocalLiquidGlassContentBrightness = compositionLocalOf { 0f }
 val LocalLiquidGlassTint = compositionLocalOf { Color.Unspecified }
 
 /**
+ * Read strictly in draw/effect phases: 0f = normal static LayerBackdrop refraction;
+ * 1f = live hardware video (Animated Album Canvas TextureView) sits directly behind
+ * controls, so frozen static LayerBackdrop pixels are skipped for true transparency.
+ */
+val LocalLiveVideoOverlayAlpha = staticCompositionLocalOf<() -> Float> { { 0f } }
+
+/**
  * Plain nanosecond clock (after Auris' GlassMotion) that marks active Now Playing sheet
- * travel without snapshot-state invalidations, so glass can skip heavy lens passes while
- * the sheet is in flight and automatically resume within 500 ms of settling.
+ * and MainShell pager travel without snapshot-state invalidations, so glass can pause
+ * heavy lens & pixel-readback passes during motion and resume crisply right after settling.
  */
 object GlassMotion {
     private const val FREEZE_WINDOW_NS = 500_000_000L
+    private const val PAGER_SETTLE_WINDOW_NS = 220_000_000L
+
     @Volatile
     private var lastSheetStampNs: Long = Long.MIN_VALUE
+
+    @Volatile
+    private var pagerMoving: Boolean = false
+
+    @Volatile
+    private var lastPagerStampNs: Long = Long.MIN_VALUE
 
     fun stampSheet() {
         lastSheetStampNs = System.nanoTime()
@@ -223,6 +241,24 @@ object GlassMotion {
         if (stamp == Long.MIN_VALUE) return false
         return (System.nanoTime() - stamp) < FREEZE_WINDOW_NS
     }
+
+    fun stampPager() {
+        lastPagerStampNs = System.nanoTime()
+    }
+
+    fun setPagerMoving(moving: Boolean) {
+        pagerMoving = moving
+        lastPagerStampNs = System.nanoTime()
+    }
+
+    fun isPagerMoving(): Boolean {
+        if (pagerMoving) return true
+        val stamp = lastPagerStampNs
+        if (stamp == Long.MIN_VALUE) return false
+        return (System.nanoTime() - stamp) < PAGER_SETTLE_WINDOW_NS
+    }
+
+    fun isMotionActive(): Boolean = isSheetMoving() || isPagerMoving()
 }
 
 /** Typealiases for clean, unified Backdrop types (mirrors PlatformBackdrop). */
@@ -750,65 +786,92 @@ private fun DrawScope.drawGlassSurfaceOverlay(
     minScrim: Float,
     maxScrim: Float,
     tintColor: Color,
+    liveVideoAlpha: Float = 0f,
 ) {
     val intensity = LiquidGlassIntensity.value
     val press = interaction?.pressProgress ?: 0f
-    val darken = lerp(minScrim, maxScrim, ((luminanceAnimation - 0.3f) / 0.5f).coerceIn(0f, 1f))
-    drawRect((if (isDark) Color.Black else Color.White).copy(alpha = LiquidGlassIntensity.tint(darken)))
-    if (tintColor.isSpecified) {
-        val washAlpha = (if (isDark) 0.14f else 0.10f) * lerp(0.65f, 1.15f, intensity)
-        drawRect(tintColor.copy(alpha = washAlpha))
+    val videoAlpha = liveVideoAlpha.coerceIn(0f, 1f)
+    val effectiveTint = if (videoAlpha > 0.01f && tintColor.isSpecified) {
+        Color.Unspecified
+    } else {
+        tintColor
     }
+    val darken = lerp(minScrim, maxScrim, ((luminanceAnimation - 0.3f) / 0.5f).coerceIn(0f, 1f))
+    val baseScrim = LiquidGlassIntensity.tint(darken)
+    val scrimAlpha = lerp(baseScrim, if (isDark) 0.14f else 0.12f, videoAlpha)
 
-    // Convex top-left specular catch (shifts subtly with gravity tilt) and lower shade.
+    val rimOutline = shape.createOutline(size, layoutDirection, this)
     val tiltX = GlassTilt.x
     val tiltY = GlassTilt.y
-    val specColor = if (tintColor.isSpecified) {
-        androidx.compose.ui.graphics.lerp(Color.White, tintColor, 0.28f)
+    val specColor = if (effectiveTint.isSpecified) {
+        androidx.compose.ui.graphics.lerp(Color.White, effectiveTint, 0.28f)
     } else {
         Color.White
     }
-    val sheenStart = Offset(
-        size.width * (0.04f + tiltX * 0.26f),
-        size.height * (0.04f + tiltY * 0.20f),
-    )
-    val sheenEnd = Offset(
-        size.width * (0.72f + tiltX * 0.24f),
-        size.height * (0.85f + tiltY * 0.18f),
-    )
-    drawRect(
-        brush = Brush.linearGradient(
-            0f to specColor.copy(alpha = if (isDark) lerp(0.09f, 0.20f, intensity) else lerp(0.24f, 0.42f, intensity)),
-            0.46f to Color.Transparent,
-            start = sheenStart,
-            end = sheenEnd,
-        ),
-    )
-    if ((abs(tiltX) > 0.04f || abs(tiltY) > 0.04f) && size.minDimension > 1f) {
-        val streakX = size.width * (0.5f + tiltX * 0.45f)
-        val streakY = size.height * (0.5f + tiltY * 0.45f)
-        val glintAlpha = ((abs(tiltX) + abs(tiltY)) * 0.5f).coerceIn(0f, 1f) *
-            (if (isDark) 0.16f else 0.24f) * lerp(0.6f, 1.15f, intensity)
+
+    fun DrawScope.drawGlassFillLayers() {
+        drawRect((if (isDark) Color.Black else Color.White).copy(alpha = scrimAlpha))
+        if (tintColor.isSpecified) {
+            val washAlpha = (if (isDark) 0.14f else 0.10f) *
+                lerp(0.65f, 1.15f, intensity) *
+                (1f - videoAlpha)
+            if (washAlpha > 0.002f) {
+                drawRect(tintColor.copy(alpha = washAlpha))
+            }
+        }
+
+        // Convex top-left specular catch (shifts subtly with gravity tilt) and lower shade.
+        val sheenStart = Offset(
+            size.width * (0.04f + tiltX * 0.26f),
+            size.height * (0.04f + tiltY * 0.20f),
+        )
+        val sheenEnd = Offset(
+            size.width * (0.72f + tiltX * 0.24f),
+            size.height * (0.85f + tiltY * 0.18f),
+        )
         drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(specColor.copy(alpha = glintAlpha), Color.Transparent),
-                center = Offset(streakX, streakY),
-                radius = (size.maxDimension * 0.65f).coerceAtLeast(1f),
+            brush = Brush.linearGradient(
+                0f to specColor.copy(alpha = if (isDark) lerp(0.09f, 0.20f, intensity) else lerp(0.24f, 0.42f, intensity)),
+                0.46f to Color.Transparent,
+                start = sheenStart,
+                end = sheenEnd,
             ),
-            blendMode = BlendMode.Plus,
+        )
+        if ((abs(tiltX) > 0.04f || abs(tiltY) > 0.04f) && size.minDimension > 1f) {
+            val streakX = size.width * (0.5f + tiltX * 0.45f)
+            val streakY = size.height * (0.5f + tiltY * 0.45f)
+            val glintAlpha = ((abs(tiltX) + abs(tiltY)) * 0.5f).coerceIn(0f, 1f) *
+                (if (isDark) 0.16f else 0.24f) * lerp(0.6f, 1.15f, intensity)
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(specColor.copy(alpha = glintAlpha), Color.Transparent),
+                    center = Offset(streakX, streakY),
+                    radius = (size.maxDimension * 0.65f).coerceAtLeast(1f),
+                ),
+                blendMode = BlendMode.Plus,
+            )
+        }
+        val shadeScale = lerp(1f, 0.55f, videoAlpha)
+        drawRect(
+            brush = Brush.verticalGradient(
+                0.58f to Color.Transparent,
+                1f to Color.Black.copy(alpha = (if (isDark) 0.16f else 0.09f) * shadeScale),
+            ),
         )
     }
-    drawRect(
-        brush = Brush.verticalGradient(
-            0.58f to Color.Transparent,
-            1f to Color.Black.copy(alpha = if (isDark) 0.16f else 0.09f),
-        ),
-    )
+
+    if (videoAlpha > 0.01f) {
+        val clip = Path().apply { addOutline(rimOutline) }
+        clipPath(clip) {
+            drawGlassFillLayers()
+        }
+    } else {
+        drawGlassFillLayers()
+    }
 
     // Directional inner rim (plus crisp outer dark hairline in Light mode so white
     // glass pops cleanly off bright pages, after Auris' ConvxOuterDarkRim).
     val rimBoost = 1f + 0.34f * press
-    val rimOutline = shape.createOutline(size, layoutDirection, this)
     if (!isDark) {
         drawOutline(
             outline = rimOutline,
@@ -943,6 +1006,7 @@ fun Modifier.drawInteractiveGlass(
     minScrim: Float = GlassRecipe.MIN_SCRIM,
     maxScrim: Float = GlassRecipe.MAX_SCRIM,
     tintColor: Color = Color.Unspecified,
+    liveVideoOverlayAlpha: () -> Float = { 0f },
 ): Modifier =
     this
         .drawBackdrop(
@@ -950,45 +1014,61 @@ fun Modifier.drawInteractiveGlass(
             shape = { lensSafeGlassShape(shape) },
             highlight = { highlight },
             effects = {
-                val l = (luminanceAnimation * 2f - 1f).let { sign(it) * it * it }
-                val press = interaction?.pressProgress ?: 0f
-                val intensity = LiquidGlassIntensity.value
-                colorControls(
-                    brightness = if (isDark) GlassRecipe.BRIGHTNESS_DARK else GlassRecipe.BRIGHTNESS_LIGHT,
-                    contrast = GlassRecipe.CONTRAST,
-                    saturation = LiquidGlassIntensity.saturation(
-                        GlassRecipe.SATURATION_FROSTED,
-                        GlassRecipe.SATURATION_CLEAR,
-                    ) + 0.15f * press,
-                )
-                blur(
-                    (
-                        if (l > 0f) {
-                            lerp(
-                                GlassRecipe.BLUR_BASE_DP.dp.toPx(),
-                                GlassRecipe.BLUR_BRIGHT_DP.dp.toPx(),
-                                l,
-                            )
-                        } else {
-                            lerp(
-                                GlassRecipe.BLUR_BASE_DP.dp.toPx(),
-                                GlassRecipe.BLUR_DARK_DP.dp.toPx(),
-                                -l,
-                            )
-                        }
-                    ) * blurScale * LiquidGlassIntensity.blur() + GlassRecipe.PRESS_BLUR_DP.dp.toPx() * press,
-                )
-                if (!GlassMotion.isSheetMoving()) {
-                    val pressRefractionPx = GlassRecipe.PRESS_REFRACTION_DP.dp.toPx() * press
-                    lens(
-                        size.minDimension / GlassRecipe.LENS_DIVISOR * intensity + pressRefractionPx,
-                        size.minDimension * 0.62f + pressRefractionPx,
-                        intensity >= GlassRecipe.DISPERSION_THRESHOLD || press > 0.05f,
+                val videoAlpha = liveVideoOverlayAlpha().coerceIn(0f, 1f)
+                if (videoAlpha < 0.98f) {
+                    val l = (luminanceAnimation * 2f - 1f).let { sign(it) * it * it }
+                    val press = interaction?.pressProgress ?: 0f
+                    val intensity = LiquidGlassIntensity.value
+                    colorControls(
+                        brightness = if (isDark) GlassRecipe.BRIGHTNESS_DARK else GlassRecipe.BRIGHTNESS_LIGHT,
+                        contrast = GlassRecipe.CONTRAST,
+                        saturation = LiquidGlassIntensity.saturation(
+                            GlassRecipe.SATURATION_FROSTED,
+                            GlassRecipe.SATURATION_CLEAR,
+                        ) + 0.15f * press,
                     )
+                    blur(
+                        (
+                            if (l > 0f) {
+                                lerp(
+                                    GlassRecipe.BLUR_BASE_DP.dp.toPx(),
+                                    GlassRecipe.BLUR_BRIGHT_DP.dp.toPx(),
+                                    l,
+                                )
+                            } else {
+                                lerp(
+                                    GlassRecipe.BLUR_BASE_DP.dp.toPx(),
+                                    GlassRecipe.BLUR_DARK_DP.dp.toPx(),
+                                    -l,
+                                )
+                            }
+                        ) * blurScale * LiquidGlassIntensity.blur() + GlassRecipe.PRESS_BLUR_DP.dp.toPx() * press,
+                    )
+                    if (!GlassMotion.isMotionActive()) {
+                        val pressRefractionPx = GlassRecipe.PRESS_REFRACTION_DP.dp.toPx() * press
+                        lens(
+                            size.minDimension / GlassRecipe.LENS_DIVISOR * intensity + pressRefractionPx,
+                            size.minDimension * 0.62f + pressRefractionPx,
+                            intensity >= GlassRecipe.DISPERSION_THRESHOLD || press > 0.05f,
+                        )
+                    }
                 }
             },
             onDrawBackdrop = { drawBackdrop ->
-                drawBackdrop()
+                val videoAlpha = liveVideoOverlayAlpha().coerceIn(0f, 1f)
+                when {
+                    videoAlpha <= 0.01f -> drawBackdrop()
+                    videoAlpha >= 0.98f -> Unit
+                    else -> {
+                        val paint = Paint().apply { alpha = 1f - videoAlpha }
+                        drawContext.canvas.saveLayer(
+                            Rect(Offset.Zero, size),
+                            paint,
+                        )
+                        drawBackdrop()
+                        drawContext.canvas.restore()
+                    }
+                }
             },
             onDrawSurface = {
                 drawGlassSurfaceOverlay(
@@ -1000,6 +1080,7 @@ fun Modifier.drawInteractiveGlass(
                     minScrim = minScrim,
                     maxScrim = maxScrim,
                     tintColor = tintColor,
+                    liveVideoAlpha = liveVideoOverlayAlpha().coerceIn(0f, 1f),
                 )
             },
             layerBlock =
@@ -1332,7 +1413,7 @@ fun Modifier.miniPlayerLiquidGlass(
                         }
                     ) * blurScale * LiquidGlassIntensity.blur() + GlassRecipe.PRESS_BLUR_DP.dp.toPx() * press,
                 )
-                if (!GlassMotion.isSheetMoving() && crownHeightPx() <= 0.5f) {
+                if (!GlassMotion.isMotionActive() && crownHeightPx() <= 0.5f) {
                     val pressRefractionPx = GlassRecipe.PRESS_REFRACTION_DP.dp.toPx() * press
                     lens(
                         size.minDimension / GlassRecipe.LENS_DIVISOR * intensity + pressRefractionPx,
@@ -1381,6 +1462,7 @@ fun Modifier.liquidGlass(
     }
     val isDark = forceDark || LocalIsDarkTheme.current
     val interaction = rememberGlassInteraction()
+    val liveVideoOverlayAlpha = LocalLiveVideoOverlayAlpha.current
     return this.drawInteractiveGlass(
         isDark = isDark,
         backdrop = backdrop,
@@ -1389,6 +1471,7 @@ fun Modifier.liquidGlass(
         interaction = if (interactive) interaction else null,
         highlight = highlight,
         tintColor = tintColor,
+        liveVideoOverlayAlpha = liveVideoOverlayAlpha,
     )
 }
 
@@ -1412,6 +1495,7 @@ fun Modifier.liquidGlass(
     }
     val isDark = forceDark || LocalIsDarkTheme.current
     val interaction = rememberGlassInteraction()
+    val liveVideoOverlayAlpha = LocalLiveVideoOverlayAlpha.current
     return this.drawInteractiveGlass(
         isDark = isDark,
         backdrop = backdrop,
@@ -1423,6 +1507,7 @@ fun Modifier.liquidGlass(
         minScrim = minScrim,
         maxScrim = maxScrim,
         tintColor = tintColor,
+        liveVideoOverlayAlpha = liveVideoOverlayAlpha,
     )
 }
 

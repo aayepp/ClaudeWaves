@@ -527,6 +527,8 @@ internal fun MiniPlayer(
     pull: MiniPlayerPull? = null,
     /** 0 = full card, 1 = slim card docked beside the collapsed nav pill. Read in layout/draw only. */
     compactProgress: () -> Float = { 0f },
+    adaptiveInk: Boolean = true,
+    defaultUseLightInk: Boolean = LocalIsDarkTheme.current,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -603,12 +605,13 @@ internal fun MiniPlayer(
     val miniUseLightInk = rememberBackdropUseLightInk(
         backdrop = backdrop,
         bounds = miniBackdropBounds,
-        enabled = isGlass,
+        enabled = isGlass && adaptiveInk,
         scrimBaseAlpha = 0.28f,
         tintColor = resolvedMiniTint,
         // Skip the opaque cover art on the left so sampling focuses on the text & control area.
         cropStartX = 0.20f,
         cropEndX = 0.96f,
+        defaultUseLightInk = defaultUseLightInk,
     )
     val miniGlassInk by animateColorAsState(
         targetValue = if (miniUseLightInk) Color.White else Color.Black,

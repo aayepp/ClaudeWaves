@@ -218,8 +218,8 @@ fun CanvasArtworkPlayer(
 
     val foreground = rememberIsForeground()
     val fullPlayerOpen = LocalFullPlayerOpen.current
-    LaunchedEffect(foreground, fullPlayerOpen, pausedForTransition, url) {
-        player.playWhenReady = foreground && fullPlayerOpen && !pausedForTransition
+    LaunchedEffect(isPlaying, foreground, fullPlayerOpen, pausedForTransition, url) {
+        player.playWhenReady = isPlaying && foreground && fullPlayerOpen && !pausedForTransition
     }
 
     LaunchedEffect(surfaceGeneration) {

@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -83,7 +84,6 @@ import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
 import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
 import com.lastwave.app.ui.theme.rememberBackdropUseLightInkPerSlot
 import com.lastwave.app.ui.theme.trackBackdropBounds
-import com.lastwave.app.ui.theme.waterDropJiggle
 import io.github.fletchmckee.liquid.LiquidState
 import io.github.fletchmckee.liquid.liquefiable
 import io.github.fletchmckee.liquid.liquid
@@ -145,8 +145,9 @@ private fun LiquidNavigationBarContent(
     var releaseGeneration by remember { mutableIntStateOf(0) }
     // The drop stays lifted for the whole flight to a tapped tab, not only under the finger,
     // and sets down as the accent pill when it lands (after Auris' selection pill).
-    val lift by animateFloatAsState(
-        if (pressed || settledPosition.isRunning) 1f else 0f,
+    val isLifted by remember { derivedStateOf { pressed || settledPosition.isRunning } }
+    val liftState = animateFloatAsState(
+        if (isLifted) 1f else 0f,
         spring(dampingRatio = 0.90f, stiffness = 520f),
         label = "liquidDropLift",
     )
@@ -202,15 +203,20 @@ private fun LiquidNavigationBarContent(
     val pressedScale = railHeight.value / (railHeight.value - 8f)
     val captionIndex = if (pressed) captionAtPress else selectedIndex
     val railMaxWidth = if (compact) {
-        val caption = rememberTextMeasurer().measure(
-            text = items[captionIndex.coerceIn(items.indices)].label,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            softWrap = false,
-            maxLines = 1,
-        )
-        val captionSlotWidth = with(density) {
-            // Match glyph padding and reserve a pixel for equal-slot rounding.
-            (caption.size.width + 24.dp.roundToPx() + 6.dp.roundToPx() + 2 * 4.dp.roundToPx() + 1).toDp()
+        val textMeasurer = rememberTextMeasurer()
+        val captionText = items[captionIndex.coerceIn(items.indices)].label
+        val captionStyle = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+        val captionSlotWidth = remember(textMeasurer, captionText, captionStyle, density) {
+            val caption = textMeasurer.measure(
+                text = captionText,
+                style = captionStyle,
+                softWrap = false,
+                maxLines = 1,
+            )
+            with(density) {
+                // Match glyph padding and reserve a pixel for equal-slot rounding.
+                (caption.size.width + 24.dp.roundToPx() + 6.dp.roundToPx() + 2 * 4.dp.roundToPx() + 1).toDp()
+            }
         }
         maxOf(280.dp, captionSlotWidth * count + 8.dp)
     } else 360.dp
@@ -226,7 +232,6 @@ private fun LiquidNavigationBarContent(
                 .fillMaxWidth().height(railHeight)
                 .trackBackdropBounds(dockBounds)
                 .testTag("liquid_navigation_bar")
-                .waterDropJiggle(amplitude = 0.045f, tiltDegrees = 2.1f, dipDp = 3.5.dp)
                 .railShadow(),
         ) {
             val tabWidth = (maxWidth - 8.dp) / count
@@ -236,25 +241,17 @@ private fun LiquidNavigationBarContent(
 
             // A -> B -> C is acyclic: page A, clear navigation plane B,
             // sibling lens C. The visible opaque rail covers B's original draw.
-            // B has heavier frost than the outer rail, so the selected lens C reads
-            // as frosted glass; B's glyphs sit above that blur and stay sharp.
+            // B keeps glyphs sharp above a matching frosted rail for C.
             Box(
                 Modifier.matchParentSize().clearAndSetSemantics { }
                     .clip(CircleShape)
                     .captureHeadroom(20.dp)
                     .liquefiable(railState)
                     .background(pageColor)
-                    .liquid(pageState) {
-                        shape = RoundedCornerShape(0.dp)
-                        frost = 0.dp
-                        refraction = 0f
-                        curve = 0f
-                        edge = 0f
-                    }
                     .padding(20.dp),
             ) {
                 Box(Modifier.matchParentSize().background(surfaceColor, CircleShape)
-                    .navigationRail(pageState, railTint, blurRadius = 24.dp))
+                    .navigationRail(pageState, railTint, blurRadius = 12.dp))
                 NavigationGlyphs(
                     items, selectedIndex, captionIndex, compact, inkAt,
                     captured = true, onSelect = {}, modifier = Modifier.fillMaxSize().padding(4.dp),
@@ -330,7 +327,7 @@ private fun LiquidNavigationBarContent(
                     Modifier.align(AbsoluteAlignment.TopLeft).absoluteOffset {
                         IntOffset((currentPosition() * tabPx + (tabPx - lensPx) / 2f).roundToInt(), 0)
                     }.width(lensWidth).fillMaxHeight().graphicsLayer {
-                        val amount = lift.coerceIn(0f, 1f)
+                        val amount = liftState.value.coerceIn(0f, 1f)
                         val flow = ((currentPosition() - trailingPosition.value) * 2f).coerceIn(-1f, 1f)
                         // Keep the frosted selection visible at rest; never
                         // blend doubled glyphs.
@@ -345,9 +342,9 @@ private fun LiquidNavigationBarContent(
                         ambientShadowColor = Color.Black.copy(alpha = 0.08f)
                         spotShadowColor = Color.Black.copy(alpha = 0.16f)
                     }.testTag("liquid_navigation_lens")
-                        .liquidBubbleHighlight(isDark) { 0.25f + 0.75f * lift.coerceIn(0f, 1f) }
+                        .liquidBubbleHighlight(isDark) { 0.25f + 0.75f * liftState.value.coerceIn(0f, 1f) }
                         .liquid(railState) {
-                            val amount = lift.coerceIn(0f, 1f)
+                            val amount = liftState.value.coerceIn(0f, 1f)
                             shape = LensShape
                             frost = 0.dp
                             refraction = 0.08f + 0.37f * amount
@@ -398,7 +395,6 @@ private fun LiquidNavigationBarContent(
             Modifier.size(railHeight)
                 .trackBackdropBounds(searchBounds)
                 .testTag("liquid_navigation_search")
-                .waterDropJiggle(amplitude = 0.072f, tiltDegrees = 2.2f, dipDp = 3.dp)
                 .shadow(8.dp, CircleShape, clip = false,
                     ambientColor = Color.Black.copy(alpha = 0.10f),
                     spotColor = Color.Black.copy(alpha = 0.14f))

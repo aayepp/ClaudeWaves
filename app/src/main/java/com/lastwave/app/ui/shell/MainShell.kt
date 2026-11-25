@@ -166,7 +166,6 @@ import com.lastwave.app.ui.theme.LocalMd3NavBar
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.ui.theme.liquidGlassContainerColor
-import com.lastwave.app.ui.theme.waterDropJiggle
 import com.lastwave.app.ui.theme.BackdropBoundsHolder
 import com.lastwave.app.ui.theme.LayerBackdrop
 import com.lastwave.app.ui.theme.glassRim
@@ -284,6 +283,14 @@ fun MainShell(
     val feedTapEvents = remember { kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow { pagerState.isScrollInProgress }.collect { scrolling ->
+            com.lastwave.app.ui.theme.GlassMotion.setPagerMoving(scrolling)
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { com.lastwave.app.ui.theme.GlassMotion.setPagerMoving(false) }
+    }
     // Drive the dock selection from an explicit tab index instead of
     // pagerState.currentPage. currentPage flips mid-scroll (halfway through
     // animateScrollToPage), which re-triggers the pill width animation + the
@@ -488,7 +495,7 @@ fun MainShell(
             // page's whole tab each time it flipped halfway through a swipe.
             val isCurrent by remember(page) { derivedStateOf { page == pagerState.currentPage } }
             val pageShown by remember(page) {
-                derivedStateOf { page == pagerState.currentPage || pagerState.isScrollInProgress }
+                derivedStateOf { page == pagerState.currentPage && !pagerState.isScrollInProgress }
             }
             AmbientAnimationsGate(visible = { pageShown }) {
                 PredictiveBackScreen(
@@ -558,6 +565,7 @@ fun MainShell(
         val navHaptic = androidx.compose.ui.platform.LocalHapticFeedback.current
         val currentOnSelect by androidx.compose.runtime.rememberUpdatedState { index: Int ->
             navHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
+            com.lastwave.app.ui.theme.GlassMotion.stampPager()
             if (tabs[index] == MainTab.FEED) {
                 val wasOnDetail = onReturnToHome()
                 if (wasOnDetail) {
@@ -567,7 +575,19 @@ fun MainShell(
                 }
                 if (pagerState.currentPage != feedIndex) {
                     if (selectedTabIndex != feedIndex) selectedTabIndex = feedIndex
-                    scope.launch { pagerState.scrollToPage(feedIndex) }
+                    scope.launch {
+                        if (kotlin.math.abs(feedIndex - pagerState.currentPage) > 1) {
+                            pagerState.scrollToPage(feedIndex)
+                        } else {
+                            pagerState.animateScrollToPage(
+                                feedIndex,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = 650f,
+                                ),
+                            )
+                        }
+                    }
                     return@rememberUpdatedState
                 }
                 feedTapEvents.tryEmit(Unit)
@@ -595,6 +615,7 @@ fun MainShell(
         // refresh action, or enqueue a page animation at every crossed tab.
         fun selectLiquidTab(index: Int, refreshIfSelected: Boolean) {
             navHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
+            com.lastwave.app.ui.theme.GlassMotion.stampPager()
             val isFeed = tabs[index] == MainTab.FEED
             val returnedFromDetail = isFeed && onReturnToHome()
             val alreadySettled = selectedTabIndex == index &&
@@ -640,22 +661,25 @@ fun MainShell(
                 bottomNavSlot.value = { material3NavigationEnabled ->
                     Box(Modifier.fillMaxSize()) {
                         val collapse = LocalChromeCollapse.current
-                        val collapseProgress = collapse?.progress ?: { 0f }
+                        val collapseProgress = remember(collapse) { collapse?.progress ?: { 0f } }
                         val barModifier = Modifier.align(Alignment.BottomCenter).collapsingNavBar(collapseProgress)
                         val homeOnRight = com.lastwave.app.ui.player.LocalHomeOnRight.current
                         val pillModifier = Modifier
                             .align(if (homeOnRight) Alignment.BottomEnd else Alignment.BottomStart)
                             .collapsedNavPill(collapseProgress)
-                        val expand = { collapse?.expand(); Unit }
-                        val barVisible = { collapseProgress() < 0.95f }
-                        val pillVisible = { collapseProgress() > 0.05f }
+                        val expand = remember(collapse) { { collapse?.expand(); Unit } }
+                        val barVisible = remember(collapseProgress) { { collapseProgress() < 0.95f } }
+                        val pillVisible = remember(collapseProgress) { { collapseProgress() > 0.05f } }
                         if (navigationLiquidState != null) {
-                            val items = tabs.map { tab ->
-                                LiquidNavigationItem(
-                                    label = androidx.compose.ui.res.stringResource(tab.labelRes),
-                                    icon = tab.icon(),
-                                    glyph = tab.glyph(),
-                                )
+                            val labels = tabs.map { androidx.compose.ui.res.stringResource(it.labelRes) }
+                            val items = remember(tabs, labels) {
+                                tabs.mapIndexed { index, tab ->
+                                    LiquidNavigationItem(
+                                        label = labels[index],
+                                        icon = tab.icon(),
+                                        glyph = tab.glyph(),
+                                    )
+                                }
                             }
                             LiquidNavigationBar(
                                 liquidState = navigationLiquidState,
@@ -772,7 +796,7 @@ private fun FloatingNavBar(
                 ),
                 tonalElevation = if (liquidGlass) 0.dp else 6.dp,
                 shadowElevation = if (liquidGlass || comic) 0.dp else 12.dp,
-                modifier = Modifier.weight(1f).widthIn(max = 420.dp).trackBackdropBounds(dockBackdropBounds).waterDropJiggle(amplitude = 0.045f, tiltDegrees = 2.1f, dipDp = 3.5.dp).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
+                modifier = Modifier.weight(1f).widthIn(max = 420.dp).trackBackdropBounds(dockBackdropBounds).comicPanel(DockShape, translucent = liquidGlass).liquidGlassChrome(DockShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = dockInteraction)
                     .then(if (liquidGlass) Modifier.glassRim(DockShape) else Modifier),
             ) {
                 val latestSelectedIndex by androidx.compose.runtime.rememberUpdatedState(selectedIndex)
@@ -843,7 +867,6 @@ private fun FloatingNavBar(
                 interactionSource = searchInteraction,
                 modifier = Modifier.size(60.dp)
                     .trackBackdropBounds(searchBackdropBounds)
-                    .waterDropJiggle(amplitude = 0.072f, tiltDegrees = 2.2f, dipDp = 3.dp)
                     .comicPanel(CircleShape, translucent = liquidGlass)
                     .liquidGlassChrome(CircleShape, liquidGlass, LiquidGlassPreset.BottomNavigation, backdrop, interactionSource = searchInteraction)
                     .then(if (liquidGlass) Modifier.glassRim() else Modifier),

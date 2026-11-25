@@ -124,7 +124,7 @@ internal fun rememberBackdropContrastCoordinator(
             var moving = false
             val active = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 !latestPaused() &&
-                !GlassMotion.isSheetMoving()
+                !GlassMotion.isMotionActive()
             val sourceLayer = backdrop.graphicsLayer
             if (active && !sourceLayer.isReleased && sourceLayer.size.width > 0 && sourceLayer.size.height > 0) {
                 val activeTargets = coordinator.snapshotTargets()
@@ -336,7 +336,7 @@ internal fun rememberBackdropUseLightInk(
         while (true) {
             val active = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 latestVisible() &&
-                !GlassMotion.isSheetMoving()
+                !GlassMotion.isMotionActive()
             val rect = bounds.rect
             val sourceLayer = layerBackdrop.graphicsLayer
             if (

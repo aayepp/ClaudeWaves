@@ -90,9 +90,11 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -333,6 +335,10 @@ import javax.inject.Inject
 import kotlin.math.abs
 
 
+private class QueueRowBoundsHolder {
+    var rect: Rect? = null
+}
+
 internal var isQueueLockedState by mutableStateOf(false)
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -350,6 +356,8 @@ internal fun QueuePanel(
     val listState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val dropController = LocalMiniPlayerDropController.current
     val darkBackdrop = PlayerPalette.shade.luminance() < 0.5f
     val isGlass = LocalLiquidGlass.current
     val accentTint = remember(ambientColor, darkBackdrop) {
@@ -572,11 +580,25 @@ internal fun QueuePanel(
                 )
                 shuffleUpcoming.forEachIndexed { order, queueIndex ->
                     val item = state.queue[queueIndex]
+                    val shuffleRowBounds = remember(queueIndex, item.title) { QueueRowBoundsHolder() }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                if (coords.isAttached) shuffleRowBounds.rect = coords.boundsInRoot()
+                            }
                             .clipOnly(RoundedCornerShape(12.dp))
-                            .clickable { player.seekToQueueItem(queueIndex) }
+                            .clickable {
+                                dropController?.triggerFromBounds(
+                                    title = item.title,
+                                    artist = item.artist,
+                                    artworkUrl = item.artworkUrl,
+                                    rowBoundsInRoot = shuffleRowBounds.rect,
+                                    kind = LiquidDropKind.PLAY,
+                                    thumbOffsetPx = with(density) { 48.dp.toPx() },
+                                )
+                                player.seekToQueueItem(queueIndex)
+                            }
                             .padding(horizontal = 4.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -702,8 +724,20 @@ internal fun QueuePanel(
                     }
                 )
 
+                val rowBoundsHolder = remember(stableKey) { QueueRowBoundsHolder() }
                 val rowOnClick = {
-                    player.seekToQueueItem(currentQueueKeys.indexOf(stableKey).takeIf { it >= 0 } ?: currentIndex)
+                    val resolvedIndex = currentQueueKeys.indexOf(stableKey).takeIf { it >= 0 } ?: currentIndex
+                    if (!isCurrent) {
+                        dropController?.triggerFromBounds(
+                            title = item.title,
+                            artist = item.artist,
+                            artworkUrl = item.artworkUrl,
+                            rowBoundsInRoot = rowBoundsHolder.rect,
+                            kind = LiquidDropKind.PLAY,
+                            thumbOffsetPx = with(density) { 62.dp.toPx() },
+                        )
+                    }
+                    player.seekToQueueItem(resolvedIndex)
                 }
                 val dragModifier = if (!isQueueLocked) {
                     Modifier.pointerInput(stableKey) {
@@ -898,6 +932,9 @@ internal fun QueuePanel(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .onGloballyPositioned { coords ->
+                                        if (coords.isAttached) rowBoundsHolder.rect = coords.boundsInRoot()
+                                    }
                                     .padding(vertical = if (isCurrent) 2.dp else 0.dp)
                                     .then(
                                         if (highlighted) {
