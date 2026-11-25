@@ -167,6 +167,11 @@ class MiniPlayerDropController {
     }
 }
 
+/** Plain root-bounds holder so song rows track drop origin with zero scroll recompositions. */
+internal class DropRowBoundsHolder {
+    var rect: Rect? = null
+}
+
 val LocalMiniPlayerDropController = staticCompositionLocalOf<MiniPlayerDropController?> { null }
 
 private data class ParabolaSample(
@@ -176,21 +181,31 @@ private data class ParabolaSample(
     val stretch: Float,
 )
 
-private fun sampleParabolaDrop(
+private fun sampleGravityDrop(
     t: Float,
     start: Offset,
-    end: Offset,
-    bulgeX: Float,
+    target: Offset,
     arcLiftPx: Float,
 ): ParabolaSample {
     val u = t.coerceIn(0f, 1f)
-    val cx = (start.x + end.x) * 0.5f + bulgeX
-    val cy = minOf(start.y, end.y) - arcLiftPx
     val omt = 1f - u
-    val x = omt * omt * start.x + 2f * omt * u * cx + u * u * end.x
-    val y = omt * omt * start.y + 2f * omt * u * cy + u * u * end.y
-    val vx = 2f * omt * (cx - start.x) + 2f * u * (end.x - cx)
-    val vy = 2f * omt * (cy - start.y) + 2f * u * (end.y - cy)
+    val topY = minOf(start.y, target.y) - arcLiftPx
+    val p1 = Offset(lerp(start.x, target.x, 0.72f), topY)
+    val p2 = Offset(target.x, lerp(topY, target.y, 0.52f))
+    val x = omt * omt * omt * start.x +
+        3f * omt * omt * u * p1.x +
+        3f * omt * u * u * p2.x +
+        u * u * u * target.x
+    val y = omt * omt * omt * start.y +
+        3f * omt * omt * u * p1.y +
+        3f * omt * u * u * p2.y +
+        u * u * u * target.y
+    val vx = 3f * omt * omt * (p1.x - start.x) +
+        6f * omt * u * (p2.x - p1.x) +
+        3f * u * u * (target.x - p2.x)
+    val vy = 3f * omt * omt * (p1.y - start.y) +
+        6f * omt * u * (p2.y - p1.y) +
+        3f * u * u * (target.y - p2.y)
     val speed = hypot(vx, vy)
     val stretch = 1f + ((speed / 2100f) * sin(u * PI.toFloat()) * 0.20f).coerceIn(0f, 0.20f)
     return ParabolaSample(x = x, y = y, angleRad = atan2(vy, vx), stretch = stretch)
@@ -237,34 +252,35 @@ internal fun MiniPlayerLiquidDropOverlay(
 
         val origin = hostOrigin()
         val miniRect = miniCardBounds()
-        val start = remember(drop.id, origin) {
+        val crownMarginPx = with(density) { 48.dp.toPx() }
+        val start = remember(drop.id, origin, hostWidthPx, hostHeightPx) {
             if (drop.startCenterInRoot == Offset.Unspecified) {
-                Offset(hostWidthPx * 0.25f, hostHeightPx * 0.42f)
+                Offset(hostWidthPx * 0.36f, hostHeightPx * 0.42f)
             } else {
                 Offset(
-                    x = (drop.startCenterInRoot.x - origin.x).coerceIn(28f, hostWidthPx - 28f),
+                    x = (drop.startCenterInRoot.x - origin.x).coerceIn(hostWidthPx * 0.14f, hostWidthPx * 0.86f),
                     y = (drop.startCenterInRoot.y - origin.y).coerceIn(40f, hostHeightPx - 140f),
                 )
             }
         }
-        val flightStart = remember(drop.id, start) {
-            Offset(start.x, (start.y - popLiftPx).coerceAtLeast(36f))
-        }
         val target = remember(drop.id, miniRect, hostWidthPx, hostHeightPx) {
             if (miniRect != null && miniRect.width > 20f) {
-                val tx = if (drop.kind == LiquidDropKind.PLAY) {
-                    (miniRect.left + thumbOffsetPx).coerceIn(miniRect.left + 24f, miniRect.right - 24f)
-                } else {
-                    miniRect.center.x
-                }
+                val pillR = (miniRect.height * 0.5f).coerceAtLeast(with(density) { 28.dp.toPx() })
+                val minSafeX = miniRect.left + pillR + crownMarginPx
+                val maxSafeX = miniRect.right - pillR - crownMarginPx
+                val preferredFrac = if (drop.kind == LiquidDropKind.PLAY) 0.46f else 0.50f
+                val rawTx = miniRect.left + miniRect.width * preferredFrac
+                val tx = if (maxSafeX > minSafeX) rawTx.coerceIn(minSafeX, maxSafeX) else miniRect.center.x
                 Offset(tx, miniRect.top + with(density) { 4.dp.toPx() })
             } else {
-                Offset(hostWidthPx * 0.5f, hostHeightPx - with(density) { 104.dp.toPx() })
+                Offset(hostWidthPx * 0.48f, hostHeightPx - with(density) { 104.dp.toPx() })
             }
         }
-        val arcBulgeX = remember(drop.id, flightStart, target) {
-            val dir = if (target.x >= flightStart.x) 1f else -1f
-            dir * with(density) { 44.dp.toPx() }
+        val flightStart = remember(drop.id, start, target) {
+            Offset(
+                x = lerp(start.x, target.x, 0.22f),
+                y = (start.y - popLiftPx).coerceAtLeast(36f),
+            )
         }
         val arcLiftPx = with(density) { 56.dp.toPx() }
 
@@ -275,14 +291,12 @@ internal fun MiniPlayerLiquidDropOverlay(
         var isImpactTriggered by remember(drop.id) { mutableStateOf(false) }
 
         LaunchedEffect(drop.id) {
-            val frac = if (miniRect != null && miniRect.width > 20f) {
-                ((target.x - miniRect.left) / miniRect.width).coerceIn(0.14f, 0.86f)
-            } else if (drop.kind == LiquidDropKind.PLAY) {
-                0.18f
+            val finalFrac = if (miniRect != null && miniRect.width > 20f) {
+                ((target.x - miniRect.left) / miniRect.width).coerceIn(0.22f, 0.78f)
             } else {
-                0.5f
+                0.48f
             }
-            controller.impactXFraction = frac
+            controller.impactXFraction = finalFrac
             controller.crownHeightPx = 0f
             controller.miniBounce = 0f
             controller.miniWobbleTilt = 0f
@@ -308,6 +322,10 @@ internal fun MiniPlayerLiquidDropOverlay(
                 ),
             ) {
                 val ft = value
+                if (ft >= 0.56f && miniRect != null && miniRect.width > 20f) {
+                    val curX = sampleGravityDrop(ft, flightStart, target, arcLiftPx).x
+                    controller.impactXFraction = ((curX - miniRect.left) / miniRect.width).coerceIn(0.22f, 0.78f)
+                }
                 if (ft >= 0.60f) {
                     val ct = ((ft - 0.60f) / 0.40f).coerceIn(0f, 1f)
                     controller.crownHeightPx = maxCrownPx * sin(ct * PI.toFloat())
@@ -317,6 +335,7 @@ internal fun MiniPlayerLiquidDropOverlay(
                     bridgeStrength = sin(bt * PI.toFloat())
                 }
             }
+            controller.impactXFraction = finalFrac
 
             bridgeStrength = 0f
             isImpactTriggered = true
@@ -326,8 +345,8 @@ internal fun MiniPlayerLiquidDropOverlay(
 
             // Stage 3 — Impact elastic jelly wobble, ripple shockwave & splash beads
             val tiltSide = when {
-                frac < 0.42f -> -1f
-                frac > 0.58f -> 1f
+                finalFrac < 0.42f -> -1f
+                finalFrac > 0.58f -> 1f
                 else -> -0.55f
             }
             val bounceJob = launch {
@@ -377,13 +396,13 @@ internal fun MiniPlayerLiquidDropOverlay(
         val ft = flightAnim.value
         val sample = if (ft <= 0.001f) {
             ParabolaSample(
-                x = start.x,
+                x = lerp(start.x, flightStart.x, pt.coerceIn(0f, 1f)),
                 y = lerp(start.y, flightStart.y, pt.coerceIn(0f, 1.15f)),
                 angleRad = 0f,
                 stretch = 1f,
             )
         } else {
-            sampleParabolaDrop(ft, flightStart, target, arcBulgeX, arcLiftPx)
+            sampleGravityDrop(ft, flightStart, target, arcLiftPx)
         }
         val dropRadiusPx = when {
             ft <= 0.001f -> lerp(dropRestRadiusPx * 0.64f, dropRestRadiusPx, pt)
@@ -412,7 +431,7 @@ internal fun MiniPlayerLiquidDropOverlay(
                 for (i in trailLags.indices) {
                     val bt = ft - trailLags[i]
                     if (bt in 0.04f..0.90f) {
-                        val pos = sampleParabolaDrop(bt, flightStart, target, arcBulgeX, arcLiftPx)
+                        val pos = sampleGravityDrop(bt, flightStart, target, arcLiftPx)
                         val fade = sin(((bt - 0.04f) / 0.86f).coerceIn(0f, 1f) * PI.toFloat())
                         drawMicroWaterBead(
                             center = Offset(pos.x + trailOffX[i].dp.toPx(), pos.y),
@@ -436,13 +455,19 @@ internal fun MiniPlayerLiquidDropOverlay(
                     val waistW = neckW * (0.44f + 0.34f * bridgeStrength)
                     val waistY = (sample.y + baseY) * 0.52f
                     val topConnectY = sample.y + dropRadiusPx * 0.20f
-                    val bx = sample.x
+                    val topX = sample.x
+                    val baseX = if (miniRect != null && miniRect.width > 20f) {
+                        miniRect.left + controller.impactXFraction * miniRect.width
+                    } else {
+                        target.x
+                    }
+                    val waistX = (topX + baseX) * 0.5f
 
                     val bridgePath = Path().apply {
-                        moveTo(bx - baseW, baseY)
-                        cubicTo(bx - waistW, baseY - 4f, bx - waistW * 0.85f, waistY, bx - neckW * 0.82f, topConnectY)
-                        lineTo(bx + neckW * 0.82f, topConnectY)
-                        cubicTo(bx + waistW * 0.85f, waistY, bx + waistW, baseY - 4f, bx + baseW, baseY)
+                        moveTo(baseX - baseW, baseY)
+                        cubicTo(baseX - waistW, baseY - 4f, waistX - waistW * 0.85f, waistY, topX - neckW * 0.82f, topConnectY)
+                        lineTo(topX + neckW * 0.82f, topConnectY)
+                        cubicTo(waistX + waistW * 0.85f, waistY, baseX + waistW, baseY - 4f, baseX + baseW, baseY)
                         close()
                     }
                     val bridgeTopColor = when {
@@ -466,12 +491,12 @@ internal fun MiniPlayerLiquidDropOverlay(
                         ),
                     )
                     val leftNeck = Path().apply {
-                        moveTo(bx - baseW, baseY)
-                        cubicTo(bx - waistW, baseY - 4f, bx - waistW * 0.85f, waistY, bx - neckW * 0.82f, topConnectY)
+                        moveTo(baseX - baseW, baseY)
+                        cubicTo(baseX - waistW, baseY - 4f, waistX - waistW * 0.85f, waistY, topX - neckW * 0.82f, topConnectY)
                     }
                     val rightNeck = Path().apply {
-                        moveTo(bx + baseW, baseY)
-                        cubicTo(bx + waistW, baseY - 4f, bx + waistW * 0.85f, waistY, bx + neckW * 0.82f, topConnectY)
+                        moveTo(baseX + baseW, baseY)
+                        cubicTo(baseX + waistW, baseY - 4f, waistX + waistW * 0.85f, waistY, topX + neckW * 0.82f, topConnectY)
                     }
                     val neckPeakColor = if (isComic) ComicInk.copy(alpha = 0.88f * bridgeStrength) else Color.White.copy(alpha = 0.82f * bridgeStrength)
                     val neckBrush = Brush.verticalGradient(

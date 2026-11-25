@@ -64,7 +64,13 @@ import com.lastwave.app.ui.common.TrackMenuTarget
 import com.lastwave.app.ui.common.safeDrawingBottomPadding
 import com.lastwave.app.ui.common.safeHorizontalContentPadding
 import com.lastwave.app.ui.common.adaptiveContentWidth
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import com.lastwave.app.ui.player.LocalMiniPlayerScrollClearance
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 
 /**
  * Faithful port of genres.js (§5): bar-chart genre list with a period
@@ -324,10 +330,22 @@ private fun GenreTrackRow(
     modifier: Modifier = Modifier,
 ) {
     val musicPlayer = com.lastwave.app.ui.player.LocalMusicPlayer.current
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { 40.dp.toPx() }
+    val rowBounds = remember(track.name, track.artist) { DropRowBoundsHolder() }
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
             .clickable {
+                dropController?.triggerFromBounds(
+                    title = track.name,
+                    artist = track.artist,
+                    artworkUrl = track.artworkUrl,
+                    rowBoundsInRoot = rowBounds.rect,
+                    kind = LiquidDropKind.PLAY,
+                    thumbOffsetPx = thumbOffsetPx,
+                )
                 val queue = allTracks.map {
                     com.lastwave.app.playback.PlayableTrack(it.name, it.artist, album = it.album, artworkUrl = it.artworkUrl)
                 }

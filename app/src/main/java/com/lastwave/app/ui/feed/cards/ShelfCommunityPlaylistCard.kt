@@ -36,8 +36,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -238,9 +243,26 @@ internal fun PreviewArtwork(url: String?, fallbackIcon: ImageVector, modifier: M
 
 @Composable
 private fun CommunitySongRow(song: YouTubeMusicTrack, plays: String?, height: Dp, onClick: () -> Unit, onMenuClick: (() -> Unit)?) {
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { 26.dp.toPx() }
+    val rowBounds = remember(song.videoId, song.title) { DropRowBoundsHolder() }
     Row(
-        Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(CardTokens.coverCornerRadius))
-            .cardPressable(onClick = onClick).semantics { contentDescription = "Play ${song.title}, ${song.artist}" },
+        Modifier
+            .fillMaxWidth()
+            .height(height)
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
+            .clip(RoundedCornerShape(CardTokens.coverCornerRadius))
+            .cardPressable(onClick = {
+                dropController?.triggerFromBounds(
+                    title = song.title,
+                    artist = song.artist,
+                    artworkUrl = song.artworkUrl,
+                    rowBoundsInRoot = rowBounds.rect,
+                    kind = LiquidDropKind.PLAY,
+                    thumbOffsetPx = thumbOffsetPx,
+                )
+                onClick()
+            }).semantics { contentDescription = "Play ${song.title}, ${song.artist}" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PreviewArtwork(song.artworkUrl, Icons.Filled.MusicNote,

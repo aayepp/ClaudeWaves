@@ -882,27 +882,24 @@ private fun DrawScope.drawGlassSurfaceOverlay(
     val touchRatioX = if (press > 0.01f && size.width > 0f) {
         ((interaction?.touchPosition?.x ?: (size.width * 0.5f)) / size.width - 0.5f).coerceIn(-0.5f, 0.5f) * press
     } else 0f
-    val touchRatioY = if (press > 0.01f && size.height > 0f) {
-        ((interaction?.touchPosition?.y ?: (size.height * 0.5f)) / size.height - 0.5f).coerceIn(-0.5f, 0.5f) * press
-    } else 0f
     val rimStart = Offset(
-        size.width * (0.14f + tiltX * 0.22f + touchRatioX * 0.35f).coerceIn(0f, 1f),
-        size.height * (0.12f + tiltY * 0.22f + touchRatioY * 0.35f).coerceIn(0f, 1f),
+        size.width * (0.50f + tiltX * 0.24f + touchRatioX * 0.35f).coerceIn(0f, 1f),
+        size.height * (0.00f + tiltY * 0.12f).coerceIn(0f, 0.35f),
     )
     val rimEnd = Offset(
-        size.width * (0.88f + tiltX * 0.12f - touchRatioX * 0.25f).coerceIn(0f, 1f),
-        size.height * (0.90f + tiltY * 0.12f - touchRatioY * 0.25f).coerceIn(0f, 1f),
+        size.width * (0.50f - tiltX * 0.16f - touchRatioX * 0.25f).coerceIn(0f, 1f),
+        size.height * (1.00f + tiltY * 0.12f).coerceIn(0.65f, 1f),
     )
     drawOutline(
         outline = rimOutline,
         brush = Brush.linearGradient(
-            0f to specColor.copy(alpha = ((if (isDark) 0.65f else 0.95f) * rimBoost).coerceAtMost(1f)),
-            0.45f to Color.White.copy(alpha = if (isDark) 0.08f else 0.18f),
-            1f to specColor.copy(alpha = ((if (isDark) 0.30f else 0.48f) * rimBoost).coerceAtMost(1f)),
+            0f to specColor.copy(alpha = ((if (isDark) 0.62f else 0.92f) * rimBoost).coerceAtMost(1f)),
+            0.50f to specColor.copy(alpha = ((if (isDark) 0.28f else 0.44f) * rimBoost).coerceAtMost(1f)),
+            1f to specColor.copy(alpha = ((if (isDark) 0.34f else 0.54f) * rimBoost).coerceAtMost(1f)),
             start = rimStart,
             end = rimEnd,
         ),
-        style = Stroke(width = 1.1.dp.toPx()),
+        style = Stroke(width = 1.15.dp.toPx()),
     )
 
     // Double-wave expanding specular water ripple ring from touch point.
@@ -1012,7 +1009,7 @@ fun Modifier.drawInteractiveGlass(
         .drawBackdrop(
             backdrop = backdrop,
             shape = { lensSafeGlassShape(shape) },
-            highlight = { highlight },
+            highlight = null,
             effects = {
                 val videoAlpha = liveVideoOverlayAlpha().coerceIn(0f, 1f)
                 if (videoAlpha < 0.98f) {
@@ -1382,7 +1379,7 @@ fun Modifier.miniPlayerLiquidGlass(
         .drawBackdrop(
             backdrop = backdrop,
             shape = activeShape,
-            highlight = { Highlight.Default },
+            highlight = null,
             shadow = { Shadow.Default },
             effects = {
                 val l = (luminanceAnimation * 2f - 1f).let { sign(it) * it * it }
@@ -1771,9 +1768,11 @@ private suspend inline fun AwaitPointerEventScope.awaitDragOrUp(pointerId: Point
  * every floating control carries the same rim.
  */
 internal fun Modifier.glassRim(shape: Shape = CircleShape): Modifier = border(
-    1.dp,
+    1.1.dp,
     androidx.compose.ui.graphics.Brush.verticalGradient(
-        listOf(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.55f), androidx.compose.ui.graphics.Color.White.copy(alpha = 0.12f)),
+        0f to androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f),
+        0.50f to androidx.compose.ui.graphics.Color.White.copy(alpha = 0.26f),
+        1f to androidx.compose.ui.graphics.Color.White.copy(alpha = 0.34f),
     ),
     shape,
 )

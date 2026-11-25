@@ -40,6 +40,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip as uiClip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +54,9 @@ import com.lastwave.app.ui.comic.clip
 import com.lastwave.app.ui.common.ArtworkImage
 import com.lastwave.app.ui.common.LocalAmbientAnimationsActive
 import com.lastwave.app.ui.common.TrackSubtitleWithBadge
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
 import com.lastwave.app.ui.theme.comicPanel
@@ -72,6 +78,21 @@ internal fun TrackRow(
     val isNowPlaying = track.isNowPlaying
     val isDark = LocalIsDarkTheme.current
     val isComic = LocalComicTheme.current
+    val dropController = LocalMiniPlayerDropController.current
+    val density = LocalDensity.current
+    val rowBounds = remember { DropRowBoundsHolder() }
+    val thumbOffsetPx = with(density) { (if (rank != null && !isNowPlaying) 52.dp else 26.dp).toPx() }
+    val rowOnClick = {
+        dropController?.triggerFromBounds(
+            title = track.name,
+            artist = track.artist,
+            artworkUrl = track.artworkUrl,
+            rowBoundsInRoot = rowBounds.rect,
+            kind = LiquidDropKind.PLAY,
+            thumbOffsetPx = thumbOffsetPx,
+        )
+        onClick()
+    }
     val secondaryTextColor = if (isNowPlaying) {
         MaterialTheme.colorScheme.primary
     } else {
@@ -81,6 +102,7 @@ internal fun TrackRow(
     val rowBase = if (isNowPlaying) {
         Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
             .padding(vertical = 4.dp)
             .comicPanel(TelemetryNowPlayingShape, offset = 2.dp)
             .uiClip(TelemetryNowPlayingShape)
@@ -89,11 +111,12 @@ internal fun TrackRow(
                 if (isComic) Modifier
                 else Modifier.border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), TelemetryNowPlayingShape),
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(onClick = rowOnClick, onLongClick = onLongClick)
     } else {
         Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
+            .combinedClickable(onClick = rowOnClick, onLongClick = onLongClick)
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {

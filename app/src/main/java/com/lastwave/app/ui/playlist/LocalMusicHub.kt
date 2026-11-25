@@ -151,6 +151,12 @@ import com.lastwave.app.ui.common.TrackMenuCapabilities
 import com.lastwave.app.ui.common.TrackMenuTarget
 import com.lastwave.app.ui.common.adaptiveContentWidth
 import com.lastwave.app.ui.common.groupPositionFor
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.lastwave.app.ui.settings.formatBytes
 import com.lastwave.app.ui.settings.formatDuration
 import com.lastwave.app.ui.shell.FloatingNavDefaults
@@ -2126,6 +2132,7 @@ private fun LocalSongGridRow(
     onToggleLike: (GeneratedTrack) -> Unit,
     onMenu: (GeneratedTrack) -> Unit,
 ) {
+    val dropController = LocalMiniPlayerDropController.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2137,22 +2144,40 @@ private fun LocalSongGridRow(
                 playbackCurrent?.artist.equals(track.artist, ignoreCase = true)
             val liked = LocalOfflineRepository.normalizeUrl(track.url) in offlineLikedUrls
             val selected = track.url in selectedUrls
-            LocalSquareGridCard(
-                title = track.name,
-                subtitle = track.artist,
-                trackName = track.name,
-                trackArtist = track.artist,
-                artworkUrl = track.artworkUrl,
-                badge = formatBadgeForTrack(track),
-                fallbackIcon = if (playingThis) Icons.Filled.GraphicEq else Icons.Filled.MusicNote,
-                selected = selected,
-                liked = liked,
-                onClick = { onTrackClick(index, track) },
-                onLongClick = { onTrackLongClick(track) },
-                onToggleLike = { onToggleLike(track) },
-                onMenu = if (!selectionActive) { { onMenu(track) } } else null,
-                modifier = Modifier.weight(1f),
-            )
+            val cardBounds = remember(track.url) { DropRowBoundsHolder() }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() },
+            ) {
+                LocalSquareGridCard(
+                    title = track.name,
+                    subtitle = track.artist,
+                    trackName = track.name,
+                    trackArtist = track.artist,
+                    artworkUrl = track.artworkUrl,
+                    badge = formatBadgeForTrack(track),
+                    fallbackIcon = if (playingThis) Icons.Filled.GraphicEq else Icons.Filled.MusicNote,
+                    selected = selected,
+                    liked = liked,
+                    onClick = {
+                        if (!selectionActive) {
+                            dropController?.triggerDrop(
+                                title = track.name,
+                                artist = track.artist,
+                                artworkUrl = track.artworkUrl,
+                                startCenterInRoot = cardBounds.rect?.center ?: Offset.Unspecified,
+                                kind = LiquidDropKind.PLAY,
+                            )
+                        }
+                        onTrackClick(index, track)
+                    },
+                    onLongClick = { onTrackLongClick(track) },
+                    onToggleLike = { onToggleLike(track) },
+                    onMenu = if (!selectionActive) { { onMenu(track) } } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
         if (tracks.size == 1) Spacer(Modifier.weight(1f))
     }

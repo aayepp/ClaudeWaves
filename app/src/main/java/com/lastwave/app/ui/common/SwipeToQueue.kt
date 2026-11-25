@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.lastwave.app.playback.PlayableTrack
+import com.lastwave.app.ui.player.DropRowBoundsHolder
 import com.lastwave.app.ui.player.LiquidDropKind
 import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import com.lastwave.app.ui.player.LocalMusicPlayer
@@ -71,11 +72,11 @@ fun SwipeToQueue(
     val offset = remember { Animatable(0f) }
     val currentTrack by rememberUpdatedState(track)
     val dropController = LocalMiniPlayerDropController.current
-    var rowBounds by remember { mutableStateOf<Rect?>(null) }
+    val rowBounds = remember { DropRowBoundsHolder() }
 
     Box(
         modifier
-            .onGloballyPositioned { rowBounds = it.boundsInRoot() }
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
             .pointerInput(dir, thresholdPx) {
             var armed = false
             detectHorizontalDragGestures(
@@ -102,7 +103,7 @@ fun SwipeToQueue(
                                 title = queued.title,
                                 artist = queued.artist,
                                 artworkUrl = queued.artworkUrl,
-                                rowBoundsInRoot = rowBounds,
+                                rowBoundsInRoot = rowBounds.rect,
                                 kind = LiquidDropKind.QUEUE,
                                 thumbOffsetPx = thumbOffsetPx,
                                 horizontalShiftPx = offset.value * dir * 0.65f,

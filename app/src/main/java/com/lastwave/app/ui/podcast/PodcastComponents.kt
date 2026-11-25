@@ -147,6 +147,9 @@ fun PodcastEpisodeRow(
         position = position,
         isPlaying = isPlaying,
         onClick = onClick,
+        badgeTitle = episode.title,
+        badgeArtist = episode.showTitle,
+        dropArtworkUrl = episode.artworkUrl,
         modifier = modifier,
         leading = {
             PodcastShowArtwork(

@@ -92,7 +92,10 @@ import androidx.compose.ui.Modifier
 import com.lastwave.app.ui.comic.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -111,6 +114,9 @@ import com.lastwave.app.ui.common.adaptiveContentWidth
 import com.lastwave.app.ui.common.groupPositionFor
 import com.lastwave.app.ui.common.groupShape
 import com.lastwave.app.ui.common.safeDrawingBottomPadding
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import com.lastwave.app.ui.player.LocalMiniPlayerScrollClearance
 import com.lastwave.app.ui.player.LocalMusicPlayer
 import com.lastwave.app.ui.player.PlayingWaveBars
@@ -221,17 +227,35 @@ internal fun DownloadedTrackCard(
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { 42.dp.toPx() }
+    val rowBounds = remember { DropRowBoundsHolder() }
 
     Card(
         shape = groupShape(position),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() },
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onPlay, onLongClick = { menuExpanded = true })
+                .combinedClickable(
+                    onClick = {
+                        dropController?.triggerFromBounds(
+                            title = track.title,
+                            artist = track.artist,
+                            artworkUrl = track.artworkUrl,
+                            rowBoundsInRoot = rowBounds.rect,
+                            kind = LiquidDropKind.PLAY,
+                            thumbOffsetPx = thumbOffsetPx,
+                        )
+                        onPlay()
+                    },
+                    onLongClick = { menuExpanded = true },
+                )
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

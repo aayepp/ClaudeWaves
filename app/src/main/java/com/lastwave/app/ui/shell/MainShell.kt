@@ -1084,8 +1084,9 @@ private fun NavSelectionPill(target: Rect?, backdrop: com.kyant.backdrop.Backdro
                             blur(4.dp.toPx())
                             lens(12.dp.toPx(), 18.dp.toPx(), LiquidGlassIntensity.value >= 0.45f)
                         },
-                        highlight = { Highlight.Default },
-                    ),
+                        highlight = null,
+                    )
+                    .glassRim(RoundedCornerShape(percent = 50)),
             )
         }
     }

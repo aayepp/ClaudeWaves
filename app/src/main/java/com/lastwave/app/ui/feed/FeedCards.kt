@@ -129,6 +129,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -199,19 +204,33 @@ internal fun SquareItemCard(
     onTrackLongClick: (TrackMiniTrayData) -> Unit,
     onOpenPodcastShow: (String) -> Unit = {},
 ) {
+    val dropController = LocalMiniPlayerDropController.current
     when (shelfItem) {
         is HomeShelfItem.Track -> {
             val track = shelfItem.track
-            com.lastwave.app.ui.feed.cards.ShelfSquareCard(
-                title = track.title,
-                infoLine = ArtistHelper.primaryArtist(track.artist),
-                artworkUrl = track.artworkUrl,
-                fallbackIcon = Icons.Filled.MusicNote,
-                onClick = { onPlayTrack(track, shelfTitle) },
-                onLongClick = { onTrackLongClick(trackTray(track, shelfTitle, onPlayTrack)) },
-                onPlayClick = { onPlayTrack(track, shelfTitle) },
-                cardWidth = com.lastwave.app.ui.feed.cards.rememberSquareCardWidth(),
-            )
+            val cardBounds = remember(track.videoId, track.title) { DropRowBoundsHolder() }
+            val playWithDrop = {
+                dropController?.triggerDrop(
+                    title = track.title,
+                    artist = ArtistHelper.primaryArtist(track.artist),
+                    artworkUrl = track.artworkUrl,
+                    startCenterInRoot = cardBounds.rect?.center ?: Offset.Unspecified,
+                    kind = LiquidDropKind.PLAY,
+                )
+                onPlayTrack(track, shelfTitle)
+            }
+            Box(Modifier.onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() }) {
+                com.lastwave.app.ui.feed.cards.ShelfSquareCard(
+                    title = track.title,
+                    infoLine = ArtistHelper.primaryArtist(track.artist),
+                    artworkUrl = track.artworkUrl,
+                    fallbackIcon = Icons.Filled.MusicNote,
+                    onClick = playWithDrop,
+                    onLongClick = { onTrackLongClick(trackTray(track, shelfTitle, onPlayTrack)) },
+                    onPlayClick = playWithDrop,
+                    cardWidth = com.lastwave.app.ui.feed.cards.rememberSquareCardWidth(),
+                )
+            }
         }
         is HomeShelfItem.Playlist -> {
             val p = shelfItem.playlist
@@ -237,14 +256,26 @@ internal fun SquareItemCard(
         }
         is HomeShelfItem.PodcastEpisode -> {
             val ep = shelfItem
-            com.lastwave.app.ui.feed.cards.ShelfSquareCard(
-                title = ep.title,
-                infoLine = listOfNotNull(ep.subtitle, ep.showName).joinToString(" \u2022 "),
-                artworkUrl = ep.artworkUrl,
-                fallbackIcon = Icons.Filled.Mic,
-                onClick = { onPlayTrack(ep.toYouTubeMusicTrack(), shelfTitle) },
-                cardWidth = com.lastwave.app.ui.feed.cards.rememberSquareCardWidth(),
-            )
+            val cardBounds = remember(ep.videoId, ep.title) { DropRowBoundsHolder() }
+            Box(Modifier.onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() }) {
+                com.lastwave.app.ui.feed.cards.ShelfSquareCard(
+                    title = ep.title,
+                    infoLine = listOfNotNull(ep.subtitle, ep.showName).joinToString(" \u2022 "),
+                    artworkUrl = ep.artworkUrl,
+                    fallbackIcon = Icons.Filled.Mic,
+                    onClick = {
+                        dropController?.triggerDrop(
+                            title = ep.title,
+                            artist = ep.showName.orEmpty(),
+                            artworkUrl = ep.artworkUrl,
+                            startCenterInRoot = cardBounds.rect?.center ?: Offset.Unspecified,
+                            kind = LiquidDropKind.PLAY,
+                        )
+                        onPlayTrack(ep.toYouTubeMusicTrack(), shelfTitle)
+                    },
+                    cardWidth = com.lastwave.app.ui.feed.cards.rememberSquareCardWidth(),
+                )
+            }
         }
     }
 }
@@ -259,18 +290,32 @@ internal fun WideItemCard(
     onTrackLongClick: (TrackMiniTrayData) -> Unit,
     onOpenPodcastShow: (String) -> Unit = {},
 ) {
+    val dropController = LocalMiniPlayerDropController.current
     when (shelfItem) {
         is HomeShelfItem.Track -> {
             val track = shelfItem.track
-            com.lastwave.app.ui.feed.cards.ShelfWideCard(
-                title = track.title,
-                infoLine = ArtistHelper.primaryArtist(track.artist),
-                artworkUrl = track.artworkUrl,
-                onClick = { onPlayTrack(track, shelfTitle) },
-                onLongClick = { onTrackLongClick(trackTray(track, shelfTitle, onPlayTrack)) },
-                onPlayClick = { onPlayTrack(track, shelfTitle) },
-                cardWidth = com.lastwave.app.ui.feed.cards.rememberWideCardWidth(),
-            )
+            val cardBounds = remember(track.videoId, track.title) { DropRowBoundsHolder() }
+            val playWithDrop = {
+                dropController?.triggerDrop(
+                    title = track.title,
+                    artist = ArtistHelper.primaryArtist(track.artist),
+                    artworkUrl = track.artworkUrl,
+                    startCenterInRoot = cardBounds.rect?.center ?: Offset.Unspecified,
+                    kind = LiquidDropKind.PLAY,
+                )
+                onPlayTrack(track, shelfTitle)
+            }
+            Box(Modifier.onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() }) {
+                com.lastwave.app.ui.feed.cards.ShelfWideCard(
+                    title = track.title,
+                    infoLine = ArtistHelper.primaryArtist(track.artist),
+                    artworkUrl = track.artworkUrl,
+                    onClick = playWithDrop,
+                    onLongClick = { onTrackLongClick(trackTray(track, shelfTitle, onPlayTrack)) },
+                    onPlayClick = playWithDrop,
+                    cardWidth = com.lastwave.app.ui.feed.cards.rememberWideCardWidth(),
+                )
+            }
         }
         is HomeShelfItem.Playlist -> {
             val p = shelfItem.playlist
@@ -295,13 +340,25 @@ internal fun WideItemCard(
         }
         is HomeShelfItem.PodcastEpisode -> {
             val ep = shelfItem
-            com.lastwave.app.ui.feed.cards.ShelfWideCard(
-                title = ep.title,
-                infoLine = listOfNotNull(ep.subtitle, ep.showName).joinToString(" \u2022 "),
-                artworkUrl = ep.artworkUrl,
-                onClick = { onPlayTrack(ep.toYouTubeMusicTrack(), shelfTitle) },
-                cardWidth = com.lastwave.app.ui.feed.cards.rememberWideCardWidth(),
-            )
+            val cardBounds = remember(ep.videoId, ep.title) { DropRowBoundsHolder() }
+            Box(Modifier.onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() }) {
+                com.lastwave.app.ui.feed.cards.ShelfWideCard(
+                    title = ep.title,
+                    infoLine = listOfNotNull(ep.subtitle, ep.showName).joinToString(" \u2022 "),
+                    artworkUrl = ep.artworkUrl,
+                    onClick = {
+                        dropController?.triggerDrop(
+                            title = ep.title,
+                            artist = ep.showName.orEmpty(),
+                            artworkUrl = ep.artworkUrl,
+                            startCenterInRoot = cardBounds.rect?.center ?: Offset.Unspecified,
+                            kind = LiquidDropKind.PLAY,
+                        )
+                        onPlayTrack(ep.toYouTubeMusicTrack(), shelfTitle)
+                    },
+                    cardWidth = com.lastwave.app.ui.feed.cards.rememberWideCardWidth(),
+                )
+            }
         }
     }
 }
@@ -316,18 +373,31 @@ internal fun FeaturedItemCard(
     onTrackLongClick: (TrackMiniTrayData) -> Unit,
     onOpenPodcastShow: (String) -> Unit = {},
 ) {
+    val dropController = LocalMiniPlayerDropController.current
     when (shelfItem) {
         is HomeShelfItem.Track -> {
             val track = shelfItem.track
-            com.lastwave.app.ui.feed.cards.ShelfFeaturedCard(
-                title = track.title,
-                artist = ArtistHelper.primaryArtist(track.artist),
-                artworkUrl = track.artworkUrl,
-                caption = shelfItem.caption,
-                onClick = { onPlayTrack(track, shelfTitle) },
-                onLongClick = { onTrackLongClick(trackTray(track, shelfTitle, onPlayTrack)) },
-                cardWidth = com.lastwave.app.ui.feed.cards.rememberFeaturedCardWidth(),
-            )
+            val cardBounds = remember(track.videoId, track.title) { DropRowBoundsHolder() }
+            Box(Modifier.onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() }) {
+                com.lastwave.app.ui.feed.cards.ShelfFeaturedCard(
+                    title = track.title,
+                    artist = ArtistHelper.primaryArtist(track.artist),
+                    artworkUrl = track.artworkUrl,
+                    caption = shelfItem.caption,
+                    onClick = {
+                        dropController?.triggerDrop(
+                            title = track.title,
+                            artist = ArtistHelper.primaryArtist(track.artist),
+                            artworkUrl = track.artworkUrl,
+                            startCenterInRoot = cardBounds.rect?.center ?: Offset.Unspecified,
+                            kind = LiquidDropKind.PLAY,
+                        )
+                        onPlayTrack(track, shelfTitle)
+                    },
+                    onLongClick = { onTrackLongClick(trackTray(track, shelfTitle, onPlayTrack)) },
+                    cardWidth = com.lastwave.app.ui.feed.cards.rememberFeaturedCardWidth(),
+                )
+            }
         }
         is HomeShelfItem.Playlist -> {
             val p = shelfItem.playlist
@@ -354,14 +424,26 @@ internal fun FeaturedItemCard(
         }
         is HomeShelfItem.PodcastEpisode -> {
             val ep = shelfItem
-            com.lastwave.app.ui.feed.cards.ShelfFeaturedCard(
-                title = ep.title,
-                artist = listOfNotNull(ep.subtitle, ep.showName).joinToString(" \u2022 "),
-                artworkUrl = ep.artworkUrl,
-                caption = shelfItem.caption,
-                onClick = { onPlayTrack(ep.toYouTubeMusicTrack(), shelfTitle) },
-                cardWidth = com.lastwave.app.ui.feed.cards.rememberFeaturedCardWidth(),
-            )
+            val cardBounds = remember(ep.videoId, ep.title) { DropRowBoundsHolder() }
+            Box(Modifier.onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() }) {
+                com.lastwave.app.ui.feed.cards.ShelfFeaturedCard(
+                    title = ep.title,
+                    artist = listOfNotNull(ep.subtitle, ep.showName).joinToString(" \u2022 "),
+                    artworkUrl = ep.artworkUrl,
+                    caption = shelfItem.caption,
+                    onClick = {
+                        dropController?.triggerDrop(
+                            title = ep.title,
+                            artist = ep.showName.orEmpty(),
+                            artworkUrl = ep.artworkUrl,
+                            startCenterInRoot = cardBounds.rect?.center ?: Offset.Unspecified,
+                            kind = LiquidDropKind.PLAY,
+                        )
+                        onPlayTrack(ep.toYouTubeMusicTrack(), shelfTitle)
+                    },
+                    cardWidth = com.lastwave.app.ui.feed.cards.rememberFeaturedCardWidth(),
+                )
+            }
         }
     }
 }

@@ -273,7 +273,11 @@ private fun PlayerToastPillCard(
             )
             val rimBrush = Brush.verticalGradient(
                 if (onDarkBg) {
-                    listOf(Color.White.copy(alpha = 0.44f), Color.White.copy(alpha = 0.14f))
+                    listOf(
+                        Color.White.copy(alpha = 0.52f),
+                        Color.White.copy(alpha = 0.22f),
+                        Color.White.copy(alpha = 0.30f),
+                    )
                 } else {
                     listOf(Color.White.copy(alpha = 0.95f), Color.Black.copy(alpha = 0.10f))
                 },

@@ -75,7 +75,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -1048,13 +1054,27 @@ private fun PlaylistQuickPeekDialog(
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
                     } else {
+                        val dropController = LocalMiniPlayerDropController.current
+                        val thumbOffsetPx = with(LocalDensity.current) { 25.dp.toPx() }
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             previewTracks.forEachIndexed { index, track ->
+                                val rowBounds = remember(track.name, track.artist, index) { DropRowBoundsHolder() }
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
                                         .clip(RoundedCornerShape(12.dp))
-                                        .clickable { onPlayTrack(index) }
+                                        .clickable {
+                                            dropController?.triggerFromBounds(
+                                                title = track.name,
+                                                artist = track.artist,
+                                                artworkUrl = track.artworkUrl,
+                                                rowBoundsInRoot = rowBounds.rect,
+                                                kind = LiquidDropKind.PLAY,
+                                                thumbOffsetPx = thumbOffsetPx,
+                                            )
+                                            onPlayTrack(index)
+                                        }
                                         .padding(horizontal = 6.dp, vertical = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),

@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.lastwave.app.ui.comic.clip
+import com.lastwave.app.ui.player.DropRowBoundsHolder
 import com.lastwave.app.ui.player.LiquidDropKind
 import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.geometry.Rect
@@ -334,11 +335,17 @@ fun ExpressiveGroupTrackRow(
     val density = LocalDensity.current
     val thumbOffsetPx = with(density) { 42.dp.toPx() }
     val dropController = LocalMiniPlayerDropController.current
-    var rowBounds by remember { mutableStateOf<Rect?>(null) }
+    val rowBounds = remember { DropRowBoundsHolder() }
     val shape = groupShape(position)
     val playingContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
 
-    SwipeToQueue(queueTrack, modifier.fillMaxWidth().onGloballyPositioned { rowBounds = it.boundsInRoot() }, shape) {
+    SwipeToQueue(
+        queueTrack,
+        modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() },
+        shape,
+    ) {
         Card(
             shape = shape,
             colors = CardDefaults.cardColors(
@@ -355,13 +362,13 @@ fun ExpressiveGroupTrackRow(
                     interactionSource = interactionSource,
                     indication = androidx.compose.material3.ripple(),
                     onClick = {
-                        if (dropController != null) {
+                        if (dropController != null && (queueTrack != null || dropArtworkUrl != null || badgeTitle != null)) {
                             val dropTrack = queueTrack?.invoke()
                             dropController.triggerFromBounds(
                                 title = dropTrack?.title ?: badgeTitle ?: title,
                                 artist = dropTrack?.artist ?: badgeArtist ?: subtitle,
                                 artworkUrl = dropTrack?.artworkUrl ?: dropArtworkUrl,
-                                rowBoundsInRoot = rowBounds,
+                                rowBoundsInRoot = rowBounds.rect,
                                 kind = LiquidDropKind.PLAY,
                                 thumbOffsetPx = thumbOffsetPx,
                             )

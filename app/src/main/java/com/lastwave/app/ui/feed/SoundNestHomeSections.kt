@@ -84,6 +84,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.lastwave.app.playback.toPlayableTrack
 import com.lastwave.app.ui.common.SwipeToQueue
+import com.lastwave.app.ui.player.DropRowBoundsHolder
 import com.lastwave.app.ui.player.LiquidDropKind
 import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.semantics.heading
@@ -949,6 +950,9 @@ internal fun CompactSongCard(
     val artShape = RoundedCornerShape(10.dp)
     val accentColor = if (comic) ComicAccent else MaterialTheme.colorScheme.primary
     val cardInteraction = remember { MutableInteractionSource() }
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { 36.dp.toPx() }
+    val cardBounds = remember { DropRowBoundsHolder() }
 
     Surface(
         shape = cardShape,
@@ -956,6 +960,7 @@ internal fun CompactSongCard(
         border = if (!comic) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)) else null,
         modifier = modifier
             .width(224.dp)
+            .onGloballyPositioned { if (it.isAttached) cardBounds.rect = it.boundsInRoot() }
             .then(if (comic) Modifier.comicPress(cardInteraction) else Modifier.expressivePressScale(cardInteraction))
             .comicPanel(cardShape, offset = 2.dp)
             .combinedClickable(
@@ -963,6 +968,14 @@ internal fun CompactSongCard(
                 indication = comicIndicationOrNull(),
                 onClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    dropController?.triggerFromBounds(
+                        title = item.title,
+                        artist = item.artist,
+                        artworkUrl = item.artworkUrl,
+                        rowBoundsInRoot = cardBounds.rect,
+                        kind = LiquidDropKind.PLAY,
+                        thumbOffsetPx = thumbOffsetPx,
+                    )
                     item.onClick()
                 },
                 onLongClick = item.onLongClick?.let {
@@ -1288,7 +1301,7 @@ internal fun RecommendedSongRow(
     val haptics = LocalHapticFeedback.current
     val dropController = LocalMiniPlayerDropController.current
     val thumbOffsetPx = with(LocalDensity.current) { (horizontalPadding + 30.dp).toPx() }
-    var rowBounds by remember { mutableStateOf<Rect?>(null) }
+    val rowBounds = remember { DropRowBoundsHolder() }
     val thumbShape = RoundedCornerShape(10.dp)
     val rowShape = RoundedCornerShape(14.dp)
 
@@ -1300,7 +1313,7 @@ internal fun RecommendedSongRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { rowBounds = it.boundsInRoot() }
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
             .clip(rowShape)
             .then(
                 if (item.isCurrent) {
@@ -1321,7 +1334,7 @@ internal fun RecommendedSongRow(
                         title = item.track.title,
                         artist = item.track.artist,
                         artworkUrl = item.track.artworkUrl,
-                        rowBoundsInRoot = rowBounds,
+                        rowBoundsInRoot = rowBounds.rect,
                         kind = LiquidDropKind.PLAY,
                         thumbOffsetPx = thumbOffsetPx,
                     )

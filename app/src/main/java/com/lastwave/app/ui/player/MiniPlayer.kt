@@ -873,7 +873,11 @@ internal fun MiniPlayer(
                             )
                         }
                     }
-                    MiniPlayerProgress(progressState)
+                    MiniPlayerProgress(
+                        progressState = progressState,
+                        isGlass = true,
+                        trackTint = miniGlassInk,
+                    )
                 }
                 MiniPlayerImpactAndQueueOverlay(
                     dropController = dropController,
@@ -915,14 +919,17 @@ internal fun MiniPlayer(
                                 drawPath(path = unifiedPath, color = Color.Black.copy(alpha = if (isDark) 0.34f else 0.14f))
                             }
                             drawPath(path = unifiedPath, color = m3SurfaceColor)
-                            val rimHighlight = Color.White.copy(alpha = if (isDark) 0.16f else 0.48f)
+                            val rimTop = Color.White.copy(alpha = if (isDark) 0.24f else 0.58f)
+                            val rimMid = Color.White.copy(alpha = if (isDark) 0.12f else 0.26f)
+                            val rimBottom = Color.White.copy(alpha = if (isDark) 0.16f else 0.34f)
                             drawPath(
                                 path = unifiedPath,
                                 brush = Brush.verticalGradient(
-                                    0f to rimHighlight,
-                                    0.6f to Color.Transparent,
+                                    0f to rimTop,
+                                    0.5f to rimMid,
+                                    1f to rimBottom,
                                 ),
-                                style = Stroke(width = 0.9.dp.toPx()),
+                                style = Stroke(width = 1.dp.toPx()),
                             )
                         }
                     },
@@ -1170,6 +1177,8 @@ private fun MiniPlayerFavoriteButton(
 internal fun MiniPlayerProgress(
     progressState: StateFlow<PlaybackProgressState>,
     modifier: Modifier = Modifier,
+    isGlass: Boolean = false,
+    trackTint: Color? = null,
 ) {
     val comic = LocalComicTheme.current
     val progressFractionState = remember { mutableFloatStateOf(0f) }
@@ -1182,12 +1191,20 @@ internal fun MiniPlayerProgress(
     Box(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .height(if (comic) 3.5.dp else 3.dp)
+            .then(
+                if (isGlass) {
+                    Modifier.padding(start = 28.dp, end = 28.dp, bottom = 2.5.dp).height(2.dp)
+                } else {
+                    Modifier.padding(horizontal = 14.dp).height(if (comic) 3.5.dp else 3.dp)
+                },
+            )
             .clip(CircleShape)
             .background(
-                if (comic) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f)
-                else MaterialTheme.colorScheme.surfaceVariant,
+                when {
+                    isGlass -> (trackTint ?: Color.White).copy(alpha = 0.18f)
+                    comic -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                },
             ),
     ) {
         // Scale an already measured layer instead of changing its width and

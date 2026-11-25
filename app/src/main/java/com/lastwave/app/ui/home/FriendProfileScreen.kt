@@ -68,7 +68,13 @@ import androidx.compose.ui.Modifier
 import com.lastwave.app.ui.comic.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import com.lastwave.app.ui.player.DropRowBoundsHolder
+import com.lastwave.app.ui.player.LiquidDropKind
+import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.lastwave.app.R
@@ -846,12 +852,29 @@ private fun FriendTrackRow(
     onLongClick: () -> Unit,
     onMenuClick: () -> Unit,
 ) {
+    val dropController = LocalMiniPlayerDropController.current
+    val thumbOffsetPx = with(LocalDensity.current) { 42.dp.toPx() }
+    val rowBounds = remember(track.name, track.artist) { DropRowBoundsHolder() }
     Surface(
         shape = TrackRowShape,
         color = Color.Transparent,
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
+            .combinedClickable(
+                onClick = {
+                    dropController?.triggerFromBounds(
+                        title = track.name,
+                        artist = track.artist,
+                        artworkUrl = track.artworkUrl,
+                        rowBoundsInRoot = rowBounds.rect,
+                        kind = LiquidDropKind.PLAY,
+                        thumbOffsetPx = thumbOffsetPx,
+                    )
+                    onClick()
+                },
+                onLongClick = onLongClick,
+            ),
     ) {
         Row(
             modifier = Modifier

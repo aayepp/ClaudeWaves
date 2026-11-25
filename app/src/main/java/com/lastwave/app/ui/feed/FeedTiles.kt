@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import com.lastwave.app.ui.player.DropRowBoundsHolder
 import com.lastwave.app.ui.player.LiquidDropKind
 import com.lastwave.app.ui.player.LocalMiniPlayerDropController
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -1316,21 +1317,21 @@ private fun QuickPickTrackRow(
     val haptics = LocalHapticFeedback.current
     val dropController = LocalMiniPlayerDropController.current
     val thumbOffsetPx = with(LocalDensity.current) { (horizontalPadding + 24.dp).toPx() }
-    var rowBounds by remember { mutableStateOf<Rect?>(null) }
+    val rowBounds = remember { DropRowBoundsHolder() }
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else Color.Transparent,
         border = null,
         modifier = Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { rowBounds = it.boundsInRoot() }
+            .onGloballyPositioned { if (it.isAttached) rowBounds.rect = it.boundsInRoot() }
             .combinedClickable(
                 onClick = {
                     dropController?.triggerFromBounds(
                         title = track.title,
                         artist = ArtistHelper.primaryArtist(track.artist),
                         artworkUrl = track.artworkUrl,
-                        rowBoundsInRoot = rowBounds,
+                        rowBoundsInRoot = rowBounds.rect,
                         kind = LiquidDropKind.PLAY,
                         thumbOffsetPx = thumbOffsetPx,
                     )
