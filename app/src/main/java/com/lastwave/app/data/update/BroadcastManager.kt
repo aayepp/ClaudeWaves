@@ -2,6 +2,9 @@ package com.lastwave.app.data.update
 
 import android.content.Context
 import android.net.Uri
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +25,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,6 +52,7 @@ data class BroadcastMessage(
     val message: String,
     val type: BroadcastType,
     val publishedAt: String,
+    val imageUrl: String? = null,
     val actionLabel: String?,
     val actionUrl: String?,
     val notify: Boolean,
@@ -125,7 +134,7 @@ class BroadcastManager @Inject constructor(
         _state.value = _state.value.copy(showDialog = false)
     }
 
-    fun hasOwnerToken(): Boolean = !prefs.getString(KEY_OWNER_TOKEN, null).isNullOrBlank()
+    fun hasOwnerToken(): Boolean = !readOwnerToken().isNullOrBlank()
 
     fun savedOwnerLogin(): String? = prefs.getString(KEY_OWNER_LOGIN, null)
 
@@ -134,6 +143,54 @@ class BroadcastManager @Inject constructor(
             .remove(KEY_OWNER_TOKEN)
             .remove(KEY_OWNER_LOGIN)
             .apply()
+    }
+
+    private fun getOrCreateSecretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        (keyStore.getKey(KEYSTORE_ALIAS, null) as? SecretKey)?.let { return it }
+        val spec = KeyGenParameterSpec.Builder(
+            KEYSTORE_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .setRandomizedEncryptionRequired(true)
+            .build()
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).run {
+            init(spec)
+            generateKey()
+        }
+    }
+
+    private fun encryptToken(plainToken: String): String {
+        val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
+        val iv = cipher.iv
+        val ciphertext = cipher.doFinal(plainToken.toByteArray(Charsets.UTF_8))
+        val combined = ByteArray(iv.size + ciphertext.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(ciphertext, 0, combined, iv.size, ciphertext.size)
+        return ENC_PREFIX + Base64.encodeToString(combined, Base64.NO_WRAP)
+    }
+
+    private fun readOwnerToken(): String? {
+        val stored = prefs.getString(KEY_OWNER_TOKEN, null)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (!stored.startsWith(ENC_PREFIX)) {
+            runCatching { encryptToken(stored) }.getOrNull()?.let { encrypted ->
+                prefs.edit().putString(KEY_OWNER_TOKEN, encrypted).apply()
+            }
+            return stored
+        }
+        return runCatching {
+            val payload = Base64.decode(stored.removePrefix(ENC_PREFIX), Base64.NO_WRAP)
+            if (payload.size <= GCM_IV_BYTES) return@runCatching null
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            val key = keyStore.getKey(KEYSTORE_ALIAS, null) as? SecretKey ?: return@runCatching null
+            val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, payload, 0, GCM_IV_BYTES))
+            String(cipher.doFinal(payload, GCM_IV_BYTES, payload.size - GCM_IV_BYTES), Charsets.UTF_8)
+        }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
     suspend fun saveAndVerifyOwnerToken(rawToken: String): Result<String> = withContext(Dispatchers.IO) {
@@ -154,8 +211,9 @@ class BroadcastManager @Inject constructor(
                 if (!login.equals(OWNER_LOGIN, ignoreCase = true)) {
                     return@withContext Result.failure(IllegalStateException("Token bukan milik akaun $OWNER_LOGIN"))
                 }
+                val encryptedToken = encryptToken(token)
                 prefs.edit()
-                    .putString(KEY_OWNER_TOKEN, token)
+                    .putString(KEY_OWNER_TOKEN, encryptedToken)
                     .putString(KEY_OWNER_LOGIN, login)
                     .apply()
                 Result.success(login)
@@ -168,7 +226,7 @@ class BroadcastManager @Inject constructor(
 
     suspend fun fetchOpenBroadcasts(): Result<List<BroadcastMessage>> = withContext(Dispatchers.IO) {
         try {
-            val token = prefs.getString(KEY_OWNER_TOKEN, null)?.takeIf { it.isNotBlank() }
+            val token = readOwnerToken()
             val builder = githubRequestBuilder(ISSUES_ENDPOINT)
                 .cacheControl(CacheControl.FORCE_NETWORK)
                 .get()
@@ -190,17 +248,22 @@ class BroadcastManager @Inject constructor(
         title: String,
         message: String,
         type: BroadcastType,
+        imageUrl: String? = null,
         actionLabel: String?,
         actionUrl: String?,
         notify: Boolean,
         closePrevious: Boolean = true,
     ): Result<BroadcastMessage> = withContext(Dispatchers.IO) {
-        val token = prefs.getString(KEY_OWNER_TOKEN, null)?.takeIf { it.isNotBlank() }
+        val token = readOwnerToken()
             ?: return@withContext Result.failure(IllegalStateException("Tiada token admin disimpan"))
         val cleanTitle = title.trim()
         val cleanMessage = message.trim()
         if (cleanTitle.isEmpty() || cleanMessage.isEmpty()) {
             return@withContext Result.failure(IllegalArgumentException("Tajuk & mesej wajib diisi"))
+        }
+        val cleanImageUrl = sanitizeHttpUrl(imageUrl)
+        if (!imageUrl.isNullOrBlank() && cleanImageUrl == null) {
+            return@withContext Result.failure(IllegalArgumentException("URL gambar mesti bermula dengan http:// atau https://"))
         }
         val cleanUrl = sanitizeHttpUrl(actionUrl)
         if (!actionUrl.isNullOrBlank() && cleanUrl == null) {
@@ -214,7 +277,7 @@ class BroadcastManager @Inject constructor(
             }
             val payload = JSONObject().apply {
                 put("title", cleanTitle)
-                put("body", buildIssueBody(cleanMessage, type, actionLabel, cleanUrl, notify))
+                put("body", buildIssueBody(cleanMessage, type, cleanImageUrl, actionLabel, cleanUrl, notify))
                 put("labels", JSONArray().put(BROADCAST_LABEL))
             }
             val request = githubRequestBuilder("https://api.github.com/repos/$REPO/issues")
@@ -239,7 +302,7 @@ class BroadcastManager @Inject constructor(
     }
 
     suspend fun closeBroadcast(issueNumber: Int): Result<Unit> = withContext(Dispatchers.IO) {
-        val token = prefs.getString(KEY_OWNER_TOKEN, null)?.takeIf { it.isNotBlank() }
+        val token = readOwnerToken()
             ?: return@withContext Result.failure(IllegalStateException("Tiada token admin disimpan"))
         try {
             val payload = JSONObject().apply { put("state", "closed") }
@@ -336,6 +399,7 @@ class BroadcastManager @Inject constructor(
             message = parsed.message,
             type = parsed.type,
             publishedAt = item.optString("created_at").trim(),
+            imageUrl = parsed.imageUrl,
             actionLabel = parsed.actionLabel,
             actionUrl = parsed.actionUrl,
             notify = parsed.notify,
@@ -345,6 +409,7 @@ class BroadcastManager @Inject constructor(
     private data class ParsedBody(
         val type: BroadcastType,
         val notify: Boolean,
+        val imageUrl: String?,
         val actionLabel: String?,
         val actionUrl: String?,
         val message: String,
@@ -354,6 +419,7 @@ class BroadcastManager @Inject constructor(
         val match = META_COMMENT_REGEX.find(rawBody)
         var type = BroadcastType.INFO
         var notify = true
+        var imageUrl: String? = null
         var actionLabel: String? = null
         var actionUrl: String? = null
 
@@ -367,6 +433,7 @@ class BroadcastManager @Inject constructor(
                 when (key) {
                     "type" -> type = BroadcastType.fromKey(rawValue)
                     "notify" -> notify = rawValue.toBooleanStrictOrNull() ?: true
+                    "imageUrl" -> imageUrl = sanitizeHttpUrl(urlDecode(rawValue))
                     "actionLabel" -> actionLabel = urlDecode(rawValue)?.trim()?.ifBlank { null }
                     "actionUrl" -> actionUrl = sanitizeHttpUrl(urlDecode(rawValue))
                 }
@@ -380,6 +447,7 @@ class BroadcastManager @Inject constructor(
         return ParsedBody(
             type = type,
             notify = notify,
+            imageUrl = imageUrl,
             actionLabel = actionLabel,
             actionUrl = actionUrl,
             message = cleanBody,
@@ -389,13 +457,15 @@ class BroadcastManager @Inject constructor(
     private fun buildIssueBody(
         message: String,
         type: BroadcastType,
+        imageUrl: String?,
         actionLabel: String?,
         actionUrl: String?,
         notify: Boolean,
     ): String {
-        val meta = ArrayList<String>(4).apply {
+        val meta = ArrayList<String>(5).apply {
             add("type=${type.key}")
             add("notify=$notify")
+            if (!imageUrl.isNullOrBlank()) add("imageUrl=${urlEncode(imageUrl)}")
             val label = actionLabel?.trim()?.takeIf { it.isNotEmpty() }
             if (label != null) add("actionLabel=${urlEncode(label)}")
             if (!actionUrl.isNullOrBlank()) add("actionUrl=${urlEncode(actionUrl)}")
@@ -424,6 +494,12 @@ class BroadcastManager @Inject constructor(
         private const val KEY_CACHED_JSON = "cached_json"
         private const val KEY_OWNER_TOKEN = "owner_token"
         private const val KEY_OWNER_LOGIN = "owner_login"
+        private const val ANDROID_KEYSTORE = "AndroidKeyStore"
+        private const val KEYSTORE_ALIAS = "claudewaves_broadcast_pat_v1"
+        private const val AES_GCM_TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val ENC_PREFIX = "enc_v1:"
+        private const val GCM_IV_BYTES = 12
+        private const val GCM_TAG_BITS = 128
 
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val WHITESPACE_REGEX = Regex("\\s+")

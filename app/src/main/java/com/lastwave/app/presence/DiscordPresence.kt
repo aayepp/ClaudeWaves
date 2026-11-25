@@ -134,14 +134,23 @@ object DiscordPresence {
 
     /**
      * The activity name. Discord prefixes it with "Listening to" in the member
-     * list, so appending the track makes the compact line read
-     * `Listening to LastWave · <song>`. The plain app name is used when there
-     * is no track text.
+     * list, so appending `"Artist - Title"` makes the compact line read
+     * `Listening to ClaudeWaves · Artist - Title`. Falls back cleanly when artist
+     * or track text is empty and stays inside Discord's 128-character limit.
      */
-    fun activityName(title: String): String {
-        val trimmed = title.trim()
-        return if (trimmed.isEmpty()) "ClaudeWaves" else "ClaudeWaves \u00B7 " + clip(trimmed)
+    fun activityName(title: String, artist: String = ""): String {
+        val cleanTitle = title.trim()
+        val cleanArtist = artist.trim()
+        val body = when {
+            cleanArtist.isNotEmpty() && cleanTitle.isNotEmpty() -> "$cleanArtist - $cleanTitle"
+            cleanTitle.isNotEmpty() -> cleanTitle
+            cleanArtist.isNotEmpty() -> cleanArtist
+            else -> return "ClaudeWaves"
+        }
+        return "ClaudeWaves \u00B7 " + clip(body, MAX_ACTIVITY_BODY)
     }
+
+    private const val MAX_ACTIVITY_BODY = 110
 
     /**
      * The card's subtitle: the track's artist, then the measured quality.
@@ -292,7 +301,7 @@ object DiscordPresence {
 
         return buildJsonObject {
             put("type", TYPE_LISTENING)
-            put("name", activityName(title))
+            put("name", activityName(title, track.artist))
             put("details", title)
             put("state", stateLine(track.artist, track.album, quality))
             timestamps?.let { put("timestamps", it) }
@@ -412,7 +421,7 @@ object DiscordPresence {
         return buildJsonObject {
             put("application_id", APPLICATION_ID)
             put("type", settings.activityType.code)
-            put("name", "ClaudeWaves")
+            put("name", activityName(title, track.artist))
             put("details", title)
             if (watchUrl != null) put("details_url", watchUrl)
             put("state", stateText)

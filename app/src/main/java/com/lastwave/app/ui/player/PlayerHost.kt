@@ -2,6 +2,7 @@
 
 package com.lastwave.app.ui.player
 
+import com.lastwave.app.ui.theme.ComicInk
 import com.lastwave.app.ui.theme.comicPanel
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.NowPlayingPaletteScope
@@ -222,6 +223,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -791,6 +794,9 @@ fun PlayerHost(
             }
             if ((playerLayerShown || playerMounted) && state.current != null) {
                 val sheetDensity = LocalDensity.current
+                val morphGlass = LocalLiquidGlass.current
+                val morphComic = LocalComicTheme.current
+                val morphDark = LocalIsDarkTheme.current
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -835,6 +841,75 @@ fun PlayerHost(
                         .drawBehind {
                             // Solid card surface visible until the full player fades in.
                             if (playerExpansion.value < 1f) drawRect(morphCardColor)
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            val p = playerExpansion.value.coerceIn(0f, 1f)
+                            if (p <= 0.01f || p >= 0.99f) return@drawWithContent
+                            val sweep = sin(p * kotlin.math.PI.toFloat())
+                            val start = miniCardBounds
+                                ?: androidx.compose.ui.geometry.Rect(0f, size.height, size.width, size.height)
+                            val left = androidx.compose.ui.util.lerp(start.left, 0f, p)
+                            val right = androidx.compose.ui.util.lerp(start.right, size.width, p)
+                            val top = androidx.compose.ui.util.lerp(start.top, 0f, p)
+                            val bottom = if (isFullmodeTransition) {
+                                androidx.compose.ui.util.lerp(start.bottom, size.height, p.pow(1.35f))
+                            } else {
+                                androidx.compose.ui.util.lerp(start.bottom, size.height, p)
+                            }
+                            val startRadius = minOf(start.height / 2f, PLAYER_SHEET_CORNER_RADIUS.toPx() + 8.dp.toPx())
+                            val radius = if (isFullmodeTransition) {
+                                androidx.compose.ui.util.lerp(startRadius, 0f, p.pow(1.2f))
+                            } else {
+                                androidx.compose.ui.util.lerp(startRadius, 0f, p)
+                            }
+                            val morphOutline = PlayerMorphShape(
+                                left = left,
+                                right = right,
+                                height = bottom - top,
+                                radius = radius,
+                            ).createOutline(size, layoutDirection, this)
+                            if (morphComic) {
+                                drawOutline(
+                                    outline = morphOutline,
+                                    color = ComicInk.copy(alpha = 0.85f * sweep),
+                                    style = Stroke(width = 2.5.dp.toPx()),
+                                )
+                            } else if (morphGlass) {
+                                val sweepStartX = androidx.compose.ui.util.lerp(-size.width * 0.25f, size.width * 0.65f, p)
+                                val sweepEndX = sweepStartX + size.width * 0.65f
+                                drawRect(
+                                    brush = Brush.linearGradient(
+                                        0f to Color.Transparent,
+                                        0.45f to Color.White.copy(alpha = (if (morphDark) 0.14f else 0.22f) * sweep),
+                                        0.55f to Color(0xFF7BE8FF).copy(alpha = (if (morphDark) 0.08f else 0.12f) * sweep),
+                                        1f to Color.Transparent,
+                                        start = Offset(sweepStartX, 0f),
+                                        end = Offset(sweepEndX, (bottom - top).coerceAtLeast(1f)),
+                                    ),
+                                    topLeft = Offset(left, 0f),
+                                    size = Size((right - left).coerceAtLeast(0f), (bottom - top).coerceAtLeast(0f)),
+                                    blendMode = BlendMode.Plus,
+                                )
+                                if (!morphDark) {
+                                    drawOutline(
+                                        outline = morphOutline,
+                                        color = Color.Black.copy(alpha = 0.14f * sweep),
+                                        style = Stroke(width = 2.dp.toPx()),
+                                    )
+                                }
+                                drawOutline(
+                                    outline = morphOutline,
+                                    brush = Brush.linearGradient(
+                                        0f to Color.White.copy(alpha = 0.85f * sweep),
+                                        0.5f to Color(0xFF7BE8FF).copy(alpha = 0.42f * sweep),
+                                        1f to Color.White.copy(alpha = 0.50f * sweep),
+                                        start = Offset(sweepStartX, 0f),
+                                        end = Offset(sweepEndX, (bottom - top).coerceAtLeast(1f)),
+                                    ),
+                                    style = Stroke(width = 1.6.dp.toPx()),
+                                )
+                            }
                         },
                 ) {
                     // The cover grows with the card from the mini player to full bleed, so the eye

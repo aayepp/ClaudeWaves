@@ -197,6 +197,7 @@ fun LastWaveTheme(
                 Density(baseDensity.density * UI_SCALE, baseDensity.fontScale)
             }
             SideEffect { LiquidGlassIntensity.value = themeState.liquidGlassIntensity }
+            GlassTiltEffect(enabled = glass)
             CompositionLocalProvider(
                 LocalDensity provides compactDensity,
                 LocalFontFamilyResolver provides fontResolver,

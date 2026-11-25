@@ -158,6 +158,7 @@ class BroadcastAdminViewModel @Inject constructor(
         title: String,
         message: String,
         type: BroadcastType,
+        imageUrl: String,
         actionLabel: String,
         actionUrl: String,
         notify: Boolean,
@@ -169,6 +170,7 @@ class BroadcastAdminViewModel @Inject constructor(
                 title = title,
                 message = message,
                 type = type,
+                imageUrl = imageUrl.ifBlank { null },
                 actionLabel = actionLabel.ifBlank { null },
                 actionUrl = actionUrl.ifBlank { null },
                 notify = notify,
@@ -241,6 +243,7 @@ internal fun BroadcastAdminSheet(
     var selectedType by rememberSaveable { mutableStateOf(BroadcastType.INFO) }
     var title by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("") }
+    var imageUrl by rememberSaveable { mutableStateOf("") }
     var actionLabel by rememberSaveable { mutableStateOf("") }
     var actionUrl by rememberSaveable { mutableStateOf("") }
     var notify by rememberSaveable { mutableStateOf(true) }
@@ -480,8 +483,19 @@ internal fun BroadcastAdminSheet(
                 value = message,
                 onValueChange = { message = it },
                 label = { Text("Mesej") },
+                supportingText = { Text("Sokong Markdown: **tebal**, - senarai, # tajuk") },
                 minLines = 3,
                 maxLines = 6,
+                shape = fieldShape,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = imageUrl,
+                onValueChange = { imageUrl = it },
+                label = { Text("URL Gambar Banner (pilihan)") },
+                placeholder = { Text("Kosong = banner default ClaudeWaves") },
+                singleLine = true,
                 shape = fieldShape,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -548,12 +562,14 @@ internal fun BroadcastAdminSheet(
                         title = title,
                         message = message,
                         type = selectedType,
+                        imageUrl = imageUrl,
                         actionLabel = actionLabel,
                         actionUrl = actionUrl,
                         notify = notify,
                     ) {
                         title = ""
                         message = ""
+                        imageUrl = ""
                         actionLabel = ""
                         actionUrl = ""
                     }

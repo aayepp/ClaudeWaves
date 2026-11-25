@@ -2,6 +2,7 @@ package com.lastwave.app.ui.player
 
 import com.lastwave.app.ui.theme.PlayerPalette
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -22,6 +23,9 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import com.lastwave.app.ui.common.LocalAmbientAnimationsActive
+import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import com.lastwave.app.ui.theme.LocalLiquidGlass
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.sin
@@ -105,6 +109,14 @@ internal fun WavyProgressTrack(
     val amp1 by animateFloatAsState(if (dragging) 1.2f else 13f, tween(180), label = "Amp1")
     val amp2 by animateFloatAsState(if (dragging) 1.2f else 10f, tween(180), label = "Amp2")
     val amp3 by animateFloatAsState(if (dragging) 1.2f else 7.5f, tween(180), label = "Amp3")
+    val dropletMorph by animateFloatAsState(
+        targetValue = if (dragging) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 420f),
+        label = "wavyDropletThumb",
+    )
+    val isGlass = LocalLiquidGlass.current
+    val isComic = LocalComicTheme.current
+    val isDark = LocalIsDarkTheme.current
 
     val contour1 = remember { Path() }
     val contour2 = remember { Path() }
@@ -162,11 +174,27 @@ internal fun WavyProgressTrack(
             }
         }
 
-        val thumbRadius = 7.5.dp.toPx()
-        val center = Offset(thumbX, centerY)
-        drawCircle(thumbColor.copy(alpha = 0.35f), thumbRadius + 3.5.dp.toPx(), center)
-        drawCircle(thumbColor, thumbRadius, center)
-        drawCircle(PlayerPalette.ink.copy(alpha = 0.55f), thumbRadius, center, style = Stroke(1.2.dp.toPx()))
+        val restSize = 15.dp.toPx()
+        val dragW = 36.dp.toPx()
+        val dragH = 22.dp.toPx()
+        val currentW = androidx.compose.ui.util.lerp(restSize, dragW, dropletMorph.coerceAtLeast(0f)).coerceAtLeast(2f)
+        val thumbDrawX = if (width > currentW) {
+            thumbX.coerceIn(currentW / 2f, width - currentW / 2f)
+        } else {
+            width / 2f
+        }
+        drawLiquidGlassDropletThumb(
+            center = Offset(thumbDrawX, centerY),
+            restWidthPx = restSize,
+            restHeightPx = restSize,
+            dragWidthPx = dragW,
+            dragHeightPx = dragH,
+            dragMorph = dropletMorph,
+            thumbColor = thumbColor,
+            isGlass = isGlass,
+            isComic = isComic,
+            isDark = isDark,
+        )
     }
 }
 

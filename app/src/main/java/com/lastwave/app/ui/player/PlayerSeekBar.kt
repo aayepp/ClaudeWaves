@@ -224,6 +224,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -315,6 +317,7 @@ import com.lastwave.app.ui.theme.ComicInk
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalLiquidGlass
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import com.lastwave.app.ui.theme.LiquidGlassIntensity
 import com.lastwave.app.ui.theme.LiquidGlassSurface
 import com.lastwave.app.ui.theme.liquidGlass
 import com.lastwave.app.ui.theme.liquidGlassChrome
@@ -363,6 +366,15 @@ internal fun PlayerProgressSlider(
     secondaryColor: Color = MaterialTheme.colorScheme.secondary,
 ) {
     val dragged by interactionSource.collectIsDraggedAsState()
+    val pressed by interactionSource.collectIsPressedAsState()
+    val dropletMorph by animateFloatAsState(
+        targetValue = if (dragged || pressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 420f),
+        label = "playerProgressDroplet",
+    )
+    val isGlass = LocalLiquidGlass.current
+    val isComic = LocalComicTheme.current
+    val isDark = LocalIsDarkTheme.current
     val darkBackdrop = PlayerPalette.shade.luminance() < 0.5f
     val primary = remember(primaryColor, darkBackdrop) {
         primaryColor.ensureVisibleOnBackdrop(darkBackdrop, 0.38f)
@@ -400,13 +412,16 @@ internal fun PlayerProgressSlider(
                 )
                 val thumbWidthPx = 5.dp.toPx()
                 val thumbHeightPx = 38.dp.toPx()
+                val dragWidthPx = 30.dp.toPx()
+                val dragHeightPx = 24.dp.toPx()
+                val currentThumbW = androidx.compose.ui.util.lerp(thumbWidthPx, dragWidthPx, dropletMorph.coerceAtLeast(0f)).coerceAtLeast(2f)
                 val thumbClearancePx = 9.dp.toPx()
 
                 val rawThumbCenterX = fraction * width
-                val thumbCenterX = if (width > thumbWidthPx) {
+                val thumbCenterX = if (width > currentThumbW) {
                     rawThumbCenterX.coerceIn(
-                        thumbWidthPx / 2f,
-                        width - thumbWidthPx / 2f,
+                        currentThumbW / 2f,
+                        width - currentThumbW / 2f,
                     )
                 } else {
                     width / 2f
@@ -463,38 +478,17 @@ internal fun PlayerProgressSlider(
                     )
                 }
 
-                // Vertical thumb with a subtle shadow.
-                val thumbX = thumbCenterX - thumbWidthPx / 2f
-                val thumbCornerRadius = CornerRadius(
-                    thumbWidthPx / 2f,
-                    thumbWidthPx / 2f,
-                )
-                val shadowExtra = 2.dp.toPx()
-
-                drawRoundRect(
-                    color = PlayerPalette.shade.copy(alpha = 0.35f),
-                    topLeft = Offset(
-                        thumbX - shadowExtra / 2f,
-                        centerY - thumbHeightPx / 2f - shadowExtra / 2f,
-                    ),
-                    size = Size(
-                        thumbWidthPx + shadowExtra,
-                        thumbHeightPx + shadowExtra,
-                    ),
-                    cornerRadius = CornerRadius(
-                        (thumbWidthPx + shadowExtra) / 2f,
-                        (thumbWidthPx + shadowExtra) / 2f,
-                    ),
-                )
-
-                drawRoundRect(
-                    color = thumbColor,
-                    topLeft = Offset(
-                        thumbX,
-                        centerY - thumbHeightPx / 2f,
-                    ),
-                    size = Size(thumbWidthPx, thumbHeightPx),
-                    cornerRadius = thumbCornerRadius,
+                drawLiquidGlassDropletThumb(
+                    center = Offset(thumbCenterX, centerY),
+                    restWidthPx = thumbWidthPx,
+                    restHeightPx = thumbHeightPx,
+                    dragWidthPx = dragWidthPx,
+                    dragHeightPx = dragHeightPx,
+                    dragMorph = dropletMorph,
+                    thumbColor = thumbColor,
+                    isGlass = isGlass,
+                    isComic = isComic,
+                    isDark = isDark,
                 )
             }
 
@@ -738,9 +732,17 @@ internal fun SeekBar(
     }
 
     val isComic = LocalComicTheme.current
+    val isGlass = LocalLiquidGlass.current
+    val isDark = LocalIsDarkTheme.current
     val comicPrimary = MaterialTheme.colorScheme.primary
+    val isDraggingSeek = isInteracting || dragFraction != null
+    val dropletMorph by animateFloatAsState(
+        targetValue = if (isDraggingSeek) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 420f),
+        label = "seekBarDroplet",
+    )
     val minimalBarHeightDp by animateDpAsState(
-        targetValue = if (isInteracting || dragFraction != null) 7.5.dp else 4.5.dp,
+        targetValue = if (isDraggingSeek) 7.5.dp else 4.5.dp,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "minimalSeekBarHeight",
     )
@@ -786,19 +788,22 @@ internal fun SeekBar(
                         cornerRadius = barRadius,
                     )
                 }
-                val dotRadius = if (isInteracting || dragFraction != null) 6.dp.toPx() else 3.8.dp.toPx()
-                val dotX = (fraction * width).coerceIn(dotRadius, (width - dotRadius).coerceAtLeast(dotRadius))
-                if (isComic) {
-                    drawCircle(
-                        color = ComicInk,
-                        radius = dotRadius + 1.5.dp.toPx(),
-                        center = Offset(dotX, centerY),
-                    )
-                }
-                drawCircle(
-                    color = activeColor,
-                    radius = dotRadius,
+                val restSizePx = if (isDraggingSeek) 12.dp.toPx() else 7.6.dp.toPx()
+                val dragW = 28.dp.toPx()
+                val dragH = 18.dp.toPx()
+                val currentW = androidx.compose.ui.util.lerp(restSizePx, dragW, dropletMorph.coerceAtLeast(0f)).coerceAtLeast(2f)
+                val dotX = (fraction * width).coerceIn(currentW / 2f, (width - currentW / 2f).coerceAtLeast(currentW / 2f))
+                drawLiquidGlassDropletThumb(
                     center = Offset(dotX, centerY),
+                    restWidthPx = restSizePx,
+                    restHeightPx = restSizePx,
+                    dragWidthPx = dragW,
+                    dragHeightPx = dragH,
+                    dragMorph = dropletMorph,
+                    thumbColor = activeColor,
+                    isGlass = isGlass,
+                    isComic = isComic,
+                    isDark = isDark,
                 )
             } else Canvas(modifier = Modifier.fillMaxWidth().height(44.dp)) {
                 // Draw-phase read: the 60 ms tick invalidates draw without a recomposition.
@@ -810,10 +815,13 @@ internal fun SeekBar(
                 val cornerRadius = CornerRadius(trackHeightPx / 2f, trackHeightPx / 2f)
                 val thumbWidthPx = 5.dp.toPx()
                 val thumbHeightPx = 38.dp.toPx()
+                val dragWidthPx = 32.dp.toPx()
+                val dragHeightPx = 24.dp.toPx()
+                val currentThumbW = androidx.compose.ui.util.lerp(thumbWidthPx, dragWidthPx, dropletMorph.coerceAtLeast(0f)).coerceAtLeast(2f)
                 val thumbClearancePx = 9.dp.toPx()
                 val rawThumbCenterX = fraction * width
-                val thumbCenterX = if (width > thumbWidthPx) {
-                    rawThumbCenterX.coerceIn(thumbWidthPx / 2f, width - thumbWidthPx / 2f)
+                val thumbCenterX = if (width > currentThumbW) {
+                    rawThumbCenterX.coerceIn(currentThumbW / 2f, width - currentThumbW / 2f)
                 } else {
                     width / 2f
                 }
@@ -850,23 +858,17 @@ internal fun SeekBar(
                     )
                 }
 
-                // Tall vertical pill thumb with clear space on both sides.
-                val thumbX = thumbCenterX - thumbWidthPx / 2f
-                val thumbCornerRadius = CornerRadius(thumbWidthPx / 2f, thumbWidthPx / 2f)
-
-                // Subtle dark drop-shadow behind thumb to guarantee 100% boundary separation on any artwork
-                drawRoundRect(
-                    color = PlayerPalette.shade.copy(alpha = 0.35f),
-                    topLeft = Offset(thumbX - 1.dp.toPx(), centerY - thumbHeightPx / 2f - 1.dp.toPx()),
-                    size = Size(thumbWidthPx + 2.dp.toPx(), thumbHeightPx + 2.dp.toPx()),
-                    cornerRadius = CornerRadius((thumbWidthPx + 2.dp.toPx()) / 2f, (thumbWidthPx + 2.dp.toPx()) / 2f),
-                )
-
-                drawRoundRect(
-                    color = effectivePrimary,
-                    topLeft = Offset(thumbX, centerY - thumbHeightPx / 2f),
-                    size = Size(thumbWidthPx, thumbHeightPx),
-                    cornerRadius = thumbCornerRadius,
+                drawLiquidGlassDropletThumb(
+                    center = Offset(thumbCenterX, centerY),
+                    restWidthPx = thumbWidthPx,
+                    restHeightPx = thumbHeightPx,
+                    dragWidthPx = dragWidthPx,
+                    dragHeightPx = dragHeightPx,
+                    dragMorph = dropletMorph,
+                    thumbColor = effectivePrimary,
+                    isGlass = isGlass,
+                    isComic = isComic,
+                    isDark = isDark,
                 )
             }
 
@@ -1078,4 +1080,177 @@ internal fun SeekBar(
 internal fun formatTime(ms: Long): String {
     val total = (ms.coerceAtLeast(0) / 1000)
     return "%d:%02d".format(total / 60, total % 60)
+}
+
+/**
+ * Morphs a seekbar or volume thumb into an elongated translucent Liquid Glass droplet capsule
+ * while scrubbed/dragged, with crisp Ink outline in Comic Pop and clean solid pill in No-Glass.
+ */
+internal fun DrawScope.drawLiquidGlassDropletThumb(
+    center: Offset,
+    restWidthPx: Float,
+    restHeightPx: Float,
+    dragWidthPx: Float,
+    dragHeightPx: Float,
+    dragMorph: Float,
+    thumbColor: Color,
+    isGlass: Boolean,
+    isComic: Boolean,
+    isDark: Boolean,
+) {
+    val m = dragMorph.coerceAtLeast(0f)
+    val mClamped = dragMorph.coerceIn(0f, 1f)
+    val w = androidx.compose.ui.util.lerp(restWidthPx, dragWidthPx, m).coerceAtLeast(2f)
+    val h = androidx.compose.ui.util.lerp(restHeightPx, dragHeightPx, m).coerceAtLeast(2f)
+    val topLeft = Offset(center.x - w / 2f, center.y - h / 2f)
+    val cornerR = minOf(w, h) / 2f
+    val corner = CornerRadius(cornerR, cornerR)
+
+    if (isComic) {
+        val strokePad = 2.dp.toPx()
+        drawRoundRect(
+            color = ComicInk,
+            topLeft = Offset(topLeft.x - strokePad, topLeft.y - strokePad),
+            size = Size(w + strokePad * 2f, h + strokePad * 2f),
+            cornerRadius = CornerRadius(cornerR + strokePad, cornerR + strokePad),
+        )
+        drawRoundRect(
+            color = thumbColor,
+            topLeft = topLeft,
+            size = Size(w, h),
+            cornerRadius = corner,
+        )
+        return
+    }
+
+    if (!isGlass) {
+        val shadowPad = 1.dp.toPx()
+        drawRoundRect(
+            color = PlayerPalette.shade.copy(alpha = 0.35f),
+            topLeft = Offset(topLeft.x - shadowPad, topLeft.y - shadowPad),
+            size = Size(w + shadowPad * 2f, h + shadowPad * 2f),
+            cornerRadius = CornerRadius(cornerR + shadowPad, cornerR + shadowPad),
+        )
+        drawRoundRect(
+            color = thumbColor,
+            topLeft = topLeft,
+            size = Size(w, h),
+            cornerRadius = corner,
+        )
+        if (mClamped > 0.05f) {
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.32f * mClamped),
+                topLeft = topLeft,
+                size = Size(w, h),
+                cornerRadius = corner,
+                style = Stroke(width = 1.dp.toPx()),
+            )
+        }
+        return
+    }
+
+    if (mClamped <= 0.02f) {
+        val shadowPad = 1.dp.toPx()
+        drawRoundRect(
+            color = PlayerPalette.shade.copy(alpha = 0.32f),
+            topLeft = Offset(topLeft.x - shadowPad, topLeft.y - shadowPad),
+            size = Size(w + shadowPad * 2f, h + shadowPad * 2f),
+            cornerRadius = CornerRadius(cornerR + shadowPad, cornerR + shadowPad),
+        )
+        drawRoundRect(
+            color = thumbColor,
+            topLeft = topLeft,
+            size = Size(w, h),
+            cornerRadius = corner,
+        )
+        return
+    }
+
+    // Soft glowing halo behind the expanding glass droplet.
+    val haloPad = 3.5.dp.toPx() * mClamped
+    drawRoundRect(
+        color = thumbColor.copy(alpha = 0.24f * mClamped),
+        topLeft = Offset(topLeft.x - haloPad, topLeft.y - haloPad),
+        size = Size(w + haloPad * 2f, h + haloPad * 2f),
+        cornerRadius = CornerRadius(cornerR + haloPad, cornerR + haloPad),
+    )
+
+    // Translucent frosted glass core + top-sheen fill gradient.
+    val coreAlpha = androidx.compose.ui.util.lerp(1f, if (isDark) 0.30f else 0.38f, mClamped)
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = (if (isDark) 0.34f else 0.56f) * mClamped),
+                thumbColor.copy(alpha = coreAlpha),
+                PlayerPalette.shade.copy(alpha = 0.26f * mClamped),
+            ),
+            startY = topLeft.y,
+            endY = topLeft.y + h,
+        ),
+        topLeft = topLeft,
+        size = Size(w, h),
+        cornerRadius = corner,
+    )
+
+    // Inner convex meniscus reflection along the upper curve of the droplet.
+    val insetX = 3.dp.toPx() * mClamped
+    val insetY = 2.dp.toPx() * mClamped
+    val meniscusW = (w - insetX * 2f).coerceAtLeast(1f)
+    val meniscusH = (h * 0.44f).coerceAtLeast(1f)
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = (if (isDark) 0.58f else 0.82f) * mClamped),
+                Color.Transparent,
+            ),
+            startY = topLeft.y + insetY,
+            endY = topLeft.y + insetY + meniscusH,
+        ),
+        topLeft = Offset(topLeft.x + insetX, topLeft.y + insetY),
+        size = Size(meniscusW, meniscusH),
+        cornerRadius = CornerRadius(meniscusH / 2f, meniscusH / 2f),
+    )
+
+    // Chromatic edge dispersion at higher glass clarity.
+    if (LiquidGlassIntensity.value >= 0.45f) {
+        drawRoundRect(
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    Color(0xFF7BE8FF).copy(alpha = 0.45f * mClamped),
+                    Color.Transparent,
+                    Color(0xFFFFB0E8).copy(alpha = 0.42f * mClamped),
+                ),
+                startX = topLeft.x,
+                endX = topLeft.x + w,
+            ),
+            topLeft = topLeft,
+            size = Size(w, h),
+            cornerRadius = corner,
+            style = Stroke(width = 1.2.dp.toPx()),
+        )
+    }
+
+    // Light-mode hairline + bright directional outer specular rim.
+    if (!isDark) {
+        drawRoundRect(
+            color = Color.Black.copy(alpha = 0.14f * mClamped),
+            topLeft = topLeft,
+            size = Size(w, h),
+            cornerRadius = corner,
+            style = Stroke(width = 1.8.dp.toPx()),
+        )
+    }
+    drawRoundRect(
+        brush = Brush.linearGradient(
+            0f to Color.White.copy(alpha = 0.94f * mClamped),
+            0.48f to Color.White.copy(alpha = 0.22f * mClamped),
+            1f to Color.White.copy(alpha = 0.56f * mClamped),
+            start = topLeft,
+            end = Offset(topLeft.x + w, topLeft.y + h),
+        ),
+        topLeft = topLeft,
+        size = Size(w, h),
+        cornerRadius = corner,
+        style = Stroke(width = 1.35.dp.toPx()),
+    )
 }

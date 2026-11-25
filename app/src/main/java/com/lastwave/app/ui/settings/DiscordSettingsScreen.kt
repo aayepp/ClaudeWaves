@@ -914,12 +914,21 @@ private fun DiscordPresencePreviewCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth(),
             ) {
+                val previewActivityName = if (track != null) {
+                    DiscordPresence.activityName(track.title, track.artist)
+                } else {
+                    "ClaudeWaves"
+                }
                 Text(
-                    text = "${settings.activityType.prefix} ClaudeWaves".uppercase(),
+                    text = "${settings.activityType.prefix} $previewActivityName".uppercase(),
                     style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = settings.presenceStatus.uppercase(),
                     style = MaterialTheme.typography.labelSmall,

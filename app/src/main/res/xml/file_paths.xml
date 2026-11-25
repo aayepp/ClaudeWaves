@@ -2,5 +2,5 @@
 <paths>
     <external-files-path name="documents" path="Documents/" />
     <cache-path name="shared" path="shared/" />
-    <files-path name="internal" path="." />
+    <files-path name="exports" path="exports/" />
 </paths>

@@ -3,10 +3,14 @@ package com.lastwave.app.ui.player
 import com.lastwave.app.ui.common.AnimatedToggleIcon
 
 import com.lastwave.app.ui.comic.clipOnly
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -45,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lastwave.app.playback.MusicPlayer
 import com.lastwave.app.ui.theme.LiquidGlassPreset
+import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
 import com.lastwave.app.ui.theme.LocalLiquidGlass
 import com.lastwave.app.ui.theme.PlayerPalette
 import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
@@ -105,6 +111,16 @@ fun VolumeSlider(
     }
 
     val interactionSource = remember { MutableInteractionSource() }
+    val isDragged by interactionSource.collectIsDraggedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val dropletMorph by animateFloatAsState(
+        targetValue = if (isDragged || isPressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 420f),
+        label = "volumeDropletThumb",
+    )
+    val isGlass = LocalLiquidGlass.current
+    val isComic = LocalComicTheme.current
+    val isDark = LocalIsDarkTheme.current
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         val containerShape = RoundedCornerShape(100)
@@ -179,10 +195,13 @@ fun VolumeSlider(
                     val cornerRadius = CornerRadius(trackHeightPx / 2f, trackHeightPx / 2f)
                     val thumbWidthPx = 5.dp.toPx()
                     val thumbHeightPx = 24.dp.toPx()
+                    val dragWidthPx = 26.dp.toPx()
+                    val dragHeightPx = 22.dp.toPx()
+                    val currentThumbW = androidx.compose.ui.util.lerp(thumbWidthPx, dragWidthPx, dropletMorph.coerceAtLeast(0f)).coerceAtLeast(2f)
                     val thumbClearancePx = 6.dp.toPx()
                     val rawThumbCenterX = displayFraction * width
-                    val thumbCenterX = if (width > thumbWidthPx) {
-                        rawThumbCenterX.coerceIn(thumbWidthPx / 2f, width - thumbWidthPx / 2f)
+                    val thumbCenterX = if (width > currentThumbW) {
+                        rawThumbCenterX.coerceIn(currentThumbW / 2f, width - currentThumbW / 2f)
                     } else {
                         width / 2f
                     }
@@ -219,14 +238,17 @@ fun VolumeSlider(
                         )
                     }
 
-                    // Vertical pill thumb
-                    val thumbX = thumbCenterX - thumbWidthPx / 2f
-                    val thumbCorner = CornerRadius(thumbWidthPx / 2f, thumbWidthPx / 2f)
-                    drawRoundRect(
-                        color = thumbColor,
-                        topLeft = Offset(thumbX, centerY - thumbHeightPx / 2f),
-                        size = Size(thumbWidthPx, thumbHeightPx),
-                        cornerRadius = thumbCorner,
+                    drawLiquidGlassDropletThumb(
+                        center = Offset(thumbCenterX, centerY),
+                        restWidthPx = thumbWidthPx,
+                        restHeightPx = thumbHeightPx,
+                        dragWidthPx = dragWidthPx,
+                        dragHeightPx = dragHeightPx,
+                        dragMorph = dropletMorph,
+                        thumbColor = thumbColor,
+                        isGlass = isGlass,
+                        isComic = isComic,
+                        isDark = isDark,
                     )
                 }
 

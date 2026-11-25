@@ -78,8 +78,8 @@ class DiscordPresenceTest {
         val activity = DiscordPresence.buildActivity(state(), NOW_MS)
         assertEquals(2, activity["type"]?.jsonPrimitive?.int) // 2 = Listening
         // The compact member-list line renders "Listening to " + name, so the
-        // name carries the track to read "Listening to ClaudeWaves · <song>".
-        assertEquals("ClaudeWaves \u00B7 Sunglasses at Night", str(activity, "name"))
+        // name carries artist & title to read "ClaudeWaves · <artist> - <song>".
+        assertEquals("ClaudeWaves \u00B7 Moondrop - Sunglasses at Night", str(activity, "name"))
         assertEquals("Sunglasses at Night", str(activity, "details"))
         assertEquals("Moondrop \u00B7 Hi-Res Lossless \u00B7 24-bit \u00B7 96 kHz", str(activity, "state"))
         // No status_display_type: the compact member-list line falls back to
@@ -397,6 +397,25 @@ class DiscordPresenceTest {
     fun shipsTheSameApplicationIdAsTheDesktopClient() {
         assertEquals("1552563991426105414", DiscordPresence.APPLICATION_ID)
         assertTrue(DiscordPresence.isConfigured())
+    }
+
+    @Test
+    fun gatewayActivityAndActivityNameCarryArtistAndTitleWithinDiscordLimit() {
+        val gateway = DiscordPresence.buildGatewayActivity(
+            state = state(),
+            settings = DiscordSettings(),
+            nowMs = NOW_MS,
+            resolvedLargeImage = "mp:external/cover",
+            resolvedSmallImage = "mp:external/logo",
+        )
+        assertEquals("ClaudeWaves \u00B7 Moondrop - Sunglasses at Night", str(gateway, "name"))
+        assertEquals("ClaudeWaves \u00B7 Sunglasses at Night", DiscordPresence.activityName("Sunglasses at Night", "  "))
+        assertEquals("ClaudeWaves \u00B7 Moondrop", DiscordPresence.activityName("  ", "Moondrop"))
+        assertEquals("ClaudeWaves", DiscordPresence.activityName("  ", ""))
+
+        val clipped = DiscordPresence.activityName("T".repeat(120), "A".repeat(120))
+        assertTrue(clipped.length <= 128)
+        assertTrue(clipped.startsWith("ClaudeWaves \u00B7 "))
     }
 
     private companion object {

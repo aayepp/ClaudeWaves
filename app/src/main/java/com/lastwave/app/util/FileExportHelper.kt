@@ -47,7 +47,7 @@ class FileExportHelper @Inject constructor(
     }
 
     private fun documentsDir(): File {
-        val dir = context.getExternalFilesDir("Documents") ?: context.filesDir
+        val dir = context.getExternalFilesDir("Documents") ?: File(context.filesDir, "exports")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
