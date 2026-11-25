@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.45] - 2026-11-26
+
+### Added
+- **Queue tab docked MiniPlayer & liquid drop:** docked `MiniPlayer` cleanly at the bottom of the Now Playing Queue screen with a scoped `MiniPlayerDropController` and `MiniPlayerLiquidDropOverlay`, launching the Living Water Globule drop animation into the Queue `MiniPlayer` whenever a track is tapped from the Queue list or shuffle preview.
+
+### Fixed
+- **Transparent Now Playing glass pills during Animated Album Canvas:** added `LocalLiveVideoOverlayAlpha` so Now Playing Liquid Glass pills fade out and skip frozen static `LayerBackdrop` captures while live Animated Album Canvas video plays behind them — letting the moving video shine straight through crystal-clear glass pills without solid `LikedBg`, `primaryContainer`, or translucent color veils (preserving Comic Pop and non-glass themes).
+- **Animated Album Canvas play/pause sync:** included `isPlaying` in `CanvasArtworkPlayer` playback gating so Animated Album Canvas pauses cleanly in sync when music pauses and resumes when playback resumes.
+- **Smooth butter-fluid dock tab switching:** extended `GlassMotion` to pause GPU→CPU pixel readbacks (`BackdropContrast`) and heavy lens refraction during `HorizontalPager` tab switches, removed per-frame `waterDropJiggle` AGSL re-blur churn and duplicate `liquid(pageState)` passes on `LiquidNavigationBar`, memoized dock items and text metrics, eliminated `settledPosition.isRunning` recomposition churn, and replaced 6 GPU `RenderEffect` blur layers in `NavigationGlyphs` with crisp contrast halos.
+
 ## [1.0.44] - 2026-11-26
 
 ### Changed
