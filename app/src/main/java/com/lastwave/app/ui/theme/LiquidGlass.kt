@@ -44,8 +44,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
@@ -60,6 +62,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -91,9 +94,11 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.Shadow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.sign
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.kyant.backdrop.backdrops.layerBackdrop as nativeBackdrop
@@ -736,6 +741,192 @@ internal object GlassRecipe {
     const val PRESS_REFRACTION_DP = 5f
 }
 
+private fun DrawScope.drawGlassSurfaceOverlay(
+    layoutDirection: LayoutDirection,
+    isDark: Boolean,
+    luminanceAnimation: Float,
+    shape: Shape,
+    interaction: GlassInteraction?,
+    minScrim: Float,
+    maxScrim: Float,
+    tintColor: Color,
+) {
+    val intensity = LiquidGlassIntensity.value
+    val press = interaction?.pressProgress ?: 0f
+    val darken = lerp(minScrim, maxScrim, ((luminanceAnimation - 0.3f) / 0.5f).coerceIn(0f, 1f))
+    drawRect((if (isDark) Color.Black else Color.White).copy(alpha = LiquidGlassIntensity.tint(darken)))
+    if (tintColor.isSpecified) {
+        val washAlpha = (if (isDark) 0.14f else 0.10f) * lerp(0.65f, 1.15f, intensity)
+        drawRect(tintColor.copy(alpha = washAlpha))
+    }
+
+    // Convex top-left specular catch (shifts subtly with gravity tilt) and lower shade.
+    val tiltX = GlassTilt.x
+    val tiltY = GlassTilt.y
+    val specColor = if (tintColor.isSpecified) {
+        androidx.compose.ui.graphics.lerp(Color.White, tintColor, 0.28f)
+    } else {
+        Color.White
+    }
+    val sheenStart = Offset(
+        size.width * (0.04f + tiltX * 0.26f),
+        size.height * (0.04f + tiltY * 0.20f),
+    )
+    val sheenEnd = Offset(
+        size.width * (0.72f + tiltX * 0.24f),
+        size.height * (0.85f + tiltY * 0.18f),
+    )
+    drawRect(
+        brush = Brush.linearGradient(
+            0f to specColor.copy(alpha = if (isDark) lerp(0.09f, 0.20f, intensity) else lerp(0.24f, 0.42f, intensity)),
+            0.46f to Color.Transparent,
+            start = sheenStart,
+            end = sheenEnd,
+        ),
+    )
+    if ((abs(tiltX) > 0.04f || abs(tiltY) > 0.04f) && size.minDimension > 1f) {
+        val streakX = size.width * (0.5f + tiltX * 0.45f)
+        val streakY = size.height * (0.5f + tiltY * 0.45f)
+        val glintAlpha = ((abs(tiltX) + abs(tiltY)) * 0.5f).coerceIn(0f, 1f) *
+            (if (isDark) 0.16f else 0.24f) * lerp(0.6f, 1.15f, intensity)
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(specColor.copy(alpha = glintAlpha), Color.Transparent),
+                center = Offset(streakX, streakY),
+                radius = (size.maxDimension * 0.65f).coerceAtLeast(1f),
+            ),
+            blendMode = BlendMode.Plus,
+        )
+    }
+    drawRect(
+        brush = Brush.verticalGradient(
+            0.58f to Color.Transparent,
+            1f to Color.Black.copy(alpha = if (isDark) 0.16f else 0.09f),
+        ),
+    )
+
+    // Directional inner rim (plus crisp outer dark hairline in Light mode so white
+    // glass pops cleanly off bright pages, after Auris' ConvxOuterDarkRim).
+    val rimBoost = 1f + 0.34f * press
+    val rimOutline = shape.createOutline(size, layoutDirection, this)
+    if (!isDark) {
+        drawOutline(
+            outline = rimOutline,
+            color = Color.Black.copy(alpha = 0.12f),
+            style = Stroke(width = 1.6.dp.toPx()),
+        )
+    }
+    val touchRatioX = if (press > 0.01f && size.width > 0f) {
+        ((interaction?.touchPosition?.x ?: (size.width * 0.5f)) / size.width - 0.5f).coerceIn(-0.5f, 0.5f) * press
+    } else 0f
+    val touchRatioY = if (press > 0.01f && size.height > 0f) {
+        ((interaction?.touchPosition?.y ?: (size.height * 0.5f)) / size.height - 0.5f).coerceIn(-0.5f, 0.5f) * press
+    } else 0f
+    val rimStart = Offset(
+        size.width * (0.14f + tiltX * 0.22f + touchRatioX * 0.35f).coerceIn(0f, 1f),
+        size.height * (0.12f + tiltY * 0.22f + touchRatioY * 0.35f).coerceIn(0f, 1f),
+    )
+    val rimEnd = Offset(
+        size.width * (0.88f + tiltX * 0.12f - touchRatioX * 0.25f).coerceIn(0f, 1f),
+        size.height * (0.90f + tiltY * 0.12f - touchRatioY * 0.25f).coerceIn(0f, 1f),
+    )
+    drawOutline(
+        outline = rimOutline,
+        brush = Brush.linearGradient(
+            0f to specColor.copy(alpha = ((if (isDark) 0.65f else 0.95f) * rimBoost).coerceAtMost(1f)),
+            0.45f to Color.White.copy(alpha = if (isDark) 0.08f else 0.18f),
+            1f to specColor.copy(alpha = ((if (isDark) 0.30f else 0.48f) * rimBoost).coerceAtMost(1f)),
+            start = rimStart,
+            end = rimEnd,
+        ),
+        style = Stroke(width = 1.1.dp.toPx()),
+    )
+
+    // Double-wave expanding specular water ripple ring from touch point.
+    val ripple = interaction?.rippleProgress ?: 1f
+    if (ripple < 1f) {
+        val touch = interaction?.touchPosition ?: Offset(size.width / 2f, size.height / 2f)
+        val maxR = maxOf(size.width, size.height) * 0.95f
+        val r = lerp(size.minDimension * 0.14f, maxR, ripple)
+        val fade = (1f - ripple) * (1f - ripple)
+        val ringAlpha = (if (isDark) 0.55f else 0.78f) * fade
+        drawCircle(
+            color = specColor.copy(alpha = ringAlpha),
+            radius = r,
+            center = touch,
+            style = Stroke(width = lerp(2.4.dp.toPx(), 0.7.dp.toPx(), ripple)),
+            blendMode = BlendMode.Plus,
+        )
+        drawCircle(
+            color = specColor.copy(alpha = ringAlpha * 0.45f),
+            radius = r * 0.72f,
+            center = touch,
+            style = Stroke(width = lerp(1.4.dp.toPx(), 0.45.dp.toPx(), ripple)),
+            blendMode = BlendMode.Plus,
+        )
+    }
+
+    // Multi-layer liquid specular spotlight + edge flare tracking the touch point.
+    if (press > 0f && size.minDimension > 1f) {
+        val touch = interaction?.touchPosition ?: Offset(size.width / 2f, size.height / 2f)
+        val innerR = (size.minDimension * 0.34f).coerceAtLeast(14.dp.toPx()).coerceAtLeast(1f)
+        val midR = (size.minDimension * 0.72f).coerceAtLeast(1f)
+        val wideR = (size.minDimension * 1.45f).coerceAtLeast(1f)
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = (if (isDark) 0.40f else 0.48f) * press),
+                    specColor.copy(alpha = (if (isDark) 0.14f else 0.20f) * press),
+                    Color.Transparent,
+                ),
+                center = touch,
+                radius = innerR,
+            ),
+            blendMode = BlendMode.Plus,
+        )
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = (if (isDark) 0.24f else 0.30f) * press),
+                    Color.Transparent,
+                ),
+                center = touch,
+                radius = midR,
+            ),
+            blendMode = BlendMode.Plus,
+        )
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = (if (isDark) 0.12f else 0.16f) * press),
+                    Color.Transparent,
+                ),
+                center = touch,
+                radius = wideR,
+            ),
+            blendMode = BlendMode.Plus,
+        )
+        drawOutline(
+            outline = rimOutline,
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = (if (isDark) 0.72f else 0.90f) * press),
+                    if (intensity >= GlassRecipe.DISPERSION_THRESHOLD) {
+                        Color(0xFF7BE8FF).copy(alpha = 0.28f * press)
+                    } else {
+                        specColor.copy(alpha = 0.22f * press)
+                    },
+                    Color.Transparent,
+                ),
+                center = touch,
+                radius = (size.minDimension * 0.92f).coerceAtLeast(1f),
+            ),
+            style = Stroke(width = 1.6.dp.toPx()),
+            blendMode = BlendMode.Plus,
+        )
+    }
+}
+
 /**
  * Interactive liquid glass drawing modifier.
  * Element MUST be a sibling of the backdrop source, never inside it.
@@ -800,180 +991,16 @@ fun Modifier.drawInteractiveGlass(
                 drawBackdrop()
             },
             onDrawSurface = {
-                val intensity = LiquidGlassIntensity.value
-                val press = interaction?.pressProgress ?: 0f
-                val darken = lerp(minScrim, maxScrim, ((luminanceAnimation - 0.3f) / 0.5f).coerceIn(0f, 1f))
-                drawRect((if (isDark) Color.Black else Color.White).copy(alpha = LiquidGlassIntensity.tint(darken)))
-                if (tintColor.isSpecified) {
-                    val washAlpha = (if (isDark) 0.14f else 0.10f) * lerp(0.65f, 1.15f, intensity)
-                    drawRect(tintColor.copy(alpha = washAlpha))
-                }
-
-                // Convex top-left specular catch (shifts subtly with gravity tilt) and lower shade.
-                val tiltX = GlassTilt.x
-                val tiltY = GlassTilt.y
-                val specColor = if (tintColor.isSpecified) {
-                    androidx.compose.ui.graphics.lerp(Color.White, tintColor, 0.28f)
-                } else {
-                    Color.White
-                }
-                val sheenStart = Offset(
-                    size.width * (0.04f + tiltX * 0.26f),
-                    size.height * (0.04f + tiltY * 0.20f),
+                drawGlassSurfaceOverlay(
+                    layoutDirection = layoutDirection,
+                    isDark = isDark,
+                    luminanceAnimation = luminanceAnimation,
+                    shape = lensSafeGlassShape(shape),
+                    interaction = interaction,
+                    minScrim = minScrim,
+                    maxScrim = maxScrim,
+                    tintColor = tintColor,
                 )
-                val sheenEnd = Offset(
-                    size.width * (0.72f + tiltX * 0.24f),
-                    size.height * (0.85f + tiltY * 0.18f),
-                )
-                drawRect(
-                    brush = Brush.linearGradient(
-                        0f to specColor.copy(alpha = if (isDark) lerp(0.09f, 0.20f, intensity) else lerp(0.24f, 0.42f, intensity)),
-                        0.46f to Color.Transparent,
-                        start = sheenStart,
-                        end = sheenEnd,
-                    ),
-                )
-                if ((abs(tiltX) > 0.04f || abs(tiltY) > 0.04f) && size.minDimension > 1f) {
-                    val streakX = size.width * (0.5f + tiltX * 0.45f)
-                    val streakY = size.height * (0.5f + tiltY * 0.45f)
-                    val glintAlpha = ((abs(tiltX) + abs(tiltY)) * 0.5f).coerceIn(0f, 1f) *
-                        (if (isDark) 0.16f else 0.24f) * lerp(0.6f, 1.15f, intensity)
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(specColor.copy(alpha = glintAlpha), Color.Transparent),
-                            center = Offset(streakX, streakY),
-                            radius = (size.maxDimension * 0.65f).coerceAtLeast(1f),
-                        ),
-                        blendMode = BlendMode.Plus,
-                    )
-                }
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        0.58f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = if (isDark) 0.16f else 0.09f),
-                    ),
-                )
-
-                // Directional inner rim (plus crisp outer dark hairline in Light mode so white
-                // glass pops cleanly off bright pages, after Auris' ConvxOuterDarkRim).
-                val rimBoost = 1f + 0.34f * press
-                val rimOutline = lensSafeGlassShape(shape).createOutline(size, layoutDirection, this)
-                if (!isDark) {
-                    drawOutline(
-                        outline = rimOutline,
-                        color = Color.Black.copy(alpha = 0.12f),
-                        style = Stroke(width = 1.6.dp.toPx()),
-                    )
-                }
-                val touchRatioX = if (press > 0.01f && size.width > 0f) {
-                    ((interaction?.touchPosition?.x ?: (size.width * 0.5f)) / size.width - 0.5f).coerceIn(-0.5f, 0.5f) * press
-                } else 0f
-                val touchRatioY = if (press > 0.01f && size.height > 0f) {
-                    ((interaction?.touchPosition?.y ?: (size.height * 0.5f)) / size.height - 0.5f).coerceIn(-0.5f, 0.5f) * press
-                } else 0f
-                val rimStart = Offset(
-                    size.width * (0.14f + tiltX * 0.22f + touchRatioX * 0.35f).coerceIn(0f, 1f),
-                    size.height * (0.12f + tiltY * 0.22f + touchRatioY * 0.35f).coerceIn(0f, 1f),
-                )
-                val rimEnd = Offset(
-                    size.width * (0.88f + tiltX * 0.12f - touchRatioX * 0.25f).coerceIn(0f, 1f),
-                    size.height * (0.90f + tiltY * 0.12f - touchRatioY * 0.25f).coerceIn(0f, 1f),
-                )
-                drawOutline(
-                    outline = rimOutline,
-                    brush = Brush.linearGradient(
-                        0f to specColor.copy(alpha = ((if (isDark) 0.65f else 0.95f) * rimBoost).coerceAtMost(1f)),
-                        0.45f to Color.White.copy(alpha = if (isDark) 0.08f else 0.18f),
-                        1f to specColor.copy(alpha = ((if (isDark) 0.30f else 0.48f) * rimBoost).coerceAtMost(1f)),
-                        start = rimStart,
-                        end = rimEnd,
-                    ),
-                    style = Stroke(width = 1.1.dp.toPx()),
-                )
-
-                // Double-wave expanding specular water ripple ring from touch point.
-                val ripple = interaction?.rippleProgress ?: 1f
-                if (ripple < 1f) {
-                    val touch = interaction?.touchPosition ?: Offset(size.width / 2f, size.height / 2f)
-                    val maxR = maxOf(size.width, size.height) * 0.95f
-                    val r = lerp(size.minDimension * 0.14f, maxR, ripple)
-                    val fade = (1f - ripple) * (1f - ripple)
-                    val ringAlpha = (if (isDark) 0.55f else 0.78f) * fade
-                    drawCircle(
-                        color = specColor.copy(alpha = ringAlpha),
-                        radius = r,
-                        center = touch,
-                        style = Stroke(width = lerp(2.4.dp.toPx(), 0.7.dp.toPx(), ripple)),
-                        blendMode = BlendMode.Plus,
-                    )
-                    drawCircle(
-                        color = specColor.copy(alpha = ringAlpha * 0.45f),
-                        radius = r * 0.72f,
-                        center = touch,
-                        style = Stroke(width = lerp(1.4.dp.toPx(), 0.45.dp.toPx(), ripple)),
-                        blendMode = BlendMode.Plus,
-                    )
-                }
-
-                // Multi-layer liquid specular spotlight + edge flare tracking the touch point.
-                if (press > 0f && size.minDimension > 1f) {
-                    val touch = interaction?.touchPosition ?: Offset(size.width / 2f, size.height / 2f)
-                    val innerR = (size.minDimension * 0.34f).coerceAtLeast(14.dp.toPx()).coerceAtLeast(1f)
-                    val midR = (size.minDimension * 0.72f).coerceAtLeast(1f)
-                    val wideR = (size.minDimension * 1.45f).coerceAtLeast(1f)
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = (if (isDark) 0.40f else 0.48f) * press),
-                                specColor.copy(alpha = (if (isDark) 0.14f else 0.20f) * press),
-                                Color.Transparent,
-                            ),
-                            center = touch,
-                            radius = innerR,
-                        ),
-                        blendMode = BlendMode.Plus,
-                    )
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = (if (isDark) 0.24f else 0.30f) * press),
-                                Color.Transparent,
-                            ),
-                            center = touch,
-                            radius = midR,
-                        ),
-                        blendMode = BlendMode.Plus,
-                    )
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = (if (isDark) 0.12f else 0.16f) * press),
-                                Color.Transparent,
-                            ),
-                            center = touch,
-                            radius = wideR,
-                        ),
-                        blendMode = BlendMode.Plus,
-                    )
-                    drawOutline(
-                        outline = rimOutline,
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = (if (isDark) 0.72f else 0.90f) * press),
-                                if (intensity >= GlassRecipe.DISPERSION_THRESHOLD) {
-                                    Color(0xFF7BE8FF).copy(alpha = 0.28f * press)
-                                } else {
-                                    specColor.copy(alpha = 0.22f * press)
-                                },
-                                Color.Transparent,
-                            ),
-                            center = touch,
-                            radius = (size.minDimension * 0.92f).coerceAtLeast(1f),
-                        ),
-                        style = Stroke(width = 1.6.dp.toPx()),
-                        blendMode = BlendMode.Plus,
-                    )
-                }
             },
             layerBlock =
                 if (interaction != null) {
@@ -1099,6 +1126,238 @@ val HeaderGlassFade = 32.dp
  */
 internal fun lensSafeGlassShape(shape: Shape): Shape =
     if (shape == RectangleShape) RoundedCornerShape(0.dp) else shape
+
+/**
+ * Builds one continuous closed silhouette for [MiniPlayer] combining the rounded rectangle body
+ * and, while [crownHeightPx] > 0.5f, the smooth C1 cubic-Bezier metaball mound rising out of its
+ * top edge. Because no segment crosses the base of the mound, strokes and highlights never slice it.
+ */
+fun buildMiniPlayerPillCrownPath(
+    width: Float,
+    pillHeight: Float,
+    pillTop: Float,
+    cornerRadiusPx: Float,
+    crownHeightPx: Float,
+    impactXFraction: Float,
+    densityPx: Float,
+): Path {
+    val path = Path()
+    val w = width.coerceAtLeast(1f)
+    val h = pillHeight.coerceAtLeast(1f)
+    val r = cornerRadiusPx.coerceIn(0f, minOf(w, h) / 2f)
+    val bottom = pillTop + h
+    val rawCrown = crownHeightPx.coerceAtLeast(0f)
+    val crownH = if (pillTop > 0f) rawCrown.coerceAtMost(pillTop) else rawCrown
+    val minClearance = 24f * densityPx
+
+    path.arcTo(
+        rect = Rect(0f, pillTop, 2f * r, pillTop + 2f * r),
+        startAngleDegrees = 180f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = true,
+    )
+
+    if (crownH > 0.5f && w > 2f * r + minClearance) {
+        val maxSpread = ((w - 2f * r) * 0.45f).coerceAtLeast(0f)
+        val spread = minOf(maxOf(32f * densityPx, 48f * densityPx - crownH * 0.25f), maxSpread)
+        val impactX = (impactXFraction * w).coerceIn(r + spread, w - r - spread)
+        val left = impactX - spread
+        val right = impactX + spread
+        val k = spread * 0.58f
+        val peakY = pillTop - crownH
+        path.lineTo(left, pillTop)
+        path.cubicTo(left + k * 0.72f, pillTop, impactX - k * 0.65f, peakY, impactX, peakY)
+        path.cubicTo(impactX + k * 0.65f, peakY, right - k * 0.72f, pillTop, right, pillTop)
+    }
+
+    path.lineTo(w - r, pillTop)
+    path.arcTo(
+        rect = Rect(w - 2f * r, pillTop, w, pillTop + 2f * r),
+        startAngleDegrees = -90f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = false,
+    )
+    path.lineTo(w, bottom - r)
+    path.arcTo(
+        rect = Rect(w - 2f * r, bottom - 2f * r, w, bottom),
+        startAngleDegrees = 0f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = false,
+    )
+    path.lineTo(r, bottom)
+    path.arcTo(
+        rect = Rect(0f, bottom - 2f * r, 2f * r, bottom),
+        startAngleDegrees = 90f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = false,
+    )
+    path.close()
+    return path
+}
+
+internal class MiniPlayerCrownShape(
+    private val pillTopPx: Float,
+    private val crownHeightPx: Float,
+    private val impactXFraction: Float,
+    private val densityPx: Float,
+) : CornerBasedShape(
+    CornerSize(50),
+    CornerSize(50),
+    CornerSize(50),
+    CornerSize(50),
+) {
+    override fun copy(
+        topStart: CornerSize,
+        topEnd: CornerSize,
+        bottomEnd: CornerSize,
+        bottomStart: CornerSize,
+    ): CornerBasedShape = this
+
+    override fun createOutline(
+        size: Size,
+        topStart: Float,
+        topEnd: Float,
+        bottomEnd: Float,
+        bottomStart: Float,
+        layoutDirection: LayoutDirection,
+    ): Outline {
+        if (crownHeightPx <= 0.5f || pillTopPx <= 0.5f) {
+            val r = minOf(size.width, size.height) / 2f
+            return Outline.Rounded(
+                RoundRect(0f, 0f, size.width, size.height, CornerRadius(r, r)),
+            )
+        }
+        val pillHeight = (size.height - pillTopPx).coerceAtLeast(1f)
+        return Outline.Generic(
+            buildMiniPlayerPillCrownPath(
+                width = size.width,
+                pillHeight = pillHeight,
+                pillTop = pillTopPx,
+                cornerRadiusPx = pillHeight / 2f,
+                crownHeightPx = crownHeightPx,
+                impactXFraction = impactXFraction,
+                densityPx = densityPx,
+            ),
+        )
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MiniPlayerCrownShape) return false
+        return pillTopPx == other.pillTopPx &&
+            crownHeightPx == other.crownHeightPx &&
+            impactXFraction == other.impactXFraction &&
+            densityPx == other.densityPx
+    }
+
+    override fun hashCode(): Int {
+        var result = pillTopPx.hashCode()
+        result = 31 * result + crownHeightPx.hashCode()
+        result = 31 * result + impactXFraction.hashCode()
+        result = 31 * result + densityPx.hashCode()
+        return result
+    }
+}
+
+/**
+ * Seamless Liquid Glass backdrop for [MiniPlayer] that extends above its top edge whenever a
+ * liquid-drop metaball mound ([crownHeightPx]) rises, so backdrop blur, tint, highlight, shadow,
+ * and specular rim trace one continuous glass silhouette with zero horizontal seam under the mound.
+ */
+@Composable
+fun Modifier.miniPlayerLiquidGlass(
+    backdrop: Backdrop,
+    luminanceAnimation: Float,
+    interaction: GlassInteraction?,
+    tintColor: Color = LocalLiquidGlassTint.current,
+    crownHeightPx: () -> Float = { 0f },
+    impactXFraction: () -> Float = { 0.5f },
+    blurScale: Float = 1f,
+    minScrim: Float = GlassRecipe.MIN_SCRIM,
+    maxScrim: Float = GlassRecipe.MAX_SCRIM,
+    forceDark: Boolean = false,
+): Modifier {
+    if (!LocalLiquidGlass.current || !isLiquidGlassBackdropSupported()) return this
+    val isDark = forceDark || LocalIsDarkTheme.current
+    val density = LocalDensity.current
+    val activeShape: () -> Shape = {
+        val ch = crownHeightPx().coerceAtLeast(0f)
+        if (ch > 0.5f) {
+            val pad = ceil(ch + 2f * density.density)
+            MiniPlayerCrownShape(pad, ch, impactXFraction(), density.density)
+        } else {
+            CircleShape
+        }
+    }
+    return this
+        .layout { measurable, constraints ->
+            val ch = crownHeightPx().coerceAtLeast(0f)
+            val padTopPx = if (ch > 0.5f) ceil(ch + 2.dp.toPx()).toInt() else 0
+            val placeable = measurable.measure(constraints.offset(vertical = padTopPx))
+            layout(placeable.width, (placeable.height - padTopPx).coerceAtLeast(0)) {
+                placeable.place(0, -padTopPx)
+            }
+        }
+        .drawBackdrop(
+            backdrop = backdrop,
+            shape = activeShape,
+            highlight = { Highlight.Default },
+            shadow = { Shadow.Default },
+            effects = {
+                val l = (luminanceAnimation * 2f - 1f).let { sign(it) * it * it }
+                val press = interaction?.pressProgress ?: 0f
+                val intensity = LiquidGlassIntensity.value
+                colorControls(
+                    brightness = if (isDark) GlassRecipe.BRIGHTNESS_DARK else GlassRecipe.BRIGHTNESS_LIGHT,
+                    contrast = GlassRecipe.CONTRAST,
+                    saturation = LiquidGlassIntensity.saturation(
+                        GlassRecipe.SATURATION_FROSTED,
+                        GlassRecipe.SATURATION_CLEAR,
+                    ) + 0.15f * press,
+                )
+                blur(
+                    (
+                        if (l > 0f) {
+                            lerp(
+                                GlassRecipe.BLUR_BASE_DP.dp.toPx(),
+                                GlassRecipe.BLUR_BRIGHT_DP.dp.toPx(),
+                                l,
+                            )
+                        } else {
+                            lerp(
+                                GlassRecipe.BLUR_BASE_DP.dp.toPx(),
+                                GlassRecipe.BLUR_DARK_DP.dp.toPx(),
+                                -l,
+                            )
+                        }
+                    ) * blurScale * LiquidGlassIntensity.blur() + GlassRecipe.PRESS_BLUR_DP.dp.toPx() * press,
+                )
+                if (!GlassMotion.isSheetMoving() && crownHeightPx() <= 0.5f) {
+                    val pressRefractionPx = GlassRecipe.PRESS_REFRACTION_DP.dp.toPx() * press
+                    lens(
+                        size.minDimension / GlassRecipe.LENS_DIVISOR * intensity + pressRefractionPx,
+                        size.minDimension * 0.62f + pressRefractionPx,
+                        intensity >= GlassRecipe.DISPERSION_THRESHOLD || press > 0.05f,
+                    )
+                }
+            },
+            onDrawBackdrop = { drawBackdrop ->
+                drawBackdrop()
+            },
+            onDrawSurface = {
+                drawGlassSurfaceOverlay(
+                    layoutDirection = layoutDirection,
+                    isDark = isDark,
+                    luminanceAnimation = luminanceAnimation,
+                    shape = activeShape(),
+                    interaction = interaction,
+                    minScrim = minScrim,
+                    maxScrim = maxScrim,
+                    tintColor = tintColor,
+                )
+            },
+        )
+}
 
 /** Interactive liquidGlass: static surfaces use fixed mid-luminance. */
 @Composable

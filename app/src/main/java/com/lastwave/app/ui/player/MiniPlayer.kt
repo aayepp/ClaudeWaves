@@ -220,6 +220,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.platform.LocalContext
 import com.lastwave.app.ui.comic.clip
 import androidx.compose.ui.graphics.BlendMode
@@ -332,7 +333,12 @@ import com.lastwave.app.ui.theme.LocalLiquidGlassOverlayBackdrop
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.Backdrop
 import com.lastwave.app.ui.theme.BackdropBoundsHolder
+import com.lastwave.app.ui.theme.ComicInk
+import com.lastwave.app.ui.theme.ComicPink
+import com.lastwave.app.ui.theme.buildMiniPlayerPillCrownPath
+import com.lastwave.app.ui.theme.miniPlayerLiquidGlass
 import com.lastwave.app.ui.theme.rememberBackdropUseLightInk
+import com.lastwave.app.ui.theme.rememberGlassInteraction
 import com.lastwave.app.ui.theme.rememberLayerBackdrop
 import com.lastwave.app.ui.theme.trackBackdropBounds
 import android.graphics.Bitmap
@@ -734,80 +740,33 @@ internal fun MiniPlayer(
         contentAlignment = Alignment.Center,
     ) {
         val m3SurfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        val isDark = LocalIsDarkTheme.current
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawWithContent {
-                    // Draw smooth cubic-Bezier metaball mound rising out of the MiniPlayer top edge on liquid drop impact.
-                    val crownH = dropController?.crownHeightPx ?: 0f
-                    if (crownH > 0.5f && size.width > 40f) {
-                        val impactX = ((dropController?.impactXFraction ?: 0.5f) * size.width)
-                            .coerceIn(36.dp.toPx(), size.width - 36.dp.toPx())
-                        val spread = maxOf(34.dp.toPx(), 48.dp.toPx() - crownH * 0.30f)
-                        val left = (impactX - spread).coerceAtLeast(24.dp.toPx())
-                        val right = (impactX + spread).coerceAtMost(size.width - 24.dp.toPx())
-                        val mid = (left + right) * 0.5f
-                        val k = (mid - left) * 0.58f
-                        val peakY = -crownH
-                        val crownPath = Path().apply {
-                            moveTo(left, 2f)
-                            cubicTo(left + k * 0.72f, 2f, mid - k * 0.65f, peakY, mid, peakY)
-                            cubicTo(mid + k * 0.65f, peakY, right - k * 0.72f, 2f, right, 2f)
-                            close()
-                        }
-                        val fillBrush = when {
-                            isComic -> Brush.verticalGradient(
-                                colors = listOf(m3SurfaceColor, m3SurfaceColor),
-                                startY = peakY,
-                                endY = 4f,
-                            )
-                            isGlass && miniUseLightInk -> Brush.verticalGradient(
-                                colors = listOf(Color(0xFF424752), Color(0xFF282B33)),
-                                startY = peakY,
-                                endY = 4f,
-                            )
-                            isGlass -> Brush.verticalGradient(
-                                colors = listOf(Color(0xFFF6F8FB), Color(0xFFE6EBF2)),
-                                startY = peakY,
-                                endY = 4f,
-                            )
-                            else -> Brush.verticalGradient(
-                                colors = listOf(m3SurfaceColor, m3SurfaceColor),
-                                startY = peakY,
-                                endY = 4f,
-                            )
-                        }
-                        drawPath(path = crownPath, brush = fillBrush)
-                        val rimPath = Path().apply {
-                            moveTo(left, 2f)
-                            cubicTo(left + k * 0.72f, 2f, mid - k * 0.65f, peakY, mid, peakY)
-                            cubicTo(mid + k * 0.65f, peakY, right - k * 0.72f, 2f, right, 2f)
-                        }
-                        val rimColor = when {
-                            isComic -> com.lastwave.app.ui.theme.ComicInk
-                            isGlass && miniUseLightInk -> Color.White.copy(alpha = 0.75f)
-                            isGlass -> Color.Black.copy(alpha = 0.22f)
-                            else -> Color.White.copy(alpha = 0.35f)
-                        }
-                        drawPath(path = rimPath, color = rimColor, style = Stroke(width = 1.6.dp.toPx()))
-                    }
-                    drawContent()
-                },
+                .waterDropJiggle(amplitude = 0.036f, tiltDegrees = 1.8f, dipDp = 3.dp),
         ) {
         if (isGlass) {
-            Surface(
-                shape = shape,
-                // Transparent card when glass (glass draws scrim), 95% primaryContainer otherwise to match theme color.
-                color = Color.Transparent,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                modifier = Modifier.fillMaxWidth().trackBackdropBounds(miniBackdropBounds).then(
-                    if (backdrop != null) {
-                        Modifier.liquidGlass(backdrop, luminance, shape, tintColor = resolvedMiniTint)
-                    } else Modifier
-                )
-                .waterDropJiggle(amplitude = 0.036f, tiltDegrees = 1.8f, dipDp = 3.dp)
-                .clickable(interactionSource = barInteraction, indication = comicIndicationOrNull(), onClick = onExpand),
+            val glassInteraction = rememberGlassInteraction()
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .miniPlayerLiquidGlass(
+                        backdrop = backdrop,
+                        luminanceAnimation = luminance,
+                        interaction = glassInteraction,
+                        tintColor = resolvedMiniTint,
+                        crownHeightPx = { dropController?.crownHeightPx ?: 0f },
+                        impactXFraction = { dropController?.impactXFraction ?: 0.5f },
+                    ),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .trackBackdropBounds(miniBackdropBounds)
+                    .clip(shape)
+                    .pointerInput(glassInteraction) { glassInteraction.detectPress(this) }
+                    .clickable(interactionSource = barInteraction, indication = comicIndicationOrNull(), onClick = onExpand),
             ) {
                 Box(Modifier.fillMaxWidth()) {
                 Column(
@@ -923,20 +882,55 @@ internal fun MiniPlayer(
                 }
             }
         } else {
-            // Material 3 / Comic Pop Mini-Player
+            // Material 3 / AMOLED / Comic Pop Mini-Player
             val miniCardShape = RoundedCornerShape(20.dp)
             val artShape = RoundedCornerShape(10.dp)
-            Surface(
-                shape = miniCardShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 3.dp,
-                shadowElevation = if (LocalComicTheme.current) 0.dp else 6.dp,
+            val comicLineColor = MaterialTheme.colorScheme.outline
+            val comicShadowColor = if (isDark) ComicPink else ComicInk
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .drawBehind {
+                        val unifiedPath = buildMiniPlayerPillCrownPath(
+                            width = size.width,
+                            pillHeight = size.height,
+                            pillTop = 0f,
+                            cornerRadiusPx = 20.dp.toPx(),
+                            crownHeightPx = dropController?.crownHeightPx ?: 0f,
+                            impactXFraction = dropController?.impactXFraction ?: 0.5f,
+                            densityPx = density,
+                        )
+                        if (isComic) {
+                            val off = 4.dp.toPx()
+                            translate(off, off) {
+                                drawPath(path = unifiedPath, color = comicShadowColor)
+                            }
+                            drawPath(path = unifiedPath, color = m3SurfaceColor)
+                            drawPath(path = unifiedPath, color = comicLineColor, style = Stroke(width = 2.5.dp.toPx()))
+                        } else {
+                            translate(0f, 3.dp.toPx()) {
+                                drawPath(path = unifiedPath, color = Color.Black.copy(alpha = if (isDark) 0.34f else 0.14f))
+                            }
+                            drawPath(path = unifiedPath, color = m3SurfaceColor)
+                            val rimHighlight = Color.White.copy(alpha = if (isDark) 0.16f else 0.48f)
+                            drawPath(
+                                path = unifiedPath,
+                                brush = Brush.verticalGradient(
+                                    0f to rimHighlight,
+                                    0.6f to Color.Transparent,
+                                ),
+                                style = Stroke(width = 0.9.dp.toPx()),
+                            )
+                        }
+                    },
+            )
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .waterDropJiggle(amplitude = 0.036f, tiltDegrees = 1.8f, dipDp = 3.dp)
-                    .comicPanel(miniCardShape)
+                    .clip(miniCardShape)
                     .clickable(interactionSource = barInteraction, indication = comicIndicationOrNull(), onClick = onExpand),
             ) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
                 Box(Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
@@ -1067,6 +1061,7 @@ internal fun MiniPlayer(
                     isComic = isComic,
                     modifier = Modifier.matchParentSize(),
                 )
+                }
                 }
             }
         }

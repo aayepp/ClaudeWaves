@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.MaterialTheme
@@ -32,14 +31,20 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import com.lastwave.app.playback.PlayableTrack
@@ -55,6 +60,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -302,8 +308,8 @@ internal fun MiniPlayerLiquidDropOverlay(
                 ),
             ) {
                 val ft = value
-                if (ft >= 0.56f) {
-                    val ct = ((ft - 0.56f) / 0.44f).coerceIn(0f, 1f)
+                if (ft >= 0.60f) {
+                    val ct = ((ft - 0.60f) / 0.40f).coerceIn(0f, 1f)
                     controller.crownHeightPx = maxCrownPx * sin(ct * PI.toFloat())
                 }
                 if (ft >= 0.68f) {
@@ -391,7 +397,10 @@ internal fun MiniPlayerLiquidDropOverlay(
         } else {
             (pt * 2.5f).coerceIn(0f, 1f)
         }
-        val dropDpSize = with(density) { (dropRadiusPx * 2f).toDp() }
+        val boxWidthPx = dropRadiusPx * 2.8f
+        val boxHeightPx = dropRadiusPx * 3.8f
+        val boxWidthDp = with(density) { boxWidthPx.toDp() }
+        val boxHeightDp = with(density) { boxHeightPx.toDp() }
 
         // Background Canvas: trailing crystal water beads, close-contact concave metaball bridge & impact splash beads
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -419,7 +428,7 @@ internal fun MiniPlayerLiquidDropOverlay(
 
             // 2) Close-contact concave cubic-Bezier liquid bridge between descending droplet & MiniPlayer crest
             if (!isImpactTriggered && bridgeStrength > 0.04f && dropAlpha > 0.02f) {
-                val baseY = target.y - controller.crownHeightPx * 0.45f
+                val baseY = target.y - controller.crownHeightPx * 0.72f
                 val gap = baseY - sample.y
                 if (gap in 2f..bridgeMaxGapPx) {
                     val neckW = dropRadiusPx * (0.48f + 0.36f * bridgeStrength)
@@ -436,19 +445,22 @@ internal fun MiniPlayerLiquidDropOverlay(
                         cubicTo(bx + waistW * 0.85f, waistY, bx + waistW, baseY - 4f, bx + baseW, baseY)
                         close()
                     }
-                    val bridgeTopColor = if (isComic) accent else Color(0xFF8BE2FF)
-                    val bridgeBotColor = when {
-                        isComic -> Color(0xFF1F2127)
-                        isDark -> Color(0xFF3A404A)
-                        else -> Color(0xFFDCE3EC)
+                    val bridgeTopColor = when {
+                        isComic -> accent
+                        isGlass -> Color(0xFF8BE2FF)
+                        else -> accent
+                    }
+                    val bridgeMidColor = when {
+                        isComic -> accent.copy(alpha = 0.55f * bridgeStrength)
+                        isDark -> Color(0xFF568CA4).copy(alpha = 0.42f * bridgeStrength)
+                        else -> Color(0xFFAAD8EB).copy(alpha = 0.45f * bridgeStrength)
                     }
                     drawPath(
                         path = bridgePath,
                         brush = Brush.verticalGradient(
-                            colors = listOf(
-                                bridgeTopColor.copy(alpha = 0.78f * bridgeStrength),
-                                bridgeBotColor.copy(alpha = 0.90f * bridgeStrength),
-                            ),
+                            0.00f to bridgeTopColor.copy(alpha = 0.62f * bridgeStrength),
+                            0.55f to bridgeMidColor,
+                            1.00f to Color.Transparent,
                             startY = topConnectY,
                             endY = baseY + 2f,
                         ),
@@ -461,9 +473,16 @@ internal fun MiniPlayerLiquidDropOverlay(
                         moveTo(bx + baseW, baseY)
                         cubicTo(bx + waistW, baseY - 4f, bx + waistW * 0.85f, waistY, bx + neckW * 0.82f, topConnectY)
                     }
-                    val neckStrokeColor = if (isComic) ComicInk.copy(alpha = 0.88f * bridgeStrength) else Color.White.copy(alpha = 0.85f * bridgeStrength)
-                    drawPath(leftNeck, color = neckStrokeColor, style = Stroke(width = 1.6.dp.toPx()))
-                    drawPath(rightNeck, color = neckStrokeColor, style = Stroke(width = 1.6.dp.toPx()))
+                    val neckPeakColor = if (isComic) ComicInk.copy(alpha = 0.88f * bridgeStrength) else Color.White.copy(alpha = 0.82f * bridgeStrength)
+                    val neckBrush = Brush.verticalGradient(
+                        0.00f to neckPeakColor,
+                        0.72f to neckPeakColor.copy(alpha = neckPeakColor.alpha * 0.45f),
+                        1.00f to Color.Transparent,
+                        startY = topConnectY,
+                        endY = baseY,
+                    )
+                    drawPath(leftNeck, brush = neckBrush, style = Stroke(width = 1.6.dp.toPx()))
+                    drawPath(rightNeck, brush = neckBrush, style = Stroke(width = 1.6.dp.toPx()))
                 }
             }
 
@@ -501,51 +520,77 @@ internal fun MiniPlayerLiquidDropOverlay(
             }
         }
 
-        // Foreground 3D Wet Glass Water Droplet with upright clipped album cover + water optics
+        // Foreground 3D Living Water Globule with upright clipped album cover + capillary wobble + water optics
         if (dropAlpha > 0.02f) {
+            val flightEnvelope = if (ft <= 0.001f) {
+                0f
+            } else {
+                sin((ft * 1.15f).coerceAtMost(1f) * PI.toFloat() * 0.85f)
+            }
+            val phaseRad = pt * 2.2f + ft * 9.5f
+            val angleDeg = if (ft <= 0.005f) {
+                0f
+            } else {
+                var raw = (sample.angleRad * 180f / PI.toFloat()) - 90f
+                while (raw > 180f) raw -= 360f
+                while (raw < -180f) raw += 360f
+                raw * (ft / 0.14f).coerceIn(0f, 1f)
+            }
+            val dropletShape = LivingWaterDropletShape(
+                bellyRadiusPx = dropRadiusPx,
+                stretch = flightEnvelope,
+                phaseRad = phaseRad,
+            )
+            val pivotOrigin = TransformOrigin(0.5f, 0.62f)
+            val sway = sin(phaseRad)
+
             Box(
                 modifier = Modifier
                     .offset {
                         IntOffset(
-                            (sample.x - dropRadiusPx).roundToInt(),
-                            (sample.y - dropRadiusPx).roundToInt(),
+                            (sample.x - boxWidthPx * 0.5f).roundToInt(),
+                            (sample.y - boxHeightPx * 0.62f).roundToInt(),
                         )
                     }
-                    .size(dropDpSize)
+                    .size(boxWidthDp, boxHeightDp)
                     .graphicsLayer {
                         alpha = dropAlpha
-                        // Soft elastic velocity squash-stretch while keeping album artwork readable & upright
-                        val dyFactor = absSinTilt(sample.angleRad)
-                        scaleX = lerp(sample.stretch, 1f / kotlin.math.sqrt(sample.stretch), dyFactor)
-                        scaleY = lerp(1f / kotlin.math.sqrt(sample.stretch), sample.stretch, dyFactor)
+                        transformOrigin = pivotOrigin
+                        rotationZ = angleDeg
                     },
             ) {
-                // Soft floating drop shadow & aura beneath the circular droplet
+                // Soft floating drop shadow & aura matching the live organic water contour
                 Canvas(Modifier.fillMaxSize()) {
-                    val r = size.minDimension * 0.5f
-                    drawCircle(
-                        color = Color.Black.copy(alpha = 0.38f),
-                        radius = r + 1.5.dp.toPx(),
-                        center = Offset(center.x + 2.5.dp.toPx(), center.y + 6.dp.toPx()),
+                    val cx = size.width * 0.5f
+                    val cy = size.height * 0.62f
+                    val dropletPath = buildLivingWaterDropletPath(
+                        cx = cx,
+                        cy = cy,
+                        radius = dropRadiusPx + 1.5.dp.toPx(),
+                        stretch = flightEnvelope,
+                        phaseRad = phaseRad,
                     )
+                    translate(2.5.dp.toPx(), 6.dp.toPx()) {
+                        drawPath(path = dropletPath, color = Color.Black.copy(alpha = 0.38f))
+                    }
                     if (!isComic) {
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(accent.copy(alpha = 0.28f), Color.Transparent),
-                                center = center,
-                                radius = (r + 7.dp.toPx()).coerceAtLeast(1f),
+                                center = Offset(cx, cy),
+                                radius = (dropRadiusPx + 9.dp.toPx()).coerceAtLeast(1f),
                             ),
-                            radius = r + 7.dp.toPx(),
-                            center = center,
+                            radius = dropRadiusPx + 9.dp.toPx(),
+                            center = Offset(cx, cy),
                         )
                     }
                 }
 
-                // Upright artwork cleanly clipped inside the water sphere
+                // Upright artwork cleanly clipped inside the living capillary water contour
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(CircleShape),
+                        .clip(dropletShape),
                 ) {
                     ArtworkImage(
                         name = drop.title,
@@ -553,38 +598,52 @@ internal fun MiniPlayerLiquidDropOverlay(
                         embeddedUrl = drop.artworkUrl,
                         fallbackIcon = Icons.Filled.MusicNote,
                         crossfadeMs = 0,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                transformOrigin = pivotOrigin
+                                rotationZ = -angleDeg
+                            },
                     )
-                    // 3D Water refraction optics: internal lower caustic, upper specular dome & chromatic rim
+                    // 3D Water refraction optics & strokes anchored to the belly and living contour
                     Canvas(Modifier.fillMaxSize()) {
-                        val r = size.minDimension * 0.5f
+                        val cx = size.width * 0.5f
+                        val cy = size.height * 0.62f
+                        val r = dropRadiusPx
                         if (r <= 1f) return@Canvas
+                        val dropletPath = buildLivingWaterDropletPath(
+                            cx = cx,
+                            cy = cy,
+                            radius = r,
+                            stretch = flightEnvelope,
+                            phaseRad = phaseRad,
+                        )
                         if (isComic) {
-                            drawCircle(
+                            drawRect(
                                 brush = Brush.verticalGradient(
                                     colors = listOf(Color.White.copy(alpha = 0.42f), Color.Transparent),
-                                    startY = 0f,
-                                    endY = size.height * 0.48f,
+                                    startY = (cy - r * 1.6f).coerceAtLeast(0f),
+                                    endY = cy,
                                 ),
                             )
-                            drawCircle(
+                            drawPath(
+                                path = dropletPath,
                                 color = ComicInk,
-                                radius = r - 1.dp.toPx(),
                                 style = Stroke(width = 2.2.dp.toPx()),
                             )
                             return@Canvas
                         }
 
                         // Subtle wet aqua depth gradient
-                        drawCircle(
+                        drawRect(
                             brush = Brush.linearGradient(
                                 colors = listOf(
-                                    Color(0xFFD2F5FF).copy(alpha = 0.16f),
+                                    Color(0xFFD2F5FF).copy(alpha = 0.18f),
                                     Color.Transparent,
-                                    Color(0xFF0A1626).copy(alpha = 0.26f),
+                                    Color(0xFF0A1626).copy(alpha = 0.28f),
                                 ),
-                                start = Offset.Zero,
-                                end = Offset(size.width, size.height),
+                                start = Offset(cx - r, cy - r * 1.4f),
+                                end = Offset(cx + r, cy + r),
                             ),
                         )
 
@@ -592,52 +651,52 @@ internal fun MiniPlayerLiquidDropOverlay(
                         drawOval(
                             brush = Brush.verticalGradient(
                                 colors = listOf(Color.Transparent, Color(0xFFE1FCFF).copy(alpha = 0.68f)),
-                                startY = center.y + r * 0.08f,
-                                endY = size.height,
+                                startY = cy + r * 0.08f,
+                                endY = cy + r,
                             ),
-                            topLeft = Offset(center.x - r * 0.62f, center.y + r * 0.18f),
+                            topLeft = Offset(cx - r * 0.62f, cy + r * 0.18f),
                             size = Size(r * 1.24f, r * 0.68f),
                         )
 
-                        // Curved upper-left specular meniscus dome
+                        // Curved upper specular meniscus dome with subtle capillary shimmer
                         drawOval(
                             brush = Brush.verticalGradient(
                                 colors = listOf(Color.White.copy(alpha = 0.85f), Color.Transparent),
-                                startY = r * 0.08f,
-                                endY = center.y,
+                                startY = cy - r * 0.84f,
+                                endY = cy,
                             ),
-                            topLeft = Offset(center.x - r * 0.62f, r * 0.10f),
-                            size = Size(r * 1.16f, r * 0.66f),
+                            topLeft = Offset(cx - r * 0.58f + sway * r * 0.06f, cy - r * 0.82f),
+                            size = Size(r * 1.12f, r * 0.62f),
                         )
 
                         // Pinpoint studio reflections
                         drawOval(
                             color = Color.White.copy(alpha = 0.96f),
-                            topLeft = Offset(center.x - r * 0.44f, center.y - r * 0.56f),
+                            topLeft = Offset(cx - r * 0.42f + sway * r * 0.05f, cy - r * 0.58f),
                             size = Size(r * 0.26f, r * 0.16f),
                         )
                         drawCircle(
                             color = Color.White.copy(alpha = 0.92f),
                             radius = r * 0.06f,
-                            center = Offset(center.x - r * 0.14f, center.y - r * 0.62f),
+                            center = Offset(cx - r * 0.12f + sway * r * 0.04f, cy - r * 0.64f),
                         )
 
-                        // Dark Fresnel edge + cyan chromatic dispersion rim + crisp white outer specular ring
-                        drawCircle(
+                        // Dark Fresnel edge + cyan chromatic dispersion rim + crisp white outer specular contour
+                        drawPath(
+                            path = dropletPath,
                             color = Color(0xFF050E18).copy(alpha = 0.34f),
-                            radius = r - 1.5.dp.toPx(),
                             style = Stroke(width = 3.dp.toPx()),
                         )
                         if (isGlass) {
-                            drawCircle(
+                            drawPath(
+                                path = dropletPath,
                                 color = Color(0xFF82F2FF).copy(alpha = 0.55f),
-                                radius = r - 1.dp.toPx(),
                                 style = Stroke(width = 2.2.dp.toPx()),
                             )
                         }
-                        drawCircle(
+                        drawPath(
+                            path = dropletPath,
                             color = Color.White.copy(alpha = 0.90f),
-                            radius = r - 0.75.dp.toPx(),
                             style = Stroke(width = 1.4.dp.toPx()),
                         )
                     }
@@ -647,7 +706,67 @@ internal fun MiniPlayerLiquidDropOverlay(
     }
 }
 
-private fun absSinTilt(angleRad: Float): Float = kotlin.math.abs(sin(angleRad))
+private fun buildLivingWaterDropletPath(
+    cx: Float,
+    cy: Float,
+    radius: Float,
+    stretch: Float,
+    phaseRad: Float,
+): Path {
+    val count = 40
+    val pts = Array(count) { Offset.Zero }
+    val step = (2.0 * PI / count).toFloat()
+    for (i in 0 until count) {
+        val a = i * step
+        val sinA = sin(a)
+        val cosA = cos(a)
+        val upFactor = (-sinA).coerceAtLeast(0f)
+        val tailPull = 0.88f * stretch * upFactor.pow(2.4f)
+        val oblate = 0.09f * stretch * cos(2f * a)
+        val wobble = (0.08f + 0.07f * stretch) * (
+            0.65f * sin(2f * a + phaseRad * 2.2f) +
+                0.35f * sin(3f * a - phaseRad * 3.1f)
+            )
+        val rad = radius * (1f + oblate + tailPull + wobble)
+        val pinchX = 1f - 0.34f * stretch * upFactor.pow(1.8f)
+        pts[i] = Offset(cx + rad * cosA * pinchX, cy + rad * sinA)
+    }
+    return Path().apply {
+        moveTo(pts[0].x, pts[0].y)
+        for (i in 0 until count) {
+            val p0 = pts[(i - 1 + count) % count]
+            val p1 = pts[i]
+            val p2 = pts[(i + 1) % count]
+            val p3 = pts[(i + 2) % count]
+            val c1x = p1.x + (p2.x - p0.x) / 6f
+            val c1y = p1.y + (p2.y - p0.y) / 6f
+            val c2x = p2.x - (p3.x - p1.x) / 6f
+            val c2y = p2.y - (p3.y - p1.y) / 6f
+            cubicTo(c1x, c1y, c2x, c2y, p2.x, p2.y)
+        }
+        close()
+    }
+}
+
+private data class LivingWaterDropletShape(
+    val bellyRadiusPx: Float,
+    val stretch: Float,
+    val phaseRad: Float,
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline = Outline.Generic(
+        buildLivingWaterDropletPath(
+            cx = size.width * 0.5f,
+            cy = size.height * 0.62f,
+            radius = bellyRadiusPx,
+            stretch = stretch,
+            phaseRad = phaseRad,
+        ),
+    )
+}
 
 private fun DrawScope.drawMicroWaterBead(
     center: Offset,
