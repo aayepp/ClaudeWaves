@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.44] - 2026-11-26
+
+### Changed
+- **Living water globule droplet:** replaced the static circular drop clip with an organic capillary-oscillating pear-teardrop water contour (`LivingWaterDropletShape` + `buildLivingWaterDropletPath`) that smoothly tilts along the flight tangent while keeping album artwork upright inside with shifting specular reflections and Fresnel rims across all themes.
+
+### Fixed
+- **Seamless MiniPlayer metaball mound (zero horizontal rim line):** unified the `MiniPlayer` pill and rising liquid crown into a single continuous C1 silhouette (`buildMiniPlayerPillCrownPath` + `MiniPlayerCrownShape` + `miniPlayerLiquidGlass`) across Dark/Light Liquid Glass, AMOLED, M3 No-Glass, and Comic Pop themes, removing the flat top border line cutting across the base of the mound and softly blending the concave liquid bridge into the glass crest.
+
 ## [1.0.43] - 2026-11-25
 
 ### Added
