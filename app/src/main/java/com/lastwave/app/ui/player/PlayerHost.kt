@@ -55,7 +55,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sin
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.draw.blur
@@ -533,9 +532,9 @@ fun PlayerHost(
     var isPlayerDragging by remember { mutableStateOf(false) }
     val playerLayerShown by remember { derivedStateOf { playerExpansion.value > 0f } }
     val sheetMoving by remember { derivedStateOf { playerExpansion.value < 1f } }
-    // Full-bleed covers have no sleeve to land on: the card's own cover grows instead.
-    val isFullmodeTransition = settings.canvasFullBleed
-    val artworkFlight = if (isFullmodeTransition) null else remember { ArtworkFlight { playerExpansion.value } }
+    // Full-bleed covers have no sleeve to land on; the card itself still uses the
+    // exact same linear macOS-Dock container morph without flying a second thumbnail.
+    val artworkFlight = if (settings.canvasFullBleed) null else remember { ArtworkFlight { playerExpansion.value } }
     val contentCovered by remember { derivedStateOf { playerExpansion.value >= 1f && !isPlayerDragging } }
     val showMiniPlayer by remember { derivedStateOf { playerExpansion.value < 0.45f } }
     val showBottomNav by remember { derivedStateOf { state.current == null || playerExpansion.value < 0.625f } }
@@ -706,12 +705,7 @@ fun PlayerHost(
                 // Off Home the card sits in the same row Home's collapsed bar uses, beside the Home circle.
                 val dockProgress = if (onHome != null) Docked else chromeCollapse.progress
                 val miniAlpha: GraphicsLayerScope.() -> Unit = {
-                    val p = playerExpansion.value.coerceIn(0f, 1f)
-                    alpha = if (isFullmodeTransition) {
-                        (1f - (p / 0.22f).coerceIn(0f, 1f))
-                    } else {
-                        (1f - p * 2.2f).coerceIn(0f, 1f)
-                    }
+                    alpha = (1f - playerExpansion.value.coerceIn(0f, 1f) * 2.2f).coerceIn(0f, 1f)
                 }
                 if (onHome != null) {
                     HomeDockButton(
@@ -744,17 +738,11 @@ fun PlayerHost(
                     compactProgress = dockProgress,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .zIndex(if ((!isFullmodeTransition && miniOnTop) || chromeDocking) 1f else 0f)
+                        .zIndex(if (miniOnTop || chromeDocking) 1f else 0f)
                         .graphicsLayer {
                             miniAlpha()
-                            // In normal mode, follow the morphing card's top edge as it rises.
-                            // In Fullmode, keep the MiniPlayer pill seated cleanly above the dock so
-                            // the unified fullscreen artwork card lands directly onto it.
-                            translationY = if (isFullmodeTransition) {
-                                0f
-                            } else {
-                                -(miniCardBounds?.top ?: 0f) * playerExpansion.value.coerceIn(0f, 1f)
-                            }
+                            // Stay flush with the morphing card's top edge as it rises and closes.
+                            translationY = -(miniCardBounds?.top ?: 0f) * playerExpansion.value.coerceIn(0f, 1f)
                         }
                         .dockBesidePill(
                             miniBottomPadding,
@@ -809,28 +797,14 @@ fun PlayerHost(
                             val left = androidx.compose.ui.util.lerp(start.left, 0f, p)
                             val right = androidx.compose.ui.util.lerp(start.right, size.width, p)
                             val top = androidx.compose.ui.util.lerp(start.top, 0f, p)
-                            val bottom = if (isFullmodeTransition) {
-                                androidx.compose.ui.util.lerp(start.bottom, size.height, p.pow(1.35f))
-                            } else {
-                                androidx.compose.ui.util.lerp(start.bottom, size.height, p)
-                            }
+                            val bottom = androidx.compose.ui.util.lerp(start.bottom, size.height, p)
                             val startRadius = minOf(start.height / 2f, PLAYER_SHEET_CORNER_RADIUS.toPx() + 8.dp.toPx())
-                            val radius = if (isFullmodeTransition) {
-                                androidx.compose.ui.util.lerp(startRadius, 0f, p.pow(1.2f))
-                            } else {
-                                androidx.compose.ui.util.lerp(startRadius, 0f, p)
-                            }
+                            val radius = androidx.compose.ui.util.lerp(startRadius, 0f, p)
                             // Content is anchored to the card's top edge and clipped to the card.
                             translationY = top
-                            // In Fullmode, softly crossfade the shrinking pill directly into the
-                            // resting MiniPlayer at p = 0..0.16 for a seamless landing.
-                            alpha = if (isFullmodeTransition) {
-                                val t = (p / 0.16f).coerceIn(0f, 1f)
-                                t * t * (3f - 2f * t)
-                            } else {
-                                if (p == 0f) 0f else 1f
-                            }
-                            shadowElevation = if (isFullmodeTransition && p > 0f && p < 1f) {
+                            // Pre-mount frames (p == 0): composed and measured, but not drawn over the mini player.
+                            alpha = if (p == 0f) 0f else 1f
+                            shadowElevation = if (p > 0f && p < 1f) {
                                 sin(p * kotlin.math.PI.toFloat()) * 14.dp.toPx()
                             } else {
                                 0f
@@ -852,17 +826,9 @@ fun PlayerHost(
                             val left = androidx.compose.ui.util.lerp(start.left, 0f, p)
                             val right = androidx.compose.ui.util.lerp(start.right, size.width, p)
                             val top = androidx.compose.ui.util.lerp(start.top, 0f, p)
-                            val bottom = if (isFullmodeTransition) {
-                                androidx.compose.ui.util.lerp(start.bottom, size.height, p.pow(1.35f))
-                            } else {
-                                androidx.compose.ui.util.lerp(start.bottom, size.height, p)
-                            }
+                            val bottom = androidx.compose.ui.util.lerp(start.bottom, size.height, p)
                             val startRadius = minOf(start.height / 2f, PLAYER_SHEET_CORNER_RADIUS.toPx() + 8.dp.toPx())
-                            val radius = if (isFullmodeTransition) {
-                                androidx.compose.ui.util.lerp(startRadius, 0f, p.pow(1.2f))
-                            } else {
-                                androidx.compose.ui.util.lerp(startRadius, 0f, p)
-                            }
+                            val radius = androidx.compose.ui.util.lerp(startRadius, 0f, p)
                             val morphOutline = PlayerMorphShape(
                                 left = left,
                                 right = right,
@@ -912,44 +878,21 @@ fun PlayerHost(
                             }
                         },
                 ) {
-                    // The cover grows with the card from the mini player to full bleed, so the eye
-                    // follows the artwork into Now Playing (and back home on close).
-                    if (sheetMoving && artworkFlight == null) {
-                        ArtworkImage(
-                            name = state.current!!.title,
-                            artist = state.current!!.artist,
-                            embeddedUrl = state.current!!.artworkUrl,
-                            fallbackIcon = Icons.Filled.MusicNote,
-                            decodeSizePx = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    val p = playerExpansion.value.coerceIn(0f, 1f)
-                                    val start = miniCardBounds
-                                        ?: androidx.compose.ui.geometry.Rect(0f, size.height, size.width, size.height)
-                                    val top = androidx.compose.ui.util.lerp(start.top, 0f, p)
-                                    val bottom = androidx.compose.ui.util.lerp(start.bottom, size.height, p.pow(1.35f))
-                                    val cardH = (bottom - top).coerceIn(0f, size.height)
-                                    // Keep focal region centered inside the shrinking pill; reaches 0f cleanly at p = 1f.
-                                    translationY = (cardH - size.height) * 0.42f
-                                },
-                        )
-                    }
                     Box(
                         Modifier
                             .fillMaxSize()
                             .graphicsLayer {
                                 val p = playerExpansion.value.coerceIn(0f, 1f)
-                                // Fullmode fades chrome early (p = 0.50..0.94) so only the pure
-                                // unified artwork shrinks cleanly into the MiniPlayer pill.
-                                val contentAlpha = if (isFullmodeTransition) {
-                                    val raw = ((p - 0.50f) / 0.44f).coerceIn(0f, 1f)
+                                // Fullmode has no flying thumbnail, so crossfade smoothly from p = 0.14
+                                // as the MiniPlayer dissolves; Normal waits until p = 0.25 for sleeve takeoff.
+                                val contentAlpha = if (artworkFlight == null) {
+                                    val raw = ((p - 0.14f) / 0.86f).coerceIn(0f, 1f)
                                     raw * raw * (3f - 2f * raw)
                                 } else {
                                     ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
                                 }
                                 alpha = contentAlpha
-                                val settlePx = with(sheetDensity) { (if (isFullmodeTransition) 16.dp else 24.dp).toPx() }
+                                val settlePx = with(sheetDensity) { (if (artworkFlight == null) 14.dp else 24.dp).toPx() }
                                 translationY = androidx.compose.ui.util.lerp(settlePx, 0f, contentAlpha)
                             },
                     ) {

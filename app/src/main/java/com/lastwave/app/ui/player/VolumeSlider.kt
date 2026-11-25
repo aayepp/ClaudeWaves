@@ -56,7 +56,6 @@ import com.lastwave.app.ui.theme.PlayerPalette
 import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
 import com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported
 import com.lastwave.app.ui.theme.liquidGlassChrome
-import com.lastwave.app.ui.theme.liquidGlassContainerColor
 import kotlin.math.roundToInt
 
 /**
@@ -135,16 +134,6 @@ fun VolumeSlider(
                             LocalLiquidGlass.current,
                             LiquidGlassPreset.PlayerControls,
                             interactionSource = interactionSource,
-                        )
-                    } else {
-                        Modifier
-                    }
-                )
-                .then(
-                    if (isGlassActive) {
-                        Modifier.background(
-                            liquidGlassContainerColor(Color.White.copy(alpha = 0.08f)),
-                            containerShape,
                         )
                     } else {
                         Modifier

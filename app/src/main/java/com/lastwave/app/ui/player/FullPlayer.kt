@@ -680,7 +680,7 @@ internal fun FullPlayer(
     CompositionLocalProvider(
         LocalLiquidGlassBackdrop provides if (fullGlass) playerBackdrop else null,
         LocalLiquidGlassOverlayBackdrop provides if (fullGlass) playerBackdrop else null,
-        LocalLiquidGlassTint provides if (fullGlass) ambientColor else Color.Unspecified,
+        LocalLiquidGlassTint provides Color.Unspecified,
     ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,

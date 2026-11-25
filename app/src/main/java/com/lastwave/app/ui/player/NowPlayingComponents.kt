@@ -649,6 +649,13 @@ internal fun NowPlayingHeader(
         return
     }
     val isComic = LocalComicTheme.current
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
+    val barPillColor = when {
+        isComic -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+        isGlassActive -> Color.Transparent
+        else -> PlayerPalette.ink.copy(alpha = 0.14f)
+    }
+    val barPillContentColor = PlayerPalette.ink.copy(alpha = 0.94f)
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -658,8 +665,8 @@ internal fun NowPlayingHeader(
         LiquidGlassSurface(
             onClick = hapticClick(action = onBackOrCollapse),
             shape = CircleShape,
-            color = liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f)),
-            contentColor = PlayerPalette.ink.copy(alpha = 0.94f),
+            color = barPillColor,
+            contentColor = barPillContentColor,
             glassModifier = Modifier.liquidGlassChrome(
                 CircleShape,
                 LocalLiquidGlass.current,
@@ -732,15 +739,15 @@ internal fun NowPlayingHeader(
                 LiquidGlassSurface(
                     onClick = hapticClick(action = onOpenLyricsOffset),
                     shape = CircleShape,
-                    color = if (lyricsOffsetMs != 0L) {
+                    color = if (lyricsOffsetMs != 0L && isComic) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
-                        liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+                        barPillColor
                     },
-                    contentColor = if (lyricsOffsetMs != 0L) {
+                    contentColor = if (lyricsOffsetMs != 0L && isComic) {
                         MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
-                        PlayerPalette.ink.copy(alpha = 0.94f)
+                        barPillContentColor
                     },
                     glassModifier = Modifier.liquidGlassChrome(
                         CircleShape,
@@ -756,14 +763,24 @@ internal fun NowPlayingHeader(
                             contentDescription = stringResource(R.string.player_lyrics_offset_cd),
                             modifier = Modifier.size(19.dp),
                         )
+                        if (lyricsOffsetMs != 0L && !isComic) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 7.dp, end = 7.dp)
+                                    .size(5.dp)
+                                    .clip(CircleShape)
+                                    .background(PlayerPalette.ink),
+                            )
+                        }
                     }
                 }
             }
             LiquidGlassSurface(
                 onClick = hapticClick(action = onOpenTrackMenu),
                 shape = CircleShape,
-                color = liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f)),
-                contentColor = PlayerPalette.ink.copy(alpha = 0.94f),
+                color = barPillColor,
+                contentColor = barPillContentColor,
                 glassModifier = Modifier.liquidGlassChrome(
                     CircleShape,
                     LocalLiquidGlass.current,
@@ -879,6 +896,7 @@ internal fun NowPlayingSongInfo(
                 size = 48.dp,
             )
 
+            val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
             val audioInteraction = remember { MutableInteractionSource() }
             val isPressed by audioInteraction.collectIsPressedAsState()
             val scale by animateFloatAsState(
@@ -898,13 +916,13 @@ internal fun NowPlayingSongInfo(
                 shape = CircleShape,
                 color = when {
                     isCustomAudio && isComic -> ComicAccent
-                    isCustomAudio -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.88f)
-                    else -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+                    isComic -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+                    isGlassActive -> Color.Transparent
+                    else -> PlayerPalette.ink.copy(alpha = 0.14f)
                 },
                 contentColor = when {
                     isCustomAudio && isComic -> ComicInk
-                    isCustomAudio -> MaterialTheme.colorScheme.onPrimaryContainer
-                    else -> PlayerPalette.ink.copy(alpha = 0.92f)
+                    else -> PlayerPalette.ink.copy(alpha = 0.94f)
                 },
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
@@ -921,6 +939,16 @@ internal fun NowPlayingSongInfo(
                         contentDescription = "Audio and speed controls",
                         modifier = Modifier.size(21.dp),
                     )
+                    if (isCustomAudio && !isComic) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 8.dp, end = 8.dp)
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(PlayerPalette.ink),
+                        )
+                    }
                 }
             }
         }
@@ -1038,7 +1066,7 @@ internal fun AudioInformationRow(
 @Composable
 private fun OutputRouteButton(display: OutputRouteDisplay, onClick: () -> Unit) {
     val isComic = LocalComicTheme.current
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val interaction = remember { MutableInteractionSource() }
     val isPressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -1058,13 +1086,12 @@ private fun OutputRouteButton(display: OutputRouteDisplay, onClick: () -> Unit) 
         shape = CircleShape,
         color = when {
             isComic -> display.comicColor
-            isDark -> liquidGlassContainerColor(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-            else -> MaterialTheme.colorScheme.secondaryContainer
+            isGlassActive -> Color.Transparent
+            else -> PlayerPalette.ink.copy(alpha = 0.14f)
         },
         contentColor = when {
             isComic -> ComicInk
-            isDark -> MaterialTheme.colorScheme.primary
-            else -> MaterialTheme.colorScheme.onSecondaryContainer
+            else -> PlayerPalette.ink.copy(alpha = 0.94f)
         },
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -1565,14 +1592,12 @@ internal fun MainPlaybackControls(
             shape = CircleShape,
             color = when {
                 isComic -> ComicAccent
-                isGlassActive -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.20f))
-                isTranslucent -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.primary
+                isGlassActive -> Color.Transparent
+                else -> PlayerPalette.ink.copy(alpha = 0.16f)
             },
             contentColor = when {
                 isComic -> ComicInk
-                isGlassActive -> PlayerPalette.ink
-                else -> MaterialTheme.colorScheme.onPrimary
+                else -> PlayerPalette.ink
             },
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
@@ -1845,9 +1870,11 @@ internal fun SecondaryActionRow(
     val pressedScale = dockHeight.value / (dockHeight.value - 8f).coerceAtLeast(1f)
     val slotWidthPx = if (innerWidthPx > 0) innerWidthPx.toFloat() / count else 0f
     val slotWidthDp = with(density) { slotWidthPx.toDp() }
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val outerBg = when {
         isComic -> MaterialTheme.colorScheme.surfaceContainerHigh
-        else -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+        isGlassActive -> Color.Transparent
+        else -> PlayerPalette.ink.copy(alpha = 0.14f)
     }
 
     val gestureModifier = Modifier.pointerInput(count, isRtl) {
@@ -2123,6 +2150,7 @@ private fun ClassicSecondaryActionTile(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.92f else 1f, ExpressiveMotion.spatialSpring(), label = "classicSecScale")
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val shape = RoundedCornerShape(14.dp)
     val tileColor by animateColorAsState(
         targetValue = when {
@@ -2130,7 +2158,8 @@ private fun ClassicSecondaryActionTile(
                 if (item.isHighlighted) item.comicAccent else item.comicAccent.copy(alpha = 0.44f)
             isComic ->
                 item.comicAccent.copy(alpha = if (item.isHighlighted) 0.36f else 0.22f)
-            else -> liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+            isGlassActive -> Color.Transparent
+            else -> PlayerPalette.ink.copy(alpha = 0.14f)
         },
         animationSpec = tween(180),
         label = "classicSecColor",

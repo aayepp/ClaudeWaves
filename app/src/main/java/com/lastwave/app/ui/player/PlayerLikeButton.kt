@@ -31,7 +31,10 @@ import androidx.compose.ui.unit.dp
 import com.lastwave.app.ui.common.ExpressiveMotion
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.LiquidGlassSurface
+import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalLiquidGlass
+import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
+import com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported
 import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.ui.theme.liquidGlassContainerColor
 
@@ -64,8 +67,14 @@ internal fun PlayerLikeButton(
         label = "heartFill",
     )
 
+    val isComic = LocalComicTheme.current
+    val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val background by animateColorAsState(
-        targetValue = if (liked) LikedBg else UnlikedBg,
+        targetValue = when {
+            liked -> LikedBg
+            isGlassActive && !isComic -> Color.Transparent
+            else -> UnlikedBg
+        },
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "heartBackground",
     )
