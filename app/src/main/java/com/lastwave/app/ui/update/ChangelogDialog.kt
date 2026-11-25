@@ -1,10 +1,14 @@
 package com.lastwave.app.ui.update
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -41,6 +45,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lastwave.app.data.update.AppChangelogManager
 import com.lastwave.app.data.update.AppUpdateManager
 import com.lastwave.app.data.update.ChangelogEntry
+import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import com.lastwave.app.ui.theme.LocalLiquidGlass
+import com.lastwave.app.ui.theme.comicPanel
+import com.lastwave.app.ui.theme.glassCardBorder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -89,50 +98,129 @@ private fun WhatsNewDialog(
     val notes = remember(entry.bodyMarkdown, notesStyle) {
         releaseNotesText(entry.bodyMarkdown, notesStyle)
     }
+    val metrics = rememberDialogLayoutMetrics()
+    val isComic = LocalComicTheme.current
+    val isGlass = LocalLiquidGlass.current && !isComic
+    val isDark = LocalIsDarkTheme.current
+    val corner = if (isComic) 20.dp else 28.dp
+    val cardShape = RoundedCornerShape(corner)
+    val dialogSurface = if (isGlass) {
+        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isDark) 0.90f else 0.94f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val cardBorder = when {
+        isComic -> null
+        isGlass -> glassCardBorder()
+        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f))
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        val dialogSurface = MaterialTheme.colorScheme.surfaceContainerHigh
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = cardShape,
             color = dialogSurface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .widthIn(max = 560.dp),
+            border = cardBorder,
+            modifier = if (metrics.isCompactLandscape) {
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .widthIn(max = 700.dp)
+                    .height(metrics.maxDialogHeight.coerceAtMost(400.dp))
+                    .comicPanel(cardShape)
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .widthIn(max = 520.dp)
+                    .heightIn(max = metrics.maxDialogHeight)
+                    .comicPanel(cardShape)
+            },
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                UpdateHeroHeader(
-                    icon = Icons.Filled.AutoAwesome,
-                    title = "What's New",
-                    badgeText = "v${entry.version}",
-                    subtitleText = entry.date?.let { "•  Updated $it" },
-                    surfaceColor = dialogSurface,
-                )
-                Column(
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 22.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+            if (metrics.isCompactLandscape) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    UpdateSplitHeroPane(
+                        icon = Icons.Filled.AutoAwesome,
+                        title = "What's New",
+                        badgeText = "v${entry.version}",
+                        subtitleText = entry.date?.let { "•  Updated $it" },
+                        surfaceColor = dialogSurface,
+                        modifier = Modifier.weight(0.42f).fillMaxHeight(),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)),
+                    )
                     Column(
-                        Modifier
-                            .heightIn(max = 320.dp)
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier
+                            .weight(0.58f)
+                            .fillMaxHeight()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Text(
-                            text = notes,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            Text(
+                                text = notes,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(onClick = onViewAll) { Text("All Versions") }
+                            Button(onClick = onDismiss) { Text("Got it") }
+                        }
                     }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically,
+                }
+            } else {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    UpdateHeroHeader(
+                        icon = Icons.Filled.AutoAwesome,
+                        title = "What's New",
+                        badgeText = "v${entry.version}",
+                        subtitleText = entry.date?.let { "•  Updated $it" },
+                        surfaceColor = dialogSurface,
+                        maxHeight = 175.dp,
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        TextButton(onClick = onViewAll) { Text("All Versions") }
-                        Button(onClick = onDismiss) { Text("Got it") }
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            Text(
+                                text = notes,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(onClick = onViewAll) { Text("All Versions") }
+                            Button(onClick = onDismiss) { Text("Got it") }
+                        }
                     }
                 }
             }
@@ -147,6 +235,7 @@ private fun ChangelogViewerDialog(
     onDismiss: () -> Unit,
 ) {
     val notesStyle = releaseNotesStyle()
+    val metrics = rememberDialogLayoutMetrics()
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -156,10 +245,11 @@ private fun ChangelogViewerDialog(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .widthIn(max = 560.dp),
+                .padding(horizontal = 20.dp, vertical = 14.dp)
+                .widthIn(max = 600.dp)
+                .heightIn(max = metrics.maxDialogHeight),
         ) {
-            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(12.dp))
@@ -182,7 +272,7 @@ private fun ChangelogViewerDialog(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 420.dp),
+                            .weight(1f, fill = false),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         items(items = entries, key = { it.version }) { entry ->

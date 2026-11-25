@@ -67,6 +67,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.draw.blur
@@ -512,7 +513,7 @@ internal fun AnimatedPlayPauseIcon(isPlaying: Boolean, modifier: Modifier = Modi
 @Composable
 internal fun MiniPlayer(
     state: PlaybackChromeState,
-    progressState: StateFlow<PlaybackProgressState>,
+    @Suppress("UNUSED_PARAMETER") progressState: StateFlow<PlaybackProgressState>,
     onExpand: () -> Unit,
     onToggle: () -> Unit,
     onPrevious: () -> Unit,
@@ -873,11 +874,6 @@ internal fun MiniPlayer(
                             )
                         }
                     }
-                    MiniPlayerProgress(
-                        progressState = progressState,
-                        isGlass = true,
-                        trackTint = miniGlassInk,
-                    )
                 }
                 MiniPlayerImpactAndQueueOverlay(
                     dropController = dropController,
@@ -1059,10 +1055,6 @@ internal fun MiniPlayer(
                             )
                         }
                     }
-                    MiniPlayerProgress(
-                        progressState = progressState,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
                 }
                 MiniPlayerImpactAndQueueOverlay(
                     dropController = dropController,
@@ -1092,18 +1084,62 @@ private fun MiniPlayerImpactAndQueueOverlay(
     val queueMorph = dropController.queueBannerProgress
     val accent = MaterialTheme.colorScheme.primary
 
-    if (ripple in 0.01f..0.99f) {
+    if (ripple in 0.005f..0.995f) {
         Canvas(modifier) {
             val impactX = (dropController.impactXFraction * size.width).coerceIn(16.dp.toPx(), size.width - 16.dp.toPx())
-            val maxR = size.width * 0.55f
-            val r = androidx.compose.ui.util.lerp(10.dp.toPx(), maxR, ripple)
-            val fade = (1f - ripple) * (1f - ripple)
+            val origin = Offset(impactX, 3.dp.toPx())
+            val ease1 = 1f - (1f - ripple).pow(2.2f)
+            val fade1 = (1f - ripple).pow(1.45f)
+            val tint = if (isGlass) Color(0xFF8BE2FF) else accent
+
+            // Internal caustic bloom clipped strictly inside MiniPlayer pill
+            if (!isComic) {
+                val bloomR = (size.width * 0.44f * (0.25f + 0.75f * ease1)).coerceAtLeast(1f)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            tint.copy(alpha = 0.40f * fade1),
+                            tint.copy(alpha = 0.16f * fade1),
+                            Color.Transparent,
+                        ),
+                        center = origin,
+                        radius = bloomR,
+                    ),
+                    radius = bloomR,
+                    center = origin,
+                )
+            }
+
+            // Primary expanding glass shockwave ring (clipped inside capsule)
+            val r1 = androidx.compose.ui.util.lerp(10.dp.toPx(), size.width * 0.62f, ease1)
             drawCircle(
-                color = (if (isGlass) Color(0xFF9CEEFF) else accent).copy(alpha = 0.58f * fade),
-                radius = r,
-                center = Offset(impactX, 4.dp.toPx()),
-                style = Stroke(width = androidx.compose.ui.util.lerp(3.4.dp.toPx(), 1.0.dp.toPx(), ripple)),
+                color = tint.copy(alpha = 0.72f * fade1),
+                radius = r1,
+                center = origin,
+                style = Stroke(width = androidx.compose.ui.util.lerp(3.4.dp.toPx(), 1.1.dp.toPx(), ripple)),
             )
+            if (!isComic) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.82f * fade1),
+                    radius = (r1 - 2.dp.toPx()).coerceAtLeast(1f),
+                    center = origin,
+                    style = Stroke(width = 1.3.dp.toPx()),
+                )
+            }
+
+            // Secondary harmonic trailing wave ring
+            if (ripple > 0.10f) {
+                val p2 = ((ripple - 0.10f) / 0.90f).coerceIn(0f, 1f)
+                val ease2 = 1f - (1f - p2).pow(2.1f)
+                val fade2 = (1f - p2).pow(1.5f)
+                val r2 = androidx.compose.ui.util.lerp(6.dp.toPx(), size.width * 0.44f, ease2)
+                drawCircle(
+                    color = (if (isGlass) Color(0xFFE0F9FF) else accent).copy(alpha = 0.56f * fade2),
+                    radius = r2,
+                    center = origin,
+                    style = Stroke(width = 1.8.dp.toPx()),
+                )
+            }
         }
     }
 
@@ -1169,54 +1205,6 @@ private fun MiniPlayerFavoriteButton(
                     scaleY = tapMotion.scale
                     rotationZ = tapMotion.rotationZ
                 },
-        )
-    }
-}
-
-@Composable
-internal fun MiniPlayerProgress(
-    progressState: StateFlow<PlaybackProgressState>,
-    modifier: Modifier = Modifier,
-    isGlass: Boolean = false,
-    trackTint: Color? = null,
-) {
-    val comic = LocalComicTheme.current
-    val progressFractionState = remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(progressState) {
-        progressState.collect { s ->
-            val p = if (s.durationMs > 0) s.positionMs.toFloat() / s.durationMs else 0f
-            progressFractionState.floatValue = p
-        }
-    }
-    Box(
-        modifier
-            .fillMaxWidth()
-            .then(
-                if (isGlass) {
-                    Modifier.padding(start = 28.dp, end = 28.dp, bottom = 2.5.dp).height(2.dp)
-                } else {
-                    Modifier.padding(horizontal = 14.dp).height(if (comic) 3.5.dp else 3.dp)
-                },
-            )
-            .clip(CircleShape)
-            .background(
-                when {
-                    isGlass -> (trackTint ?: Color.White).copy(alpha = 0.18f)
-                    comic -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f)
-                    else -> MaterialTheme.colorScheme.surfaceVariant
-                },
-            ),
-    ) {
-        // Scale an already measured layer instead of changing its width and
-        // forcing the mini-player through measure/layout on every ticker tick.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = progressFractionState.floatValue.coerceIn(0f, 1f)
-                    transformOrigin = TransformOrigin(0f, 0.5f)
-                }
-                .background(MaterialTheme.colorScheme.primary),
         )
     }
 }
