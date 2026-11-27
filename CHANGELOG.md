@@ -1,15 +1,12 @@
 # Changelog
 
-## [1.0.55] - 2026-11-28
+## [1.0.56] - 2026-11-28
 
 ### Added
 - **Customizable home dock (`Susun dock`):** long-pressing the bottom navigation bar (Liquid Glass & Material 3 fallback) lets users pick up to 4 buttons (`Feed`, `Stats`, `Library` tabs plus shortcuts for `Liked`, `Shuffle`, `Downloads`, `Discover`, `Podcasts`, `New Releases`, `Genres`, `Jam`, and `Settings`) and drag to reorder, with expanding-capsule layout when 4 items are selected.
 
 ### Changed
-- **Developer Console Bento overview & hourly update checks:** redesigned the Developer overview into a Bento grid (live online hero, 14-day smooth trend line, DAU/WAU/MAU/Install tiles, expandable country list with flags, app version bar, Android donut, APK downloads, category/status inbox filters + one-tap copy), unified broadcast type icons/accents, and switched update & broadcast checks to run hourly.
-
-### Fixed
-- **Developer stats DoH fallback & dock visibility:** added DoH fallback in Developer stats calls when Private DNS or ad blockers sinkhole the worker domain to `127.0.0.1`, and aligned `MainShellViewModel.setDockItems` visibility to `internal` to match `DockItem`.
+- **Faster update & announcement checks:** background update and announcement checks now run hourly with refreshed notification icons and styling.
 
 ## [1.0.54] - 2026-11-27
 
