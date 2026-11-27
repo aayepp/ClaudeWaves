@@ -254,6 +254,10 @@ class DeveloperConsoleViewModel @Inject constructor(
         }
     }
 
+    fun hideShortcutFromSettings() {
+        manager.hideDeveloperShortcut()
+    }
+
     fun signOut() {
         manager.clearOwnerToken()
         _uiState.update {
@@ -565,7 +569,9 @@ fun DeveloperConsoleScreen(
             onDismissRequest = { showSignOutConfirm = false },
             title = { Text("Log Keluar Developer?", fontWeight = FontWeight.Bold) },
             text = {
-                Text("Token @${ui.ownerLogin ?: "aayepp"} akan dipadam daripada peranti ini.")
+                Text(
+                    "Token @${ui.ownerLogin ?: "aayepp"} akan dipadam dan kad Developer Console akan disembunyikan daripada Settings.",
+                )
             },
             confirmButton = {
                 TextButton(
@@ -732,6 +738,10 @@ fun DeveloperConsoleScreen(
                 onCloseBroadcast = viewModel::closeBroadcast,
                 onSendBroadcast = viewModel::sendBroadcast,
                 onPreviewBroadcast = { previewMessage = it },
+                onHideShortcut = {
+                    viewModel.hideShortcutFromSettings()
+                    onBack()
+                },
                 onRequestSignOut = { showSignOutConfirm = true },
             )
         }
@@ -1129,6 +1139,7 @@ private fun UnlockedConsoleContent(
         onSuccess: () -> Unit,
     ) -> Unit,
     onPreviewBroadcast: (BroadcastMessage) -> Unit,
+    onHideShortcut: () -> Unit,
     onRequestSignOut: () -> Unit,
 ) {
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -1293,6 +1304,7 @@ private fun UnlockedConsoleContent(
                         SessionSecurityStrip(
                             ownerLogin = ui.ownerLogin ?: "aayepp",
                             isComic = isComic,
+                            onHideShortcut = onHideShortcut,
                             onSignOut = onRequestSignOut,
                         )
                     }
@@ -1501,6 +1513,7 @@ private fun UnlockedConsoleContent(
                         SessionSecurityStrip(
                             ownerLogin = ui.ownerLogin ?: "aayepp",
                             isComic = isComic,
+                            onHideShortcut = onHideShortcut,
                             onSignOut = onRequestSignOut,
                         )
                     }
@@ -2557,6 +2570,7 @@ private fun NewBroadcastSection(
 private fun SessionSecurityStrip(
     ownerLogin: String,
     isComic: Boolean,
+    onHideShortcut: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Surface(
@@ -2570,7 +2584,7 @@ private fun SessionSecurityStrip(
                 .fillMaxWidth()
                 .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Icon(
                 imageVector = Icons.Filled.Shield,
@@ -2578,6 +2592,7 @@ private fun SessionSecurityStrip(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
+            Spacer(Modifier.width(6.dp))
             Text(
                 text = "@$ownerLogin · Auto-kunci bila keluar",
                 style = MaterialTheme.typography.bodySmall,
@@ -2586,6 +2601,9 @@ private fun SessionSecurityStrip(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            TextButton(onClick = onHideShortcut) {
+                Text("Sembunyi", fontWeight = FontWeight.SemiBold)
+            }
             TextButton(
                 onClick = onSignOut,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),

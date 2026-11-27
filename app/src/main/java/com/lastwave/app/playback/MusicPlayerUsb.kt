@@ -339,14 +339,14 @@ internal fun MusicPlayer.applyDacRoutingFor(sourceRateHz: Int?, streamCodec: Str
         val isSpatial = isSpatialAudioCodec(streamCodec) || isSpatialAudioCodec(_state.value.audioCodec)
         val effectiveRateHz = if (isSpatial) 48000 else sourceRateHz
         val dac = usbDacMonitor.state.value.dac
-        val exclusiveWanted = !isSpatial && exclusiveUsbWanted(streamCodec)
+        val exclusiveWanted = !isSpatial && !karaokeEnabled && exclusiveUsbWanted(streamCodec)
         exclusiveUsbOutput.setWanted(exclusiveWanted)
-        val internalWanted = !isSpatial && internalDirectWanted()
+        val internalWanted = !isSpatial && !karaokeEnabled && internalDirectWanted()
         internalDirectOutput.setWanted(internalWanted)
         // Both decks share the endpoint; only the playing one may hold it.
         val liveSink = activePlayer?.let { playerToSink[it] }
         audioSinks.forEach { sink ->
-            sink.setBitPerfectRequested(!isSpatial && bitPerfectEnabled)
+            sink.setBitPerfectRequested(!isSpatial && !karaokeEnabled && bitPerfectEnabled)
             sink.syncExclusiveUsb(exclusiveWanted)
             sink.syncInternalDirect(internalWanted && sink === liveSink)
         }

@@ -77,10 +77,12 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.SyncDisabled
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import com.lastwave.app.ui.comic.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import com.lastwave.app.playback.karaoke.KaraokeStatus
 import com.lastwave.app.ui.comic.Surface
 import androidx.compose.material3.Text
 import com.lastwave.app.ui.comic.TextButton
@@ -482,7 +484,15 @@ internal fun ModernLyricsControls(
             enter = fadeIn(tween(150)) + expandVertically(tween(200)),
             exit = fadeOut(tween(150)) + shrinkVertically(tween(200)),
         ) {
-            var localVocal by remember(state.karaokeVocalLevel) { mutableFloatStateOf(state.karaokeVocalLevel) }
+            var localIntensity by remember { mutableFloatStateOf(state.karaokeRemovalIntensity) }
+            var isDraggingKaraoke by remember { mutableStateOf(false) }
+            LaunchedEffect(state.karaokeRemovalIntensity) {
+                if (!isDraggingKaraoke) {
+                    localIntensity = state.karaokeRemovalIntensity
+                }
+            }
+            val kStatus = state.karaokeStatus
+            val isErrorStatus = kStatus is KaraokeStatus.AiError
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = liquidGlassContainerColor(PlayerPalette.shade.copy(alpha = 0.42f)),
@@ -499,14 +509,102 @@ internal fun ModernLyricsControls(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.ly_karaoke_mode),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PlayerPalette.ink.copy(alpha = 0.92f),
+                                maxLines = 1,
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = PlayerPalette.ink.copy(alpha = if (isErrorStatus) 0.18f else 0.11f),
+                                modifier = if (isErrorStatus) {
+                                    Modifier.clickable { player.retryKaraokeAiDownload() }
+                                } else {
+                                    Modifier
+                                },
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                ) {
+                                    when (kStatus) {
+                                        is KaraokeStatus.DownloadingModel -> {
+                                            CircularProgressIndicator(
+                                                strokeWidth = 1.5.dp,
+                                                color = PlayerPalette.ink,
+                                                modifier = Modifier.size(10.dp),
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.ly_karaoke_ai_downloading, kStatus.progressPct),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = PlayerPalette.ink.copy(alpha = 0.92f),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                        is KaraokeStatus.PreparingAi -> {
+                                            CircularProgressIndicator(
+                                                strokeWidth = 1.5.dp,
+                                                color = PlayerPalette.ink,
+                                                modifier = Modifier.size(10.dp),
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.ly_karaoke_ai_preparing),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = PlayerPalette.ink.copy(alpha = 0.92f),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                        is KaraokeStatus.AiActive -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        shape = CircleShape,
+                                                    ),
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.ly_karaoke_ai_active),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = PlayerPalette.ink.copy(alpha = 0.95f),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                        is KaraokeStatus.AiError -> {
+                                            Text(
+                                                text = stringResource(R.string.ly_karaoke_ai_retry),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.error,
+                                                maxLines = 1,
+                                            )
+                                        }
+                                        KaraokeStatus.InstantStft, KaraokeStatus.Off -> {
+                                            Text(
+                                                text = stringResource(R.string.ly_karaoke_stft_instant),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = PlayerPalette.ink.copy(alpha = 0.82f),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         Text(
-                            text = stringResource(R.string.ly_karaoke_mode),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = PlayerPalette.ink.copy(alpha = 0.92f),
-                        )
-                        Text(
-                            text = stringResource(R.string.ly_karaoke_vocal_level, (localVocal * 100f).roundToInt()),
+                            text = stringResource(
+                                R.string.ly_karaoke_removal_level,
+                                (localIntensity * 100f).roundToInt(),
+                            ),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = PlayerPalette.ink.copy(alpha = 0.92f),
@@ -518,25 +616,29 @@ internal fun ModernLyricsControls(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.MusicNote,
+                            imageVector = Icons.Filled.Mic,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = PlayerPalette.ink.copy(alpha = 0.78f),
+                            tint = PlayerPalette.ink.copy(alpha = 0.72f),
                         )
                         Slider(
-                            value = localVocal,
+                            value = localIntensity,
                             onValueChange = {
-                                localVocal = it
-                                player.setKaraokeVocalLevel(it)
+                                isDraggingKaraoke = true
+                                localIntensity = it
+                                player.setKaraokeRemovalIntensity(it)
+                            },
+                            onValueChangeFinished = {
+                                isDraggingKaraoke = false
                             },
                             valueRange = 0f..1f,
                             modifier = Modifier.weight(1f),
                         )
                         Icon(
-                            imageVector = Icons.Filled.Mic,
+                            imageVector = Icons.Filled.MusicNote,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = PlayerPalette.ink.copy(alpha = 0.92f),
+                            tint = PlayerPalette.ink.copy(alpha = 0.95f),
                         )
                     }
                 }

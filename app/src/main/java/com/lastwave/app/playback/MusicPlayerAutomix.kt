@@ -476,7 +476,7 @@ internal fun MusicPlayer.updateBitPerfectState() {
         // Dolby Atmos / Spatial audio requires system decoding & binaural virtualization;
         // forcing bit-perfect bypass or bit-perfect mixer on Atmos mutes the output.
         val isSpatial = isSpatialAudioCodec(_state.value.audioCodec)
-        val effectiveBitPerfect = bitPerfectEnabled && !isSpatial
+        val effectiveBitPerfect = bitPerfectEnabled && !isSpatial && !karaokeEnabled
         val primaryOk = runCatching {
             val engine = nativeAudioEngine.get()
             engine.setBitPerfect(effectiveBitPerfect)

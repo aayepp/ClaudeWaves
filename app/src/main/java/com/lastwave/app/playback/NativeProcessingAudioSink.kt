@@ -169,6 +169,14 @@ class NativeProcessingAudioSink(
     /** Buffer already analysed: Media3 retries the same object until consumed. */
     private var hapticsBuffer: ByteBuffer? = null
 
+    /** Hybrid AI + C++ STFT karaoke mixer hooks. */
+    var aiKaraokeEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine? = null
+    @Volatile var karaokeEnabled: Boolean = false
+    @Volatile var karaokeRemovalIntensity: Float = 1.0f
+    private var aiMixScratch = FloatArray(0)
+    private var dryRefScratch = FloatArray(0)
+    private var aiCrossfade = 0f
+
     var onConfiguredFormat: ((sampleRateHz: Int, pcmEncoding: Int, channelCount: Int) -> Unit)? = null
     var bitDepthHintProvider: (() -> Int?)? = null
 
@@ -600,6 +608,7 @@ class NativeProcessingAudioSink(
     ): Boolean {
         maybeAdoptExclusiveUsb()
         maybeAdoptInternalDirect()
+        maybeEngageNativeForKaraoke()
         var presentationTimeUs = bufferPresentationTimeUs
         if (skipCheckedBuffer !== buffer) {
             skipCheckedBuffer = buffer
@@ -858,9 +867,30 @@ class NativeProcessingAudioSink(
     ): Boolean {
         if (pendingOutput == null) {
             if (!buffer.hasRemaining()) return true
+            val aiEngine = aiKaraokeEngine
+            var refDry: FloatArray? = null
+            var refFrames = 0
+            if (karaokeEnabled && outputChannelCount == 2 &&
+                aiEngine != null && !aiEngine.stemBuffer.isAlignmentLocked()
+            ) {
+                refFrames = extractDryStereoPreview(buffer, configuredFormat)
+                if (refFrames > 0) refDry = dryRefScratch
+            }
             processor.queueInput(buffer.duplicate())
             pendingInputLimit = buffer.limit()
             val output = processor.getOutput()
+            if (karaokeEnabled && outputChannelCount == 2 && output.hasRemaining() && aiEngine != null) {
+                blendAiKaraokeStem(
+                    output = output,
+                    presentationTimeUs = presentationTimeUs,
+                    sampleRate = processor.nativeOutputSampleRate,
+                    aiEngine = aiEngine,
+                    refDry = refDry,
+                    refFrames = refFrames,
+                )
+            } else if (!karaokeEnabled) {
+                aiCrossfade = 0f
+            }
             applyLoudness(output)
             pendingOutput = output
             pendingPresentationTimeUs = presentationTimeUs
@@ -1160,6 +1190,103 @@ class NativeProcessingAudioSink(
                 "resampled=${output.requiresResampling()} AudioTrack=idle",
         )
         return true
+    }
+
+    /**
+     * Mid-track engage when Karaoke activates while the sink was on a bypass route
+     * (e.g. Bit-Perfect direct AudioTrack). Runs safely on ExoPlayer's renderer thread.
+     */
+    private fun maybeEngageNativeForKaraoke() {
+        if (!karaokeEnabled || processingActive || bitPerfectRequested || exclusiveWanted || internalWanted) return
+        if (usbExclusive || internalActive || !hasConfigured || nativePathDisabled || !processor.isAvailable) return
+        if (pendingOutput != null || endOfStreamQueued) return
+        val format = configuredFormat ?: return
+        if (canProcess(format)) {
+            if (tryConfigureNativePath(format, configuredOutputChannels)) {
+                bitPerfectAtConfigure = false
+            }
+        }
+    }
+
+    private fun extractDryStereoPreview(buffer: ByteBuffer, format: Format?): Int {
+        if (format == null || format.sampleMimeType != MimeTypes.AUDIO_RAW) return 0
+        val channels = format.channelCount
+        if (channels !in 1..2) return 0
+        val bps = when (format.pcmEncoding) {
+            C.ENCODING_PCM_16BIT -> 2
+            C.ENCODING_PCM_FLOAT -> 4
+            else -> return 0
+        }
+        val availFrames = buffer.remaining() / (bps * channels)
+        val count = minOf(availFrames, 512)
+        if (count <= 0) return 0
+        if (dryRefScratch.size < count * 2) {
+            dryRefScratch = FloatArray(count * 2)
+        }
+        val dup = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        if (format.pcmEncoding == C.ENCODING_PCM_FLOAT) {
+            for (i in 0 until count) {
+                val l = dup.getFloat()
+                val r = if (channels == 2) dup.getFloat() else l
+                dryRefScratch[i * 2] = l
+                dryRefScratch[i * 2 + 1] = r
+            }
+        } else {
+            for (i in 0 until count) {
+                val l = dup.getShort() / 32768f
+                val r = if (channels == 2) dup.getShort() / 32768f else l
+                dryRefScratch[i * 2] = l
+                dryRefScratch[i * 2 + 1] = r
+            }
+        }
+        return count
+    }
+
+    private fun blendAiKaraokeStem(
+        output: ByteBuffer,
+        presentationTimeUs: Long,
+        sampleRate: Int,
+        aiEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine,
+        refDry: FloatArray?,
+        refFrames: Int,
+    ) {
+        val frames = output.remaining() / (Float.SIZE_BYTES * 2)
+        if (frames <= 0 || sampleRate <= 0) return
+        if (aiMixScratch.size < frames * 2) {
+            aiMixScratch = FloatArray(frames * 2)
+        }
+        val hasAi = aiEngine.tryReadMixedStereoFloat(
+            presentationTimeUs = presentationTimeUs,
+            frameCount = frames,
+            outputSampleRate = sampleRate,
+            removalIntensity = karaokeRemovalIntensity,
+            outInterleavedFloat = aiMixScratch,
+            refDryStereoFloat = refDry,
+            refDryFrames = refFrames,
+        )
+        val target = if (hasAi) 1f else 0f
+        if (aiCrossfade <= 0f && target <= 0f) return
+
+        val rampStep = 1f / (sampleRate * 0.05f).coerceAtLeast(1f)
+        val fb = output.duplicate().order(ByteOrder.nativeOrder()).asFloatBuffer()
+        for (f in 0 until frames) {
+            aiCrossfade = if (aiCrossfade < target) {
+                minOf(target, aiCrossfade + rampStep)
+            } else if (aiCrossfade > target) {
+                maxOf(target, aiCrossfade - rampStep)
+            } else {
+                aiCrossfade
+            }
+            val w = aiCrossfade
+            val idxL = f * 2
+            val idxR = idxL + 1
+            val stftL = fb.get(idxL)
+            val stftR = fb.get(idxR)
+            val aiL = aiMixScratch[idxL]
+            val aiR = aiMixScratch[idxR]
+            fb.put(idxL, (stftL + (aiL - stftL) * w).coerceIn(-0.98f, 0.98f))
+            fb.put(idxR, (stftR + (aiR - stftR) * w).coerceIn(-0.98f, 0.98f))
+        }
     }
 
     /**
@@ -1679,6 +1806,7 @@ class NativeProcessingAudioSink(
     }
 
     override fun flush() {
+        aiCrossfade = 0f
         directEq.reset()
         directEqBuffer = null
         eqCopySource = null
@@ -1722,6 +1850,7 @@ class NativeProcessingAudioSink(
     }
 
     override fun reset() {
+        aiCrossfade = 0f
         directEq.reset()
         directEqBuffer = null
         eqCopySource = null

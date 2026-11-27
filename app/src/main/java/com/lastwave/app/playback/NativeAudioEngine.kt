@@ -117,10 +117,9 @@ class NativeAudioEngine @Inject constructor(
         withHandle(Unit) { nativeSetStudioMasterClarity(it, enabled) }
     }
 
-    /** Real-time Mid-Side vocal reduction (Karaoke Mode). */
+    /** Real-time C++ STFT vocal reduction (Karaoke Mode). */
     fun setKaraoke(enabled: Boolean, vocalLevel: Float) {
-        if (systemFlattened) return
-        val safeLevel = if (vocalLevel.isFinite()) vocalLevel.coerceIn(0f, 1f) else 0.15f
+        val safeLevel = if (vocalLevel.isFinite()) vocalLevel.coerceIn(0f, 1f) else 0.0f
         withHandle(Unit) { nativeSetKaraoke(it, enabled, safeLevel) }
     }
 

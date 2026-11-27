@@ -1118,4 +1118,10 @@
     <string name="feedback_error_short">Введите минимум 3 символа для заголовка и 5 для описания.</string>
     <string name="feedback_error_rate_limit">Слишком много запросов. Попробуйте позже.</string>
     <string name="feedback_error_failed">Ошибка отправки. Проверьте подключение.</string>
+    <string name="ly_karaoke_removal_level">Убрать вокал %1$d%%</string>
+    <string name="ly_karaoke_ai_active">ИИ активен</string>
+    <string name="ly_karaoke_ai_preparing">Подготовка ИИ…</string>
+    <string name="ly_karaoke_ai_downloading">ИИ %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Мгновенно</string>
+    <string name="ly_karaoke_ai_retry">Повторить ИИ</string>
 </resources>

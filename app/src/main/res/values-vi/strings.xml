@@ -1415,4 +1415,10 @@
     <string name="feedback_error_short">Vui lòng nhập tiêu đề tối thiểu 3 ký tự và chi tiết 5 ký tự.</string>
     <string name="feedback_error_rate_limit">Bạn gửi quá nhiều lần. Vui lòng thử lại sau.</string>
     <string name="feedback_error_failed">Gửi thất bại. Kiểm tra lại kết nối mạng.</string>
+    <string name="ly_karaoke_removal_level">Tách giọng %1$d%%</string>
+    <string name="ly_karaoke_ai_active">AI Đang bật</string>
+    <string name="ly_karaoke_ai_preparing">Đang chuẩn bị AI…</string>
+    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Tức thì</string>
+    <string name="ly_karaoke_ai_retry">Thử lại AI</string>
 </resources>

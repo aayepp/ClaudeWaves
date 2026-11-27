@@ -582,6 +582,9 @@ dependencies {
 
     // Bit-perfect USB exclusive output: audio_engine UsbAudioDriver.
     implementation(project(":audio:decent-usb-audio-driver"))
+
+    // On-device AI vocal separation (MDX-Net ONNX); 1.22.0 ships 16 KB page-aligned native libs (minSdk 24+).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 }
 
 kotlin {

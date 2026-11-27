@@ -1118,4 +1118,10 @@
     <string name="feedback_error_short">제목은 3자 이상, 내용은 5자 이상 입력하세요.</string>
     <string name="feedback_error_rate_limit">요청이 너무 많습니다. 잠시 후 다시 시도하세요.</string>
     <string name="feedback_error_failed">전송 실패. 인터넷 연결을 확인하세요.</string>
+    <string name="ly_karaoke_removal_level">보컬 제거 %1$d%%</string>
+    <string name="ly_karaoke_ai_active">AI 활성</string>
+    <string name="ly_karaoke_ai_preparing">AI 준비 중…</string>
+    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">즉시</string>
+    <string name="ly_karaoke_ai_retry">AI 재시도</string>
 </resources>

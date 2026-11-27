@@ -1118,4 +1118,10 @@
     <string name="feedback_error_short">يرجى إدخال 3 أحرف للعنوان و5 أحرف للتفاصيل على الأقل.</string>
     <string name="feedback_error_rate_limit">طلبات كثيرة جدًا. حاول مرة أخرى لاحقًا.</string>
     <string name="feedback_error_failed">فشل الإرسال. تحقق من اتصالك بالإنترنت.</string>
+    <string name="ly_karaoke_removal_level">إزالة الصوت %1$d%%</string>
+    <string name="ly_karaoke_ai_active">الذكاء نشط</string>
+    <string name="ly_karaoke_ai_preparing">جارٍ تجهيز AI…</string>
+    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">فوري</string>
+    <string name="ly_karaoke_ai_retry">إعادة AI</string>
 </resources>

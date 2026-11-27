@@ -1212,4 +1212,10 @@
     <string name="feedback_error_short">Başlık en az 3, ayrıntılar en az 5 karakter olmalıdır.</string>
     <string name="feedback_error_rate_limit">Çok fazla gönderim. Lütfen birkaç dakika sonra tekrar deneyin.</string>
     <string name="feedback_error_failed">Gönderilemedi. İnternet bağlantınızı kontrol edin.</string>
+    <string name="ly_karaoke_removal_level">Vokal Kaldırma %1$d%%</string>
+    <string name="ly_karaoke_ai_active">YZ Aktif</string>
+    <string name="ly_karaoke_ai_preparing">YZ Hazırlanıyor…</string>
+    <string name="ly_karaoke_ai_downloading">YZ %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Anında</string>
+    <string name="ly_karaoke_ai_retry">YZ Tekrar</string>
 </resources>

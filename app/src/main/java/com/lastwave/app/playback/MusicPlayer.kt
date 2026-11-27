@@ -200,6 +200,7 @@ class MusicPlayer @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val ytMusicAuthManager: YtMusicAuthManager,
     private val loudnessPrefs: LoudnessPrefs,
+    internal val aiKaraokeEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine,
 ) {
 
     private class VpnYoutubeLoginRequiredException(message: String) : java.io.IOException(message)
@@ -573,8 +574,8 @@ class MusicPlayer @Inject constructor(
     /** Local in-app playback volume (persisted). Never holds the cast level. */
     var appVolume: Float = 1f
         private set
-    private var karaokeEnabled = false
-    private var karaokeVocalLevel = 0.15f
+    internal var karaokeEnabled = false
+    internal var karaokeVocalLevel = 0.0f
     /** Last volume of the cast receiver; only meaningful while casting. */
     internal var castVolume: Float = 1f
     private var appVolumePersistJob: Job? = null
@@ -1114,6 +1115,7 @@ class MusicPlayer @Inject constructor(
             runCatching { autoMixCoordinator.get().setTransportPaused(!playWhenReady) }
         }
         override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+            audioSinks.forEach { it.outputBufferSizing?.speedHeadroom = playbackParameters.speed.coerceAtLeast(1f).toDouble() }
             _state.update { it.copy(speed = playbackParameters.speed, pitch = playbackParameters.pitch) }
         }
         override fun onVolumeChanged(volume: Float) {
@@ -1257,6 +1259,9 @@ class MusicPlayer @Inject constructor(
                     if (nextIndex != C.INDEX_UNSET && nextIndex in 0 until player.mediaItemCount && nextIndex != currentIndex) {
                         preloadNextTrack(nextIndex, player.getMediaItemAt(nextIndex).toPlayableTrack())
                     }
+                }
+                if (karaokeEnabled) {
+                    aiKaraokeEngine.onTrackChanged(buildCurrentKaraokeSource(), targetPos)
                 }
             }
         override fun onPlayerError(error: PlaybackException) {
@@ -1731,7 +1736,9 @@ class MusicPlayer @Inject constructor(
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
             ): androidx.media3.exoplayer.audio.AudioSink {
-                val bufferSizing = OutputBufferSizing()
+                val bufferSizing = OutputBufferSizing().apply {
+                    speedHeadroom = 1.0
+                }
                 fun pcmSink(floatOutput: Boolean) = DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(floatOutput)
                     .setEnableAudioTrackPlaybackParams(true)
@@ -1807,9 +1814,12 @@ class MusicPlayer @Inject constructor(
                             ?: fallbackDepth
                     }
                     val isSpatial = isSpatialAudioCodec(_state.value.audioCodec)
-                    createdSink.setBitPerfectRequested(!isSpatial && bitPerfectEnabled)
-                    createdSink.syncExclusiveUsb(handleAudioFocus && !isSpatial && exclusiveUsbWanted())
-                    createdSink.syncInternalDirect(handleAudioFocus && !isSpatial && internalDirectWanted())
+                    createdSink.aiKaraokeEngine = aiKaraokeEngine
+                    createdSink.karaokeEnabled = karaokeEnabled
+                    createdSink.karaokeRemovalIntensity = (1f - karaokeVocalLevel).coerceIn(0f, 1f)
+                    createdSink.setBitPerfectRequested(!isSpatial && !karaokeEnabled && bitPerfectEnabled)
+                    createdSink.syncExclusiveUsb(handleAudioFocus && !isSpatial && !karaokeEnabled && exclusiveUsbWanted())
+                    createdSink.syncInternalDirect(handleAudioFocus && !isSpatial && !karaokeEnabled && internalDirectWanted())
                     audioSinks.add(createdSink)
                     runCatching {
                         routedDacDeviceId?.let { id -> findOutputDevice(id)?.let(createdSink::setPreferredDevice) }
@@ -2133,6 +2143,7 @@ class MusicPlayer @Inject constructor(
     @MainThread
     fun release() {
         cancelCrossfade()
+        aiKaraokeEngine.onKaraokeStateChanged(false, null, 0L)
         activePlayer?.removeListener(listener)
         activePlayer?.release()
         activePlayer = null
@@ -2146,6 +2157,14 @@ class MusicPlayer @Inject constructor(
         applicationScope.launch {
             autoMixCoordinator.get().telemetry.collect { tel ->
                 _state.update { it.copy(deckBlendTelemetry = tel) }
+            }
+        }
+        applicationScope.launch {
+            aiKaraokeEngine.status.collect { status ->
+                _state.update { live ->
+                    val effective = if (live.karaokeEnabled) status else com.lastwave.app.playback.karaoke.KaraokeStatus.Off
+                    if (live.karaokeStatus == effective) live else live.copy(karaokeStatus = effective)
+                }
             }
         }
         val autoMixCoord = autoMixCoordinator.get()
@@ -3651,20 +3670,71 @@ class MusicPlayer @Inject constructor(
 
     fun setKaraokeEnabled(enabled: Boolean) = onMain {
         karaokeEnabled = enabled
-        _state.update { it.copy(karaokeEnabled = enabled, karaokeVocalLevel = karaokeVocalLevel) }
-        runCatching { nativeAudioEngine.get().setKaraoke(enabled, karaokeVocalLevel) }
-        if (enabled && bitPerfectEnabled) {
-            runCatching { nativeAudioEngine.get().setBitPerfect(false) }
-        } else if (!enabled && bitPerfectEnabled) {
-            runCatching { nativeAudioEngine.get().setBitPerfect(true) }
+        val initialStatus = if (enabled) {
+            com.lastwave.app.playback.karaoke.KaraokeStatus.InstantStft
+        } else {
+            com.lastwave.app.playback.karaoke.KaraokeStatus.Off
         }
+        _state.update {
+            it.copy(
+                karaokeEnabled = enabled,
+                karaokeVocalLevel = karaokeVocalLevel,
+                karaokeStatus = initialStatus,
+            )
+        }
+        audioSinks.forEach { sink ->
+            sink.karaokeEnabled = enabled
+            sink.karaokeRemovalIntensity = (1f - karaokeVocalLevel).coerceIn(0f, 1f)
+        }
+        runCatching { nativeAudioEngine.get().setKaraoke(enabled, karaokeVocalLevel) }
+        updateBitPerfectState()
+        applyDacRoutingFor(currentSourceRateHz())
+        aiKaraokeEngine.onKaraokeStateChanged(
+            enabled = enabled,
+            source = if (enabled) buildCurrentKaraokeSource() else null,
+            currentPositionMs = currentPositionMs(),
+        )
     }
 
-    fun setKaraokeVocalLevel(level: Float) = onMain {
-        val clamped = if (level.isFinite()) level.coerceIn(0f, 1f) else 0.15f
-        karaokeVocalLevel = clamped
-        _state.update { it.copy(karaokeVocalLevel = clamped) }
-        runCatching { nativeAudioEngine.get().setKaraoke(karaokeEnabled, clamped) }
+    fun setKaraokeRemovalIntensity(intensity: Float) = onMain {
+        val clampedIntensity = if (intensity.isFinite()) intensity.coerceIn(0f, 1f) else 1f
+        val vocalLvl = (1f - clampedIntensity).coerceIn(0f, 1f)
+        karaokeVocalLevel = vocalLvl
+        _state.update { it.copy(karaokeVocalLevel = vocalLvl) }
+        audioSinks.forEach { it.karaokeRemovalIntensity = clampedIntensity }
+        runCatching { nativeAudioEngine.get().setKaraoke(karaokeEnabled, vocalLvl) }
+    }
+
+    fun setKaraokeVocalLevel(level: Float) {
+        val vocalLvl = if (level.isFinite()) level.coerceIn(0f, 1f) else 0f
+        setKaraokeRemovalIntensity(1f - vocalLvl)
+    }
+
+    fun retryKaraokeAiDownload() = onMain {
+        if (!karaokeEnabled) return@onMain
+        aiKaraokeEngine.retryModelDownload(
+            source = buildCurrentKaraokeSource(),
+            currentPositionMs = currentPositionMs(),
+        )
+    }
+
+    private fun buildCurrentKaraokeSource(): com.lastwave.app.playback.karaoke.AiKaraokeEngine.TrackAudioSource? {
+        if (!playerDelegate.isInitialized()) return null
+        val item = player.currentMediaItem ?: return null
+        val uri = item.localConfiguration?.uri ?: return null
+        if (uri.scheme == "lastwave") return null
+        val stream = item.localConfiguration?.customCacheKey?.let(preparedStreams::get)
+            ?: preparedStreams.values.firstOrNull { it.url == uri.toString() }
+        val key = item.mediaId.takeIf { it.isNotBlank() } ?: uri.toString()
+        val duration = player.duration.takeIf { it > 0L } ?: _state.value.durationMs
+        return com.lastwave.app.playback.karaoke.AiKaraokeEngine.TrackAudioSource(
+            trackKey = key,
+            uri = uri,
+            cacheKey = item.localConfiguration?.customCacheKey ?: stream?.cacheKey,
+            headers = mediaRequestHeaders(stream),
+            dataSourceFactory = cacheDataSourceFactory,
+            durationMs = duration,
+        )
     }
 
     fun togglePlayPause() = onMain {
@@ -3744,6 +3814,7 @@ class MusicPlayer @Inject constructor(
         playheadWallMs = now
         exclusiveUsbOutput.noteSeek(target * 1_000L)
         player.seekTo(target)
+        aiKaraokeEngine.onSeek(target)
         _state.update { it.copy(positionMs = target, isBuffering = true) }
         checkpointPodcastProgress()
     }
@@ -4411,6 +4482,7 @@ class MusicPlayer @Inject constructor(
         abandonMediaAudioFocus()
         player.stop()
         player.clearMediaItems()
+        aiKaraokeEngine.onTrackChanged(null, 0L)
         // Shuffle is engine state that survives stop()/clearMediaItems(): without
         // this reset the next fresh queue silently inherits shuffle while the
         // fresh state says off â€” until the first refresh() flips it back on.
@@ -8879,8 +8951,8 @@ class MusicPlayer @Inject constructor(
             }
             return OverlapSwap.Swapped(roundsUsed, driftMs)
         } finally {
-            // Only this swap's AudioTrack: the deck's next track sizes as usual.
-            playerToSink[standby]?.outputBufferSizing?.speedHeadroom = null
+            playerToSink[standby]?.outputBufferSizing?.speedHeadroom =
+                standby.playbackParameters.speed.coerceAtLeast(1f).toDouble()
             if (!committed) {
                 runCatching {
                     standby.stop()

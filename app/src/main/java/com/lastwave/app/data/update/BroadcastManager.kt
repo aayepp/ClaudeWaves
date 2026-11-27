@@ -88,6 +88,9 @@ class BroadcastManager @Inject constructor(
     private val _state = MutableStateFlow(BroadcastUiState())
     val state: StateFlow<BroadcastUiState> = _state.asStateFlow()
 
+    private val _devShortcutVisible = MutableStateFlow(computeDevShortcutVisible())
+    val devShortcutVisible: StateFlow<Boolean> = _devShortcutVisible.asStateFlow()
+
     init {
         checkForBroadcast()
     }
@@ -147,6 +150,20 @@ class BroadcastManager @Inject constructor(
     fun hasOwnerToken(): Boolean = !readOwnerToken().isNullOrBlank()
 
     fun savedOwnerLogin(): String? = prefs.getString(KEY_OWNER_LOGIN, null)
+
+    private fun computeDevShortcutVisible(): Boolean =
+        hasOwnerToken() && !prefs.getBoolean(KEY_DEV_SHORTCUT_HIDDEN, false)
+
+    fun hideDeveloperShortcut() {
+        prefs.edit().putBoolean(KEY_DEV_SHORTCUT_HIDDEN, true).apply()
+        _devShortcutVisible.value = false
+    }
+
+    fun revealDeveloperShortcutIfAuthenticated() {
+        if (!hasOwnerToken()) return
+        prefs.edit().remove(KEY_DEV_SHORTCUT_HIDDEN).apply()
+        _devShortcutVisible.value = true
+    }
 
     fun getDevLockState(nowMs: Long = System.currentTimeMillis()): DevLockState {
         if (hasOwnerToken()) {
@@ -219,7 +236,9 @@ class BroadcastManager @Inject constructor(
         prefs.edit()
             .remove(KEY_OWNER_TOKEN)
             .remove(KEY_OWNER_LOGIN)
+            .remove(KEY_DEV_SHORTCUT_HIDDEN)
             .apply()
+        _devShortcutVisible.value = false
     }
 
     private fun getOrCreateSecretKey(): SecretKey {
@@ -304,8 +323,10 @@ class BroadcastManager @Inject constructor(
                 prefs.edit()
                     .putString(KEY_OWNER_TOKEN, encryptedToken)
                     .putString(KEY_OWNER_LOGIN, login)
+                    .remove(KEY_DEV_SHORTCUT_HIDDEN)
                     .apply()
                 resetDevLockout()
+                _devShortcutVisible.value = true
                 Result.success(login)
             }
         } catch (e: Exception) {
@@ -584,6 +605,7 @@ class BroadcastManager @Inject constructor(
         private const val KEY_CACHED_JSON = "cached_json"
         private const val KEY_OWNER_TOKEN = "owner_token"
         private const val KEY_OWNER_LOGIN = "owner_login"
+        private const val KEY_DEV_SHORTCUT_HIDDEN = "dev_shortcut_hidden"
         private const val KEY_DEV_LOCK_STAGE = "dev_lock_stage"
         private const val KEY_DEV_FAILED_ATTEMPTS = "dev_failed_attempts"
         private const val KEY_DEV_LOCK_UNTIL_MS = "dev_lock_until_ms"

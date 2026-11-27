@@ -1465,5 +1465,11 @@
     <string name="feedback_error_short">Inserisci almeno 3 caratteri per il titolo e 5 per i dettagli.</string>
     <string name="feedback_error_rate_limit">Troppi invii ravvicinati. Riprova tra qualche minuto.</string>
     <string name="feedback_error_failed">Invio non riuscito. Controlla la connessione.</string>
+    <string name="ly_karaoke_removal_level">Rimuovi voce %1$d%%</string>
+    <string name="ly_karaoke_ai_active">IA Attiva</string>
+    <string name="ly_karaoke_ai_preparing">Preparazione IA…</string>
+    <string name="ly_karaoke_ai_downloading">IA %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Istantaneo</string>
+    <string name="ly_karaoke_ai_retry">Riprova IA</string>
 </resources>
 

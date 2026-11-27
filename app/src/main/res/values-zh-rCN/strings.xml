@@ -1121,4 +1121,10 @@
     <string name="feedback_error_short">标题至少 3 个字，详情至少 5 个字。</string>
     <string name="feedback_error_rate_limit">提交过于频繁，请稍后再试。</string>
     <string name="feedback_error_failed">发送失败，请检查网络连接。</string>
+    <string name="ly_karaoke_removal_level">消除人声 %1$d%%</string>
+    <string name="ly_karaoke_ai_active">AI已启用</string>
+    <string name="ly_karaoke_ai_preparing">正在准备AI…</string>
+    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">即时</string>
+    <string name="ly_karaoke_ai_retry">重试AI</string>
 </resources>

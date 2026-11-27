@@ -1118,4 +1118,10 @@
     <string name="feedback_error_short">Informe ao menos 3 caracteres no título e 5 nos detalhes.</string>
     <string name="feedback_error_rate_limit">Muitos envios seguidos. Tente novamente em instantes.</string>
     <string name="feedback_error_failed">Falha ao enviar. Verifique sua conexão.</string>
+    <string name="ly_karaoke_removal_level">Remover voz %1$d%%</string>
+    <string name="ly_karaoke_ai_active">IA Ativa</string>
+    <string name="ly_karaoke_ai_preparing">Preparando IA…</string>
+    <string name="ly_karaoke_ai_downloading">IA %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Instantâneo</string>
+    <string name="ly_karaoke_ai_retry">Tentar IA</string>
 </resources>

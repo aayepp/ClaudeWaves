@@ -1118,4 +1118,10 @@
     <string name="feedback_error_short">Judul minimal 3 karakter dan detail minimal 5 karakter.</string>
     <string name="feedback_error_rate_limit">Terlalu sering mengirim. Coba lagi beberapa menit lagi.</string>
     <string name="feedback_error_failed">Gagal mengirim. Periksa koneksi internet Anda.</string>
+    <string name="ly_karaoke_removal_level">Buang Vokal %1$d%%</string>
+    <string name="ly_karaoke_ai_active">AI Aktif</string>
+    <string name="ly_karaoke_ai_preparing">Menyediakan AI…</string>
+    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Segera</string>
+    <string name="ly_karaoke_ai_retry">Cuba AI</string>
 </resources>

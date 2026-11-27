@@ -1122,4 +1122,10 @@
     <string name="feedback_error_short">शीर्षक कम से कम 3 और विवरण 5 अक्षर का लिखें।</string>
     <string name="feedback_error_rate_limit">बहुत अधिक अनुरोध। कृपया थोड़ी देर बाद प्रयास करें।</string>
     <string name="feedback_error_failed">भेजने में विफल। इंटरनेट कनेक्शन जांचें।</string>
+    <string name="ly_karaoke_removal_level">वोकल हटाएं %1$d%%</string>
+    <string name="ly_karaoke_ai_active">AI सक्रिय</string>
+    <string name="ly_karaoke_ai_preparing">AI तैयार हो रहा…</string>
+    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">तुरंत</string>
+    <string name="ly_karaoke_ai_retry">AI पुनः प्रयास</string>
 </resources>

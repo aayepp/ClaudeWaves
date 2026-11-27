@@ -1533,4 +1533,10 @@
     <string name="feedback_error_short">Please enter at least 3 chars for title and 5 chars for details.</string>
     <string name="feedback_error_rate_limit">Too many submissions right now. Please try again in a few minutes.</string>
     <string name="feedback_error_failed">Failed to send. Check your internet connection.</string>
+    <string name="ly_karaoke_removal_level">Vocal Removal %1$d%%</string>
+    <string name="ly_karaoke_ai_active">AI Active</string>
+    <string name="ly_karaoke_ai_preparing">Preparing AI…</string>
+    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Instant</string>
+    <string name="ly_karaoke_ai_retry">Retry AI</string>
 </resources>

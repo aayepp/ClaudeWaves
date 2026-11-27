@@ -122,6 +122,9 @@ class SettingsViewModel @Inject constructor(
 
     val authState: StateFlow<com.lastwave.app.data.model.AuthState> = authRepository.authState
     val updateInfo = appUpdateManager.updateInfo
+    val isDeveloperShortcutVisible: StateFlow<Boolean> = broadcastManager.devShortcutVisible
+
+    fun onSecretDeveloperTrigger() = broadcastManager.revealDeveloperShortcutIfAuthenticated()
 
     fun checkForUpdates() = appUpdateManager.checkForUpdate(isSilent = false)
     fun openUpdate(context: android.content.Context) = appUpdateManager.openUpdate(context)

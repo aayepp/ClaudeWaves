@@ -38,6 +38,7 @@ import com.lastwave.app.ui.player.QualityGlyphs
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import com.lastwave.app.ui.jam.LastWaveJamSheet
@@ -420,6 +421,7 @@ fun SettingsScreen(
     val internalDirectAvailability by viewModel.internalDirectAvailability.collectAsStateWithLifecycle()
     val loudness by viewModel.loudness.collectAsStateWithLifecycle()
     val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()
+    val showDevShortcut by viewModel.isDeveloperShortcutVisible.collectAsStateWithLifecycle()
     val discordSettings by viewModel.discordSettings.collectAsStateWithLifecycle()
     val discordSubtitle = when {
         discordSettings.isSignedIn && discordSettings.enabled ->
@@ -822,6 +824,21 @@ fun SettingsScreen(
                                     duotoneGlyph = SettingsDuotoneGlyph.CLAUDEWAVES_CREST,
                                     medallionAccent = aboutAccent,
                                 )
+                            }
+                        }
+                        if (showDevShortcut) {
+                            item {
+                                SettingsGroup(rowCount = 1) { _, position ->
+                                    SettingsActionCard(
+                                        icon = Icons.Filled.Shield,
+                                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        title = "Developer Console",
+                                        subtitle = "Statistik, Inbox Feedback & Broadcast • Kunci biometrik/PIN",
+                                        onClick = onOpenDeveloperConsole,
+                                        position = position,
+                                    )
+                                }
                             }
                         }
                     }
@@ -2504,6 +2521,7 @@ fun SettingsScreen(
                         onOpenChangelog = viewModel::openChangelog,
                         onSecretAdminTrigger = {
                             if (!viewModel.isDeveloperAccessPermanentlyLocked()) {
+                                viewModel.onSecretDeveloperTrigger()
                                 onOpenDeveloperConsole()
                             }
                         },

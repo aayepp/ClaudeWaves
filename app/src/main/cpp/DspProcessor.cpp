@@ -82,11 +82,18 @@ std::vector<DspProcessor*>& clarityRegistry() {
     return instances;
 }
 
+std::atomic<bool> gKaraokeEnabled{false};
+std::atomic<float> gKaraokeVocalLevel{0.0F};
+
 }  // namespace
 
 DspProcessor::DspProcessor() noexcept {
     for (auto& gain : targetEqGainsDb_) gain.store(0.0F, std::memory_order_relaxed);
     for (auto& trim : targetClarityTrimsDb_) trim.store(0.0F, std::memory_order_relaxed);
+    targetKaraokeEnabled_.store(
+        gKaraokeEnabled.load(std::memory_order_acquire), std::memory_order_relaxed);
+    targetKaraokeVocalLevel_.store(
+        gKaraokeVocalLevel.load(std::memory_order_acquire), std::memory_order_relaxed);
     std::lock_guard<std::mutex> registryLock(clarityRegistryMutex());
     clarityRegistry().push_back(this);
 }
@@ -141,11 +148,8 @@ void DspProcessor::configure(double sampleRate) noexcept {
     monoBassFilter_ = Biquad::highPass(sampleRate_, 130.0, 0.7071067811865476);
     // 8. Harmonic air exciter: 6000 Hz highpass to isolate highs for tape-style harmonic sheen
     airExciterFilter_ = Biquad::highPass(sampleRate_, 6000.0, 0.7071067811865476);
-    // 9. Karaoke Mode vocal reducer: preserve mono kick/bass (<210 Hz) & stereo shimmer (>7.2 kHz).
-    karaokeMidLowPass1_ = Biquad::lowPass(sampleRate_, 210.0, 0.7071067811865476);
-    karaokeMidLowPass2_ = Biquad::lowPass(sampleRate_, 210.0, 0.7071067811865476);
-    karaokeMidHighPass1_ = Biquad::highPass(sampleRate_, 7200.0, 0.7071067811865476);
-    karaokeMidHighPass2_ = Biquad::highPass(sampleRate_, 7200.0, 0.7071067811865476);
+    // 9. Karaoke Mode phase-aware STFT vocal reducer
+    karaokeStft_.configure(sampleRate_);
     crossfeed_.configure(sampleRate_, 700.0, 4.5);
     rampPerFrame_ = static_cast<float>(1.0 / (sampleRate_ * 0.050));
     equalizerGainSmoothing_ = static_cast<float>(1.0 - std::exp(
@@ -217,10 +221,7 @@ void DspProcessor::reset() noexcept {
     airDetail_.clear();
     monoBassFilter_.clear();
     airExciterFilter_.clear();
-    karaokeMidLowPass1_.clear();
-    karaokeMidLowPass2_.clear();
-    karaokeMidHighPass1_.clear();
-    karaokeMidHighPass2_.clear();
+    karaokeStft_.reset();
     crossfeed_.clear();
     for (auto& band : equalizerBands_) band.clear();
     parametricEq_.reset();
@@ -245,7 +246,7 @@ void DspProcessor::setPeakProtectionEnabled(bool enabled) noexcept {
 void DspProcessor::setKaraoke(bool enabled, float vocalLevel) noexcept {
     const float safeLevel = std::isfinite(vocalLevel)
         ? std::clamp(vocalLevel, 0.0F, 1.0F)
-        : 0.15F;
+        : 0.0F;
     targetKaraokeVocalLevel_.store(safeLevel, std::memory_order_release);
     targetKaraokeEnabled_.store(enabled, std::memory_order_release);
 }
@@ -331,6 +332,18 @@ void DspProcessor::broadcastClarityAtmosBypass(bool bypass) {
     std::lock_guard<std::mutex> registryLock(clarityRegistryMutex());
     for (auto* instance : clarityRegistry()) {
         if (instance != nullptr) instance->setClarityAtmosBypass(bypass);
+    }
+}
+
+void DspProcessor::broadcastKaraoke(bool enabled, float vocalLevel) {
+    const float safeLevel = std::isfinite(vocalLevel)
+        ? std::clamp(vocalLevel, 0.0F, 1.0F)
+        : 0.0F;
+    gKaraokeVocalLevel.store(safeLevel, std::memory_order_release);
+    gKaraokeEnabled.store(enabled, std::memory_order_release);
+    std::lock_guard<std::mutex> registryLock(clarityRegistryMutex());
+    for (auto* instance : clarityRegistry()) {
+        if (instance != nullptr) instance->setKaraoke(enabled, safeLevel);
     }
 }
 
@@ -662,20 +675,6 @@ void DspProcessor::process(
             outputLeft += (wetLeft - dryLeft) * clarityMix;
             outputRight += (wetRight - dryRight) * clarityMix;
         }
-        if (karaokeChainActive_ && channelCount == 2) {
-            const float mid = (outputLeft + outputRight) * 0.5F;
-            const float side = (outputLeft - outputRight) * 0.5F;
-            const float midBass = karaokeMidLowPass2_.tick(karaokeMidLowPass1_.tick(mid, 0), 0);
-            const float midAir = karaokeMidHighPass2_.tick(karaokeMidHighPass1_.tick(mid, 0), 0);
-            const float midVocal = mid - midBass - midAir;
-            const float vLvl = currentKaraokeVocalLevel_;
-            const float keptMid = midBass + midVocal * vLvl + midAir * (0.45F + 0.55F * vLvl);
-            const float sideBoost = 1.0F + 0.16F * (1.0F - vLvl);
-            const float kLeft = keptMid + side * sideBoost;
-            const float kRight = keptMid - side * sideBoost;
-            outputLeft += (kLeft - outputLeft) * currentKaraokeWet_;
-            outputRight += (kRight - outputRight) * currentKaraokeWet_;
-        }
 
         // Analog soft-knee saturation: provides clean headroom without squashing the track
         auto softSaturate = [](float x) noexcept -> float {
@@ -724,15 +723,25 @@ void DspProcessor::process(
     }
     for (auto& band : equalizerBands_) band.settle();
     for (Biquad* filter : {&subBassHighPass_, &bassFoundation_, &lowMidSeparation_, &boxinessControl_,
-             &presenceDetail_, &airDetail_, &monoBassFilter_, &airExciterFilter_,
-             &karaokeMidLowPass1_, &karaokeMidLowPass2_, &karaokeMidHighPass1_, &karaokeMidHighPass2_}) {
+             &presenceDetail_, &airDetail_, &monoBassFilter_, &airExciterFilter_}) {
         filter->settle();
     }
+    if (karaokeChainActive_ && channelCount == 2) {
+        karaokeStft_.process(
+            samples,
+            frameCount,
+            currentKaraokeVocalLevel_,
+            currentKaraokeWet_);
+        const std::size_t sampleCount = static_cast<std::size_t>(frameCount) * 2U;
+        for (std::size_t i = 0U; i < sampleCount; ++i) {
+            const float v = samples[i];
+            samples[i] = std::isfinite(v)
+                ? std::clamp(v, -kOutputCeiling, kOutputCeiling)
+                : 0.0F;
+        }
+    }
     if (karaokeTarget == 0.0F && currentKaraokeWet_ == 0.0F && karaokeChainActive_) {
-        karaokeMidLowPass1_.clear();
-        karaokeMidLowPass2_.clear();
-        karaokeMidHighPass1_.clear();
-        karaokeMidHighPass2_.clear();
+        karaokeStft_.reset();
         karaokeChainActive_ = false;
     }
     if (target == 0.0F && currentWet_ == 0.0F && clarityChainActive_) {

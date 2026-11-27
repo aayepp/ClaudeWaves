@@ -1118,4 +1118,10 @@
     <string name="feedback_error_short">Bitte mindestens 3 Zeichen für Titel und 5 für Details.</string>
     <string name="feedback_error_rate_limit">Zu viele Anfragen. Bitte später erneut versuchen.</string>
     <string name="feedback_error_failed">Senden fehlgeschlagen. Internetverbindung prüfen.</string>
+    <string name="ly_karaoke_removal_level">Stimme entfernen %1$d%%</string>
+    <string name="ly_karaoke_ai_active">KI Aktiv</string>
+    <string name="ly_karaoke_ai_preparing">KI wird geladen…</string>
+    <string name="ly_karaoke_ai_downloading">KI %1$d%%</string>
+    <string name="ly_karaoke_stft_instant">Sofort</string>
+    <string name="ly_karaoke_ai_retry">KI wiederholen</string>
 </resources>
