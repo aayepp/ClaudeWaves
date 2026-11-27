@@ -211,6 +211,20 @@ Java_com_lastwave_app_playback_NativeAudioEngine_nativeSetEqualizer(
     engine->setEqualizer(enabled == JNI_TRUE, gains.data(), gains.size());
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_com_lastwave_app_playback_NativeAudioEngine_nativeSetAutoMixBandGains(
+    JNIEnv*,
+    jobject,
+    jlong handle,
+    jboolean active,
+    jfloat lowGain,
+    jfloat midGain,
+    jfloat highGain) {
+    if (auto* engine = fromHandle(handle); engine != nullptr) {
+        engine->setAutoMixBandGains(active == JNI_TRUE, lowGain, midGain, highGain);
+    }
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_lastwave_app_playback_NativeAudioEngine_nativeConfigureMediaProcessor(
     JNIEnv*,

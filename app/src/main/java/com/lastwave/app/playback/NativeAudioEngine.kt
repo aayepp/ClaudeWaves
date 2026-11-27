@@ -142,6 +142,15 @@ class NativeAudioEngine @Inject constructor(
         withHandle(Unit) { nativeSetEqualizer(it, enabled, safeGains) }
     }
 
+    /** Thread-safe per-deck 3-band Linkwitz-Riley AutoMix gain modulation (active, low, mid, high). */
+    fun setAutoMixBandGains(active: Boolean, lowGain: Float, midGain: Float, highGain: Float) {
+        if (systemFlattened) return
+        val safeLow = if (lowGain.isFinite()) lowGain.coerceIn(0f, 1f) else 1f
+        val safeMid = if (midGain.isFinite()) midGain.coerceIn(0f, 1f) else 1f
+        val safeHigh = if (highGain.isFinite()) highGain.coerceIn(0f, 1f) else 1f
+        withHandle(Unit) { nativeSetAutoMixBandGains(it, active, safeLow, safeMid, safeHigh) }
+    }
+
     /**
      * Clarity wet/dry mix in 0..1. Defaults to 1.0, which reproduces the
      * shipping curve sample-exactly; lower values blend toward dry.
@@ -377,6 +386,13 @@ class NativeAudioEngine @Inject constructor(
     private external fun nativeSetBitPerfect(handle: Long, enabled: Boolean)
     private external fun nativeIsBitPerfect(handle: Long): Boolean
     private external fun nativeSetEqualizer(handle: Long, enabled: Boolean, gainsDb: FloatArray)
+    private external fun nativeSetAutoMixBandGains(
+        handle: Long,
+        active: Boolean,
+        lowGain: Float,
+        midGain: Float,
+        highGain: Float,
+    )
     private external fun nativeSetClarityWet(handle: Long, wet: Float)
     private external fun nativeSetClarityTrims(handle: Long, trimsDb: FloatArray)
     private external fun nativeSetClarityPreset(handle: Long, preset: Int)

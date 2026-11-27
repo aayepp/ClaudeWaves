@@ -27,6 +27,11 @@ public:
         bool enabled,
         const float* gainsDb,
         std::size_t gainCount) noexcept;
+    void setAutoMixBandGains(
+        bool active,
+        float lowGain,
+        float midGain,
+        float highGain) noexcept;
     // Studio Master Clarity parameterization. All setters are lock-free
     // control-thread calls; the audio thread only performs atomic loads, so
     // process() stays allocation- and lock-free. Neutral defaults (wet 1.0,
@@ -220,6 +225,25 @@ private:
     Biquad monoBassFilter_{};
     Biquad airExciterFilter_{};
     Crossfeed crossfeed_{};
+    // Lock-free 3-band Linkwitz-Riley (4th-order, 120 Hz & 3.8 kHz) AutoMix
+    // spectral crossover per deck; completely bypassed when inactive & unity.
+    std::atomic<bool> autoMixActive_{false};
+    std::atomic<float> targetAutoMixLow_{1.0F};
+    std::atomic<float> targetAutoMixMid_{1.0F};
+    std::atomic<float> targetAutoMixHigh_{1.0F};
+    bool autoMixChainActive_{false};
+    float currentAutoMixLow_{1.0F};
+    float currentAutoMixMid_{1.0F};
+    float currentAutoMixHigh_{1.0F};
+    float autoMixSmoothing_{0.002F};
+    Biquad autoMixLowLp1_{};
+    Biquad autoMixLowLp2_{};
+    Biquad autoMixLowHp1_{};
+    Biquad autoMixLowHp2_{};
+    Biquad autoMixHighLp1_{};
+    Biquad autoMixHighLp2_{};
+    Biquad autoMixHighHp1_{};
+    Biquad autoMixHighHp2_{};
     // AutoEQ / manual parametric EQ. Runs first in the chain and, unlike
     // the rest of the DSP, also while Bit-Perfect is on: the user asked for
     // the correction, so it is applied and the verdict reports "Direct + EQ".

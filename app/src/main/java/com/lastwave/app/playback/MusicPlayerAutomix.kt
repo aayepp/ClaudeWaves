@@ -179,6 +179,13 @@ internal fun MusicPlayer.currentStandby(): ExoPlayer? =
             secondaryPlayer
         }
 
+internal fun MusicPlayer.engineForPlayer(target: ExoPlayer): NativeAudioEngine? =
+        if (target === secondaryPlayer) {
+            secondaryNativeEngine
+        } else {
+            runCatching { nativeAudioEngine.get() }.getOrNull()
+        }
+
     /** Builds the standby on first crossfade; afterwards it is reused and swapped. */
     @MainThread
 internal fun MusicPlayer.standbyOrCreate(): ExoPlayer = currentStandby() ?: run {
@@ -208,8 +215,10 @@ internal fun MusicPlayer.armCrossfadeStandby(nextIndex: Int, nextItem: MediaItem
         val isAlreadySet = standby.mediaItemCount == standbyQueue.size &&
             standby.currentMediaItemIndex == nextIndex &&
             standby.currentMediaItem?.mediaId == nextItem.mediaId &&
-            standby.playbackState != Player.STATE_IDLE
+            standby.playbackState != Player.STATE_IDLE &&
+            standby.playerError == null
         if (!isAlreadySet) {
+            engineForPlayer(standby)?.setAutoMixBandGains(false, 1f, 1f, 1f)
             standby.pause()
             // The sink still holds the rate routed for the playing track, and
             // opened a 48 kHz next track at 44.1 kHz. Null opens at its own rate.
@@ -218,7 +227,7 @@ internal fun MusicPlayer.armCrossfadeStandby(nextIndex: Int, nextItem: MediaItem
             standby.prepare()
         }
         crossfadeStandbyArmed = true
-        crossfadeStandbyPreparing = true
+        crossfadeStandbyPreparing = standby.playbackState != Player.STATE_READY
         logCrossfadeDecision(
             "armed",
             "index=$nextIndex track='${nextItem.mediaMetadata.title}'",

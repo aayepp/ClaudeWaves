@@ -98,24 +98,34 @@ class AcousticSignatureExtractor @Inject constructor(
         streamUrl: String?,
         sourceHash: String,
     ): AcousticSignature = withContext(Dispatchers.IO) {
-        // Retrieve word-synced lyrics if available
+        // Retrieve word-synced lyrics quickly (fast budget so stream preparation never stalls)
         val lyricsLines = runCatching {
-            val res = lyricsRepository.get().getLyrics(
-                title = track.title,
-                artist = track.artist,
-                album = track.album,
-                durationSeconds = (durationMs / 1000).toInt(),
-                videoId = track.videoId,
-            )
-            if (res is LyricsResult.Success && res.isSynced) res.lines else null
+            withTimeoutOrNull(800L) {
+                val res = lyricsRepository.get().getLyrics(
+                    title = track.title,
+                    artist = track.artist,
+                    album = track.album,
+                    durationSeconds = (durationMs / 1000).toInt(),
+                    videoId = track.videoId,
+                )
+                if (res is LyricsResult.Success && res.isSynced) res.lines else null
+            }
         }.getOrNull()
 
-        // Decode intro 45s and outro 45s into 22.05 kHz float PCM
-        val introPcm = decodePcmWindow(streamUrl, startOffsetUs = 0L, durationUs = 45_000_000L)
-        val outroStartUs = maxOf(0L, (durationMs - 45_000L) * 1000L)
-        val outroPcm = decodePcmWindow(streamUrl, startOffsetUs = outroStartUs, durationUs = 45_000_000L)
+        // Remote HTTP/HTTPS URLs require custom headers and MediaCodec decoding;
+        // skip fake raw-byte PCM parsing so AutoMix never wastes 2.5s or seeks blindly.
+        val isLocalSource = !streamUrl.isNullOrBlank() &&
+            !streamUrl.startsWith("http://", ignoreCase = true) &&
+            !streamUrl.startsWith("https://", ignoreCase = true)
 
-        // Classify Camelot Key from raw metadata or decoded chroma
+        val introPcm = if (isLocalSource) {
+            decodePcmWindow(streamUrl, startOffsetUs = 0L, durationUs = 45_000_000L)
+        } else FloatArray(0)
+        val outroStartUs = maxOf(0L, (durationMs - 45_000L) * 1000L)
+        val outroPcm = if (isLocalSource) {
+            decodePcmWindow(streamUrl, startOffsetUs = outroStartUs, durationUs = 45_000_000L)
+        } else FloatArray(0)
+
         val rawKey = track.rawKeyString()
         var camelotKey = AutoMixCamelotClassifier.parseToCamelotKey(rawKey)
         if (!camelotKey.isValid && introPcm.isNotEmpty()) {
@@ -125,16 +135,16 @@ class AcousticSignatureExtractor @Inject constructor(
             camelotKey = CamelotKey("8B")
         }
 
-        // Estimate beat grid and structural boundaries
         val analysisPcm = if (introPcm.isNotEmpty()) introPcm else outroPcm
-        val beatGrid = DownbeatGridEstimator.estimateGrid(
+        val rawBeatGrid = DownbeatGridEstimator.estimateGrid(
             pcm = analysisPcm,
             sampleRate = 22050f,
             durationMs = durationMs,
             metadataBpm = null,
         )
+        // Without real decoded PCM, keep firstDownbeatMs = 0L so incoming tracks start from frame 0.
+        val beatGrid = if (analysisPcm.isEmpty()) rawBeatGrid.copy(firstDownbeatMs = 0L) else rawBeatGrid
 
-        // Generate Vocal Activity Masks
         val introVocalMask = VocalPresenceGateDetector.createVocalMask(
             windowStartMs = 0L,
             windowDurationMs = minOf(durationMs, 45_000L),
@@ -173,16 +183,23 @@ class AcousticSignatureExtractor @Inject constructor(
                 extractor.setDataSource(url.removePrefix("file://"))
             }
             var audioTrackIndex = -1
+            var trackFormat: MediaFormat? = null
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
                 if (mime.startsWith("audio/")) {
                     audioTrackIndex = i
+                    trackFormat = format
                     break
                 }
             }
 
-            if (audioTrackIndex < 0) {
+            if (audioTrackIndex < 0 || trackFormat == null) {
+                extractor.release()
+                return FloatArray(0)
+            }
+            val mime = trackFormat.getString(MediaFormat.KEY_MIME) ?: ""
+            if (mime != MediaFormat.MIMETYPE_AUDIO_RAW) {
                 extractor.release()
                 return FloatArray(0)
             }

@@ -141,6 +141,17 @@ void DspProcessor::configure(double sampleRate) noexcept {
     monoBassFilter_ = Biquad::highPass(sampleRate_, 130.0, 0.7071067811865476);
     // 8. Harmonic air exciter: 6000 Hz highpass to isolate highs for tape-style harmonic sheen
     airExciterFilter_ = Biquad::highPass(sampleRate_, 6000.0, 0.7071067811865476);
+    // Per-deck 3-band Linkwitz-Riley 4th-order (24 dB/oct) AutoMix spectral crossover
+    constexpr double kLr4Q = 0.7071067811865476;
+    autoMixLowLp1_ = Biquad::lowPass(sampleRate_, 120.0, kLr4Q);
+    autoMixLowLp2_ = Biquad::lowPass(sampleRate_, 120.0, kLr4Q);
+    autoMixLowHp1_ = Biquad::highPass(sampleRate_, 120.0, kLr4Q);
+    autoMixLowHp2_ = Biquad::highPass(sampleRate_, 120.0, kLr4Q);
+    autoMixHighLp1_ = Biquad::lowPass(sampleRate_, 3800.0, kLr4Q);
+    autoMixHighLp2_ = Biquad::lowPass(sampleRate_, 3800.0, kLr4Q);
+    autoMixHighHp1_ = Biquad::highPass(sampleRate_, 3800.0, kLr4Q);
+    autoMixHighHp2_ = Biquad::highPass(sampleRate_, 3800.0, kLr4Q);
+    autoMixSmoothing_ = static_cast<float>(1.0 - std::exp(-1.0 / (sampleRate_ * 0.012)));
     crossfeed_.configure(sampleRate_, 700.0, 4.5);
     rampPerFrame_ = static_cast<float>(1.0 / (sampleRate_ * 0.050));
     equalizerGainSmoothing_ = static_cast<float>(1.0 - std::exp(
@@ -208,6 +219,18 @@ void DspProcessor::reset() noexcept {
     airDetail_.clear();
     monoBassFilter_.clear();
     airExciterFilter_.clear();
+    autoMixLowLp1_.clear();
+    autoMixLowLp2_.clear();
+    autoMixLowHp1_.clear();
+    autoMixLowHp2_.clear();
+    autoMixHighLp1_.clear();
+    autoMixHighLp2_.clear();
+    autoMixHighHp1_.clear();
+    autoMixHighHp2_.clear();
+    autoMixChainActive_ = autoMixActive_.load(std::memory_order_acquire);
+    currentAutoMixLow_ = autoMixChainActive_ ? targetAutoMixLow_.load(std::memory_order_acquire) : 1.0F;
+    currentAutoMixMid_ = autoMixChainActive_ ? targetAutoMixMid_.load(std::memory_order_acquire) : 1.0F;
+    currentAutoMixHigh_ = autoMixChainActive_ ? targetAutoMixHigh_.load(std::memory_order_acquire) : 1.0F;
     crossfeed_.clear();
     for (auto& band : equalizerBands_) band.clear();
     parametricEq_.reset();
@@ -243,6 +266,27 @@ void DspProcessor::setEqualizer(
     }
     targetEqualizerEnabled_.store(enabled, std::memory_order_release);
     targetEqualizerRevision_.fetch_add(1, std::memory_order_release);
+}
+
+void DspProcessor::setAutoMixBandGains(
+    bool active,
+    float lowGain,
+    float midGain,
+    float highGain) noexcept {
+    auto sanitize = [](float value) noexcept -> float {
+        return std::isfinite(value) ? std::clamp(value, 0.0F, 1.0F) : 1.0F;
+    };
+    if (active) {
+        targetAutoMixLow_.store(sanitize(lowGain), std::memory_order_release);
+        targetAutoMixMid_.store(sanitize(midGain), std::memory_order_release);
+        targetAutoMixHigh_.store(sanitize(highGain), std::memory_order_release);
+        autoMixActive_.store(true, std::memory_order_release);
+    } else {
+        targetAutoMixLow_.store(1.0F, std::memory_order_release);
+        targetAutoMixMid_.store(1.0F, std::memory_order_release);
+        targetAutoMixHigh_.store(1.0F, std::memory_order_release);
+        autoMixActive_.store(false, std::memory_order_release);
+    }
 }
 
 void DspProcessor::setClarityWet(float wet) noexcept {
@@ -392,9 +436,35 @@ void DspProcessor::process(
             }
         }
     }
-    const bool enhancementTargeted = target > 0.0F || targetEqualizerHasGain;
+    const bool autoMixTargetActive = autoMixActive_.load(std::memory_order_acquire);
+    const float autoMixTargetLow = autoMixTargetActive
+        ? targetAutoMixLow_.load(std::memory_order_acquire)
+        : 1.0F;
+    const float autoMixTargetMid = autoMixTargetActive
+        ? targetAutoMixMid_.load(std::memory_order_acquire)
+        : 1.0F;
+    const float autoMixTargetHigh = autoMixTargetActive
+        ? targetAutoMixHigh_.load(std::memory_order_acquire)
+        : 1.0F;
+    if (autoMixTargetActive && !autoMixChainActive_) {
+        for (Biquad* lrFilter : {&autoMixLowLp1_, &autoMixLowLp2_, &autoMixLowHp1_, &autoMixLowHp2_,
+                 &autoMixHighLp1_, &autoMixHighLp2_, &autoMixHighHp1_, &autoMixHighHp2_}) {
+            lrFilter->clear();
+        }
+        autoMixChainActive_ = true;
+        if (autoMixTargetLow < 0.001F && autoMixTargetMid < 0.001F && autoMixTargetHigh < 0.001F) {
+            currentAutoMixLow_ = 0.0F;
+            currentAutoMixMid_ = 0.0F;
+            currentAutoMixHigh_ = 0.0F;
+        }
+    }
+    const bool enhancementTargeted = target > 0.0F || targetEqualizerHasGain || autoMixTargetActive;
     const bool enhancementStateActive = currentWet_ > 0.0F ||
         activeEqualizerBands_ != 0U ||
+        autoMixChainActive_ ||
+        std::abs(currentAutoMixLow_ - 1.0F) >= 0.0001F ||
+        std::abs(currentAutoMixMid_ - 1.0F) >= 0.0001F ||
+        std::abs(currentAutoMixHigh_ - 1.0F) >= 0.0001F ||
         std::abs(currentPreampGain_ - 1.0F) >= 0.00001F ||
         std::abs(limiterGain_ - 1.0F) >= 0.00001F;
     // Peak protection is needed while an enhancement is active or releasing,
@@ -405,6 +475,10 @@ void DspProcessor::process(
     const bool controlsBypassed = !enhancementTargeted && !protectionRequired;
     const bool stateBypassed = currentWet_ == 0.0F &&
         activeEqualizerBands_ == 0U &&
+        !autoMixChainActive_ &&
+        std::abs(currentAutoMixLow_ - 1.0F) < 0.0001F &&
+        std::abs(currentAutoMixMid_ - 1.0F) < 0.0001F &&
+        std::abs(currentAutoMixHigh_ - 1.0F) < 0.0001F &&
         std::abs(currentPreampGain_ - 1.0F) < 0.00001F &&
         std::abs(limiterGain_ - 1.0F) < 0.00001F;
     // With every enhancement disabled, decoded PCM stays transparent. This
@@ -621,6 +695,41 @@ void DspProcessor::process(
             outputRight += (wetRight - dryRight) * clarityMix;
         }
 
+        if (autoMixChainActive_) {
+            currentAutoMixLow_ += (autoMixTargetLow - currentAutoMixLow_) * autoMixSmoothing_;
+            if (std::abs(autoMixTargetLow - currentAutoMixLow_) < 0.0001F) {
+                currentAutoMixLow_ = autoMixTargetLow;
+            }
+            currentAutoMixMid_ += (autoMixTargetMid - currentAutoMixMid_) * autoMixSmoothing_;
+            if (std::abs(autoMixTargetMid - currentAutoMixMid_) < 0.0001F) {
+                currentAutoMixMid_ = autoMixTargetMid;
+            }
+            currentAutoMixHigh_ += (autoMixTargetHigh - currentAutoMixHigh_) * autoMixSmoothing_;
+            if (std::abs(autoMixTargetHigh - currentAutoMixHigh_) < 0.0001F) {
+                currentAutoMixHigh_ = autoMixTargetHigh;
+            }
+
+            const float amLowL = autoMixLowLp2_.tick(autoMixLowLp1_.tick(outputLeft, 0), 0);
+            const float amUpperL = autoMixLowHp2_.tick(autoMixLowHp1_.tick(outputLeft, 0), 0);
+            const float amMidL = autoMixHighLp2_.tick(autoMixHighLp1_.tick(amUpperL, 0), 0);
+            const float amHighL = autoMixHighHp2_.tick(autoMixHighHp1_.tick(amUpperL, 0), 0);
+            outputLeft = amLowL * currentAutoMixLow_ +
+                         amMidL * currentAutoMixMid_ +
+                         amHighL * currentAutoMixHigh_;
+
+            if (channelCount == 2) {
+                const float amLowR = autoMixLowLp2_.tick(autoMixLowLp1_.tick(outputRight, 1), 1);
+                const float amUpperR = autoMixLowHp2_.tick(autoMixLowHp1_.tick(outputRight, 1), 1);
+                const float amMidR = autoMixHighLp2_.tick(autoMixHighLp1_.tick(amUpperR, 1), 1);
+                const float amHighR = autoMixHighHp2_.tick(autoMixHighHp1_.tick(amUpperR, 1), 1);
+                outputRight = amLowR * currentAutoMixLow_ +
+                              amMidR * currentAutoMixMid_ +
+                              amHighR * currentAutoMixHigh_;
+            } else {
+                outputRight = outputLeft;
+            }
+        }
+
         // Analog soft-knee saturation: provides clean headroom without squashing the track
         auto softSaturate = [](float x) noexcept -> float {
             const float absX = std::abs(x);
@@ -668,8 +777,23 @@ void DspProcessor::process(
     }
     for (auto& band : equalizerBands_) band.settle();
     for (Biquad* filter : {&subBassHighPass_, &bassFoundation_, &lowMidSeparation_, &boxinessControl_,
-             &presenceDetail_, &airDetail_, &monoBassFilter_, &airExciterFilter_}) {
+             &presenceDetail_, &airDetail_, &monoBassFilter_, &airExciterFilter_,
+             &autoMixLowLp1_, &autoMixLowLp2_, &autoMixLowHp1_, &autoMixLowHp2_,
+             &autoMixHighLp1_, &autoMixHighLp2_, &autoMixHighHp1_, &autoMixHighHp2_}) {
         filter->settle();
+    }
+    if (!autoMixTargetActive && autoMixChainActive_ &&
+        std::abs(currentAutoMixLow_ - 1.0F) < 0.0001F &&
+        std::abs(currentAutoMixMid_ - 1.0F) < 0.0001F &&
+        std::abs(currentAutoMixHigh_ - 1.0F) < 0.0001F) {
+        currentAutoMixLow_ = 1.0F;
+        currentAutoMixMid_ = 1.0F;
+        currentAutoMixHigh_ = 1.0F;
+        for (Biquad* lrFilter : {&autoMixLowLp1_, &autoMixLowLp2_, &autoMixLowHp1_, &autoMixLowHp2_,
+                 &autoMixHighLp1_, &autoMixHighLp2_, &autoMixHighHp1_, &autoMixHighHp2_}) {
+            lrFilter->clear();
+        }
+        autoMixChainActive_ = false;
     }
     if (target == 0.0F && currentWet_ == 0.0F && clarityChainActive_) {
         // Once bypass has fully crossfaded, stop burning CPU on a result that

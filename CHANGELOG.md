@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.58] - 2026-11-28
+
+### Fixed
+- **AutoMix live 3-band spectral DJ mixing:** wired a lock-free 4th-order Linkwitz-Riley (`120 Hz` & `3.8 kHz`) per-deck crossover into the native C++ audio engine so **DJ Spectral Filter Sweeps** performs real midpoint sub-bass swaps and smooth spectral blends instead of plain volume fades.
+- **AutoMix triggering & multi-track reliability:** fixed standby deck routing after the first mix swap, added resolver duration fallbacks for streamed tracks, removed unnecessary buffer-flushing `seekTo(0)` calls at blend start, and prevented outgoing-deck double playback as well as stale mixes during `Repeat One`, podcasts, or manual track skips.
+- **AutoMix Settings status:** displays `"Paused while Bit-Perfect is enabled"` when Bit-Perfect or USB Exclusive bypass suspends AutoMix.
+
 ## [1.0.57] - 2026-11-28
 
 ### Added

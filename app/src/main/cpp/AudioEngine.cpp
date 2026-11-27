@@ -413,6 +413,15 @@ void AudioEngine::setEqualizer(
     mediaDsp_.setEqualizer(enabled, gainsDb, gainCount);
 }
 
+void AudioEngine::setAutoMixBandGains(
+    bool active,
+    float lowGain,
+    float midGain,
+    float highGain) noexcept {
+    oboeDsp_.setAutoMixBandGains(active, lowGain, midGain, highGain);
+    mediaDsp_.setAutoMixBandGains(active, lowGain, midGain, highGain);
+}
+
 bool AudioEngine::configureMediaProcessor(
     std::int32_t inputSampleRate,
     std::int32_t outputSampleRate,

@@ -240,9 +240,15 @@ internal fun MusicPlayer.replaceMediaItemPreservingShuffle(index: Int, mediaItem
                 player.setShuffleOrder(DefaultShuffleOrder(order.toIntArray(), Random.nextLong()))
             }
         }
-        val standby = secondaryPlayer
-        if (standby != null && crossfadeStandbyArmed && index in 0 until standby.mediaItemCount) {
+        val standby = currentStandby()
+        if (standby != null && standby !== player && crossfadeStandbyArmed && index in 0 until standby.mediaItemCount) {
             standby.replaceMediaItem(index, mediaItem)
+            if (index in standbyQueue.indices) {
+                standbyQueue = standbyQueue.toMutableList().apply { set(index, mediaItem) }
+            }
+            if (index == standbyIndex && (standby.playbackState == Player.STATE_IDLE || standby.playerError != null)) {
+                standby.prepare()
+            }
         }
     }
 

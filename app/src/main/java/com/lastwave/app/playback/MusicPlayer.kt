@@ -2150,6 +2150,7 @@ class MusicPlayer @Inject constructor(
             }
         }
         val autoMixCoord = autoMixCoordinator.get()
+        autoMixCoord.engineResolver = { target -> engineForPlayer(target) }
         autoMixCoord.onPerformDeckSwap = { outgoing, incoming ->
             // Carry the exact play order across. Walking only from the
             // incoming song onward produced a partial order that failed the
@@ -2166,11 +2167,21 @@ class MusicPlayer @Inject constructor(
             incoming.playbackParameters = outgoing.playbackParameters
             crossfadeStandbyArmed = false
             crossfadeStandbyPreparing = false
+            standbyQueue = emptyList()
+            standbyIndex = C.INDEX_UNSET
             outgoingPlayer = outgoing
             activePlayer = incoming
+            musicHapticsController.bindToPlayer(incoming)
+            musicHapticsController.onAudioSessionIdChanged(incoming.audioSessionId)
             outgoing.removeListener(listener)
+            outgoing.setAudioAttributes(outgoing.audioAttributes, false)
             outgoing.repeatMode = Player.REPEAT_MODE_OFF
             outgoing.shuffleModeEnabled = false
+            if (outgoing.currentMediaItemIndex != C.INDEX_UNSET && outgoing.mediaItemCount > outgoing.currentMediaItemIndex + 1) {
+                runCatching {
+                    outgoing.removeMediaItems(outgoing.currentMediaItemIndex + 1, outgoing.mediaItemCount)
+                }
+            }
             incoming.addListener(listener)
             incoming.setAudioAttributes(incoming.audioAttributes, false)
             // The swap happens mid-blend; it must never un-pause the user.
@@ -2179,6 +2190,8 @@ class MusicPlayer @Inject constructor(
             refresh(incoming)
         }
         autoMixCoord.onTransitionComplete = {
+            runCatching { nativeAudioEngine.get().setAutoMixBandGains(false, 1f, 1f, 1f) }
+            runCatching { secondaryNativeEngine?.setAutoMixBandGains(false, 1f, 1f, 1f) }
             val toStop = outgoingPlayer
             outgoingPlayer = null
             toStop?.stop()
@@ -2277,10 +2290,20 @@ class MusicPlayer @Inject constructor(
                                 ?: preparedStreams.values.firstOrNull { it.url == nextItem?.localConfiguration?.uri?.toString() }
                             val nextStreamUrl = stream?.url ?: nextItem?.localConfiguration?.uri?.toString()
 
-                            val transitionActive = !sleepTimerEndOfTrack && (crossfadeEnabled || autoMixCoordinator.get().isEnabled)
+                            val repeatOne = player.repeatMode == Player.REPEAT_MODE_ONE || _state.value.repeatMode == Player.REPEAT_MODE_ONE
+                            val isPodcast = _state.value.current?.mediaType == MediaType.PODCAST_EPISODE
+                            val timingDurationMs = player.duration.takeIf { it > 0L }
+                                ?: player.currentMediaItem?.localConfiguration?.customCacheKey
+                                    ?.let(preparedStreams::get)?.durationMs?.takeIf { it > 0L }
+                                ?: dur.takeIf { it > 0L && durationOwnerMediaId == player.currentMediaItem?.mediaId }
+                                ?: 0L
+
+                            val transitionActive = !sleepTimerEndOfTrack && !repeatOne && !isPodcast &&
+                                !bitPerfectEnabled && !exclusiveUsbOutput.isActive() &&
+                                (crossfadeEnabled || autoMixCoordinator.get().isEnabled)
                             if (transitionActive && upcomingIdx != C.INDEX_UNSET && nextItem != null) {
-                                val remainingMs = dur - pos
-                                if (dur > 0L && (pos > dur * 0.25f || remainingMs < 90_000L)) {
+                                val remainingMs = timingDurationMs - pos
+                                if (timingDurationMs > 0L && (pos > timingDurationMs * 0.25f || remainingMs < 90_000L)) {
                                     val isNextNonPlaceholder = nextItem.localConfiguration?.uri?.scheme?.let { it != "lastwave" } == true
                                     val isStreamDead = stream?.isExpired() == true
                                     val isNextResolved = isNextNonPlaceholder && !isStreamDead
@@ -2295,18 +2318,26 @@ class MusicPlayer @Inject constructor(
                                             preloadNextTrack(upcomingIdx, nextTrk)
                                         }
                                     } else {
-                                        standbyOrCreate()
+                                        val standby = standbyOrCreate()
+                                        val standbyValid = crossfadeStandbyArmed &&
+                                            standbyIndex == upcomingIdx &&
+                                            standbyQueue.size == player.mediaItemCount &&
+                                            standbyQueue.getOrNull(upcomingIdx)?.mediaId == nextItem.mediaId &&
+                                            standby.playbackState != Player.STATE_IDLE &&
+                                            standby.playerError == null
+                                        if (standbyValid && standby.playbackState == Player.STATE_READY) {
+                                            crossfadeStandbyPreparing = false
+                                        }
                                         // A quality hot-swap owns the standby until it commits.
-                                        if (!hotSwapActive && (!crossfadeStandbyArmed || standbyIndex != upcomingIdx)) {
+                                        if (!hotSwapActive && !standbyValid) {
                                             armCrossfadeStandby(upcomingIdx, nextItem)
                                         }
                                     }
                                 }
                             }
 
-                            // Only the decoded stream length may time a mix:
-                            // catalog metadata can describe another edit of the
-                            // song and opened the blend halfway through it.
+                            // Only the decoded stream length (or resolver duration for this exact stream)
+                            // may time a mix: catalog metadata can belong to a different edit.
                             autoMixCoordinator.get().onTrackProgressTick(
                                 primaryPlayer = player,
                                 // A quality hot-swap is playing this same song on the standby.
@@ -2314,10 +2345,13 @@ class MusicPlayer @Inject constructor(
                                 currentTrack = _state.value.current,
                                 nextTrack = nextTrk,
                                 positionMs = runCatching { player.currentPosition }.getOrDefault(pos).coerceAtLeast(0L),
-                                durationMs = player.duration.takeIf { it > 0L } ?: 0L,
+                                durationMs = timingDurationMs,
                                 nextTrackStreamUrl = nextStreamUrl,
+                                nextMediaId = nextItem?.mediaId,
+                                isRepeatOne = repeatOne,
+                                isPodcast = isPodcast,
                             )
-                            if (updateCrossfade(pos)) {
+                            if (autoMixCoordinator.get().isBlending || updateCrossfade(pos)) {
                                 cadenceMs = 60L
                             } else {
 
@@ -2600,7 +2634,7 @@ class MusicPlayer @Inject constructor(
                 }
                 if (playerDelegate.isInitialized()) {
                     onMain {
-                        if (!crossfadeEnabled || bitPerfectEnabled) cancelCrossfade()
+                        if ((!crossfadeEnabled && !autoMixCoordinator.get().isEnabled) || bitPerfectEnabled) cancelCrossfade()
                         if (bitPerfectEnabled) {
                             // Tempo stretch resamples, which defeats bit-perfect.
                             // Volume is left alone: the direct sinks scale it in
@@ -2631,6 +2665,7 @@ class MusicPlayer @Inject constructor(
         applicationScope.launch(Dispatchers.Main.immediate) {
             jamRepository.get().sessionState.collect { session ->
                 val isJam = session is com.lastwave.app.data.jam.JamSessionState.Active
+                autoMixCoordinator.get().setJamRoomActive(isJam)
                 if (isJam != _state.value.isJamActive) {
                     _state.update { it.copy(isJamActive = isJam) }
                 }
@@ -3932,6 +3967,8 @@ class MusicPlayer @Inject constructor(
             return@onMain
         }
         if (index in snapshot.queue.indices && index != snapshot.currentIndex) {
+            autoMixCoordinator.get().cancelTransition(revertToPrimary = true)
+            cancelCrossfade()
             recordHistory(snapshot.current?.mediaIdKey())
         }
         resetPlayhead(0L, snapshot.queue.getOrNull(index)?.mediaIdKey())
@@ -3955,6 +3992,7 @@ class MusicPlayer @Inject constructor(
         if (pos > 5_000) {
             seekTo(0)
         } else {
+            autoMixCoordinator.get().cancelTransition(revertToPrimary = true)
             // Under shuffle, walk the explicit listening history first:
             // the engine permutation is rebuilt on toggle/handoff/edits, so
             // its "previous" is often a song never heard in this session.
@@ -4009,6 +4047,8 @@ class MusicPlayer @Inject constructor(
             return@onMain
         }
         val pendingState = _state.value
+        autoMixCoordinator.get().cancelTransition(revertToPrimary = true)
+        cancelCrossfade()
         recordHistory(pendingState.current?.mediaIdKey())
         val timeline = player.currentTimeline
         val fromIndex = if (pendingState.currentIndex in 0 until player.mediaItemCount) {

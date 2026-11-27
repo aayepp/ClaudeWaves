@@ -976,7 +976,9 @@ fun SettingsScreen(
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 title = "AutoMix",
-                                subtitle = if (hfSettings.autoMixEnabled) {
+                                subtitle = if (hfSettings.autoMixEnabled && misc.isBitPerfectEnabled) {
+                                    "Paused while Bit-Perfect is enabled"
+                                } else if (hfSettings.autoMixEnabled) {
                                     if (hfSettings.durationMode == com.lastwave.app.playback.automix.api.TransitionDurationMode.AUTO) {
                                         "Active \u2022 Phrase-matched transition (Auto)"
                                     } else {

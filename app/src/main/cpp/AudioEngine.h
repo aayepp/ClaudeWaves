@@ -62,6 +62,7 @@ public:
     // bitPerfectRequested from bitPerfectActuallyActive.
     [[nodiscard]] bool isBitPerfect() const noexcept;
     void setEqualizer(bool enabled, const float* gainsDb, std::size_t gainCount) noexcept;
+    void setAutoMixBandGains(bool active, float lowGain, float midGain, float highGain) noexcept;
 
     [[nodiscard]] bool configureMediaProcessor(
         std::int32_t inputSampleRate,
