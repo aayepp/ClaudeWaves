@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.MaterialTheme
 import com.lastwave.app.ui.comic.Surface
 import androidx.compose.material3.Text
@@ -90,6 +92,7 @@ internal fun CardArtwork(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = CardTokens.coverCornerRadius,
     decodeSizePx: Int? = null,
+    preferEmbedded: Boolean = fallbackIcon != Icons.Filled.MusicNote,
 ) {
     Surface(
         shape = RoundedCornerShape(cornerRadius),
@@ -104,6 +107,7 @@ internal fun CardArtwork(
                 embeddedUrl = artworkUrl,
                 fallbackIcon = fallbackIcon,
                 decodeSizePx = decodeSizePx,
+                preferEmbedded = preferEmbedded,
                 modifier = Modifier.fillMaxSize(),
             )
         }

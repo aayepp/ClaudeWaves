@@ -779,6 +779,7 @@ private fun TopResultCard(
                     artist = item.artist.orEmpty(),
                     embeddedUrl = item.artworkUrl,
                     fallbackIcon = fallback,
+                    preferEmbedded = tab != SearchTab.TRACKS && tab != SearchTab.LOCAL,
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (isPlaying) {
@@ -1080,6 +1081,7 @@ private fun SearchResultRow(
                 artist = item.artist.orEmpty(),
                 embeddedUrl = item.artworkUrl,
                 fallbackIcon = fallback,
+                preferEmbedded = tab != SearchTab.TRACKS && tab != SearchTab.LOCAL,
                 modifier = Modifier.fillMaxSize().clip(if (tab == SearchTab.ARTISTS || tab == SearchTab.USERS) CircleShape else RoundedCornerShape(10.dp)),
             )
             if (isPlaying) {

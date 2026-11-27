@@ -196,6 +196,7 @@ fun AlbumDetailScreen(
                     embeddedUrl = albumData.artworkUrl,
                     fallbackIcon = Icons.Filled.Album,
                     alignment = Alignment.TopCenter,
+                    preferEmbedded = true,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -533,6 +534,7 @@ fun AlbumDetailScreen(
                                             artist = track.artist.takeIf { !com.lastwave.app.util.ArtistHelper.isPlayCountOrStat(it) && it.isNotBlank() } ?: data.artist,
                                             embeddedUrl = track.artworkUrl ?: data.artworkUrl,
                                             fallbackIcon = Icons.Filled.Album,
+                                            preferEmbedded = true,
                                             modifier = Modifier.fillMaxSize(),
                                         )
                                         if (isPlayingThis) {
@@ -654,6 +656,7 @@ fun AlbumDetailScreen(
                                 ) { otherAlbum ->
                                     AlbumCard(
                                         item = otherAlbum,
+                                        artistName = data.artist,
                                         onClick = {
                                             onOpenAlbum(otherAlbum.title, data.artist, otherAlbum.browseId)
                                         },
@@ -732,6 +735,7 @@ fun AlbumDetailScreen(
                                     artist = albumData?.artist ?: artistName,
                                     embeddedUrl = albumData?.artworkUrl,
                                     fallbackIcon = Icons.Filled.Album,
+                                    preferEmbedded = true,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -787,6 +791,7 @@ fun AlbumDetailScreen(
 @Composable
 private fun AlbumCard(
     item: ArtistAlbumItem,
+    artistName: String = "",
     onClick: () -> Unit,
 ) {
     Card(
@@ -803,9 +808,10 @@ private fun AlbumCard(
             ) {
                 ArtworkImage(
                     name = item.title,
-                    artist = "",
+                    artist = artistName,
                     embeddedUrl = item.artworkUrl,
                     fallbackIcon = Icons.Filled.Album,
+                    preferEmbedded = true,
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (!item.year.isNullOrBlank()) {

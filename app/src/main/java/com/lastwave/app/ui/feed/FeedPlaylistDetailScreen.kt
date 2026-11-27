@@ -258,6 +258,7 @@ private fun PlaylistContent(
                     artist = playlist.author.orEmpty(),
                     embeddedUrl = playlist.artworkUrl ?: playlist.tracks.firstOrNull()?.artworkUrl,
                     fallbackIcon = if (playlist.id == "yt_liked") Icons.Filled.Favorite else Icons.Filled.MusicNote,
+                    preferEmbedded = true,
                     modifier = Modifier
                         .size(196.dp)
                         .clip(RoundedCornerShape(26.dp)),

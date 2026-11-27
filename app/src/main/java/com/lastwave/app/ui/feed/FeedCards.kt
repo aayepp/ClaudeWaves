@@ -607,6 +607,7 @@ internal fun FeedMediaCard(
                         artist = subtitle,
                         embeddedUrl = artworkUrl,
                         fallbackIcon = fallbackIcon,
+                        preferEmbedded = true,
                         modifier = Modifier.fillMaxSize(),
                     )
                     if (badgeText != null) {

@@ -54,6 +54,7 @@ fun ArtworkImage(
     alignment: Alignment = Alignment.Center,
     transformations: List<Transformation> = emptyList(),
     crossfadeMs: Int = 120,
+    preferEmbedded: Boolean = false,
     artworkViewModel: ArtworkViewModel = LocalArtworkViewModel.current ?: hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -74,9 +75,12 @@ fun ArtworkImage(
     // Local songs: a cover extracted from the user's own file wins
     // over any online lookup, and no lookup is started for it.
     val localCover = embeddedUrl?.startsWith("file://") == true && !embeddedFailed
+    // Authoritative non-track entities (albums, singles, playlists) carry official artwork
+    // from YouTube Music; skip song-search overrides so they never swap album covers.
+    val useEmbeddedDirectly = preferEmbedded && ArtworkNormalizer.isRealImage(embeddedUrl) && !embeddedFailed
 
-    LaunchedEffect(key, resolvedFailed, localCover) {
-        if (localCover) return@LaunchedEffect
+    LaunchedEffect(key, resolvedFailed, localCover, useEmbeddedDirectly) {
+        if (localCover || useEmbeddedDirectly) return@LaunchedEffect
         if (resolvedFailed && !refreshRequested) {
             refreshRequested = true
             artworkViewModel.refresh(name, artist)
@@ -88,16 +92,14 @@ fun ArtworkImage(
     val highResUrl = resolvedUrl?.takeIf { it.isNotBlank() }
     val useHighRes = highResUrl != null && !resolvedFailed
 
-    // High-resolution master artwork from Spotify -> Apple Music -> Tidal -> Deezer takes priority.
-    // While resolving in background, embeddedUrl (upscaled) is shown seamlessly.
-    val displayUrl = if (localCover) {
-        embeddedUrl
-    } else if (useHighRes) {
-        highResUrl
-    } else if (ArtworkNormalizer.isRealImage(embeddedUrl) && !embeddedFailed) {
-        ArtworkNormalizer.upscaleYoutubeArtwork(embeddedUrl)
-    } else {
-        null
+    // High-resolution master artwork from Spotify -> Apple Music -> Tidal -> Deezer takes priority
+    // for tracks, while preferEmbedded honors authoritative embedded covers directly.
+    val displayUrl = when {
+        localCover -> embeddedUrl
+        useEmbeddedDirectly -> ArtworkNormalizer.upscaleYoutubeArtwork(embeddedUrl)
+        useHighRes -> highResUrl
+        ArtworkNormalizer.isRealImage(embeddedUrl) && !embeddedFailed -> ArtworkNormalizer.upscaleYoutubeArtwork(embeddedUrl)
+        else -> null
     }
 
     val mobileDataUrl = remember(displayUrl, embeddedUrl, localCover) {
@@ -153,7 +155,7 @@ fun ArtworkImage(
                 },
                 modifier = Modifier.fillMaxSize(),
                 onError = {
-                    if (localCover) {
+                    if (localCover || useEmbeddedDirectly) {
                         embeddedFailed = true
                     } else if (requestUrl == displayUrl && useHighRes) {
                         resolvedFailed = true

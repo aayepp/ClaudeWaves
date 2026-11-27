@@ -1163,6 +1163,7 @@ internal fun QuickTileCard(
                 artist = tile.subtitle ?: "",
                 embeddedUrl = tile.artworkUrl,
                 fallbackIcon = Icons.Filled.Album,
+                preferEmbedded = tile.actionVideoId == null,
                 modifier = Modifier.fillMaxSize(),
             )
         }

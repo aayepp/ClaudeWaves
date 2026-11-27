@@ -2230,10 +2230,8 @@ class InnerTubeMusicApi @Inject constructor(
 
         val descRuns = header?.obj("description")?.array("runs")?.joinToString("") { it.asObject()?.string("text").orEmpty() }
 
-        val thumbs = header?.obj("thumbnail")?.obj("croppedSquareThumbnailRenderer")?.array("thumbnails")
-            ?: header?.obj("thumbnail")?.obj("musicThumbnailRenderer")?.obj("thumbnail")?.array("thumbnails")
-            ?: header?.obj("thumbnail")?.array("thumbnails")
-        val artworkUrl = thumbs?.lastOrNull()?.asObject()?.string("url")?.highResolutionArtwork()
+        val artworkUrl = header?.let { extractThumbnailsUrl(it) }
+            ?: responsiveHeaders.firstNotNullOfOrNull { extractThumbnailsUrl(it) }
 
         val songPages = collectBrowseSongPages(root, limit = 100)
         val tracks = songPages.tracks.map { track ->

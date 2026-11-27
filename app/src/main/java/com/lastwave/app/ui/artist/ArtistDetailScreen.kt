@@ -846,6 +846,7 @@ fun ArtistDetailScreen(
                                 ) { album ->
                                     ArtistAlbumCard(
                                         item = album,
+                                        artistName = com.lastwave.app.util.ArtistHelper.primaryArtist(data.name),
                                         onClick = {
                                             onOpenAlbum(album.title, com.lastwave.app.util.ArtistHelper.primaryArtist(data.name), album.browseId)
                                         },
@@ -886,6 +887,7 @@ fun ArtistDetailScreen(
                                 ) { single ->
                                     ArtistAlbumCard(
                                         item = single,
+                                        artistName = com.lastwave.app.util.ArtistHelper.primaryArtist(data.name),
                                         onClick = {
                                             onOpenAlbum(single.title, com.lastwave.app.util.ArtistHelper.primaryArtist(data.name), single.browseId)
                                         },
@@ -1302,6 +1304,7 @@ fun ArtistDetailScreen(
 @Composable
 private fun ArtistAlbumCard(
     item: ArtistAlbumItem,
+    artistName: String = "",
     onClick: () -> Unit,
 ) {
     Card(
@@ -1318,9 +1321,10 @@ private fun ArtistAlbumCard(
             ) {
                 ArtworkImage(
                     name = item.title,
-                    artist = "",
+                    artist = artistName,
                     embeddedUrl = item.artworkUrl,
                     fallbackIcon = Icons.Filled.Album,
+                    preferEmbedded = true,
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (!item.year.isNullOrBlank()) {
