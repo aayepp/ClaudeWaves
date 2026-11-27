@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.59] - 2026-11-28
+
+### Fixed
+- **Feedback & Bug Report localization:** localized all bug report fields, area/frequency chips, and screenshot upload labels across all 15 supported app languages so the sheet matches your selected language cleanly.
+
 ## [1.0.58] - 2026-11-28
 
 ### Fixed

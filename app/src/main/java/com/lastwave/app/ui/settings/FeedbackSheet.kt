@@ -73,21 +73,26 @@ import com.lastwave.app.ui.theme.sakugaTypingInput
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private data class BugChipOption(
+    val wireKey: String,
+    val labelRes: Int,
+)
+
 private val BUG_AREAS = listOf(
-    "Playback",
-    "MiniPlayer",
-    "Lyrics",
-    "Downloads",
-    "USB DAC",
-    "Search",
-    "UI / Theme",
-    "Lain-lain",
+    BugChipOption("Playback", R.string.feedback_area_playback),
+    BugChipOption("MiniPlayer", R.string.feedback_area_miniplayer),
+    BugChipOption("Lyrics", R.string.feedback_area_lyrics),
+    BugChipOption("Downloads", R.string.feedback_area_downloads),
+    BugChipOption("USB DAC", R.string.feedback_area_usb_dac),
+    BugChipOption("Search", R.string.feedback_area_search),
+    BugChipOption("UI / Theme", R.string.feedback_area_ui_theme),
+    BugChipOption("Other", R.string.feedback_area_other),
 )
 
 private val BUG_FREQUENCIES = listOf(
-    "Setiap Kali",
-    "Kadang",
-    "Sekali",
+    BugChipOption("Always", R.string.feedback_freq_always),
+    BugChipOption("Sometimes", R.string.feedback_freq_sometimes),
+    BugChipOption("Once", R.string.feedback_freq_once),
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -109,8 +114,8 @@ internal fun FeedbackBottomSheet(
     val isFlatCel = LocalComicTheme.current || LocalSakugaTheme.current
 
     var categoryKey by rememberSaveable { mutableStateOf(FeedbackCategory.BUG.wireKey) }
-    var bugArea by rememberSaveable { mutableStateOf(BUG_AREAS.first()) }
-    var bugFrequency by rememberSaveable { mutableStateOf(BUG_FREQUENCIES.first()) }
+    var bugAreaKey by rememberSaveable { mutableStateOf(BUG_AREAS.first().wireKey) }
+    var bugFreqKey by rememberSaveable { mutableStateOf(BUG_FREQUENCIES.first().wireKey) }
     var title by rememberSaveable { mutableStateOf("") }
     var body by rememberSaveable { mutableStateOf("") }
     var contact by rememberSaveable { mutableStateOf("") }
@@ -166,7 +171,7 @@ internal fun FeedbackBottomSheet(
                 )
                 Text(
                     text = if (isBugMode) {
-                        "Pilih bahagian terjejas, tulis langkah untuk ulang bug & lampirkan gambar jika perlu"
+                        stringResource(R.string.feedback_bug_sub)
                     } else {
                         stringResource(R.string.feedback_sheet_sub)
                     },
@@ -218,7 +223,7 @@ internal fun FeedbackBottomSheet(
             if (isBugMode) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Bahagian Terjejas",
+                        text = stringResource(R.string.feedback_bug_area_label),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -229,13 +234,13 @@ internal fun FeedbackBottomSheet(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         BUG_AREAS.forEach { area ->
-                            val selected = bugArea == area
+                            val selected = bugAreaKey == area.wireKey
                             FilterChip(
                                 selected = selected,
-                                onClick = { if (!isSending && !sentSuccess) bugArea = area },
+                                onClick = { if (!isSending && !sentSuccess) bugAreaKey = area.wireKey },
                                 label = {
                                     Text(
-                                        text = area,
+                                        text = stringResource(area.labelRes),
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                     )
@@ -255,12 +260,16 @@ internal fun FeedbackBottomSheet(
                 },
                 label = {
                     Text(
-                        if (isBugMode) "Tajuk Masalah" else stringResource(R.string.feedback_title_label),
+                        stringResource(
+                            if (isBugMode) R.string.feedback_bug_title_label else R.string.feedback_title_label,
+                        ),
                     )
                 },
                 placeholder = {
                     Text(
-                        if (isBugMode) "Contoh: Lagu berhenti bila tukar tab Queue" else stringResource(R.string.feedback_title_hint),
+                        stringResource(
+                            if (isBugMode) R.string.feedback_bug_title_hint else R.string.feedback_title_hint,
+                        ),
                     )
                 },
                 singleLine = true,
@@ -279,16 +288,16 @@ internal fun FeedbackBottomSheet(
                 },
                 label = {
                     Text(
-                        if (isBugMode) "Langkah Ulang Bug (Steps to Reproduce)" else stringResource(R.string.feedback_body_label),
+                        stringResource(
+                            if (isBugMode) R.string.feedback_bug_steps_label else R.string.feedback_body_label,
+                        ),
                     )
                 },
                 placeholder = {
                     Text(
-                        if (isBugMode) {
-                            "1. Buka ...\n2. Tekan ...\n3. Apa yang berlaku..."
-                        } else {
-                            stringResource(R.string.feedback_body_hint)
-                        },
+                        stringResource(
+                            if (isBugMode) R.string.feedback_bug_steps_hint else R.string.feedback_body_hint,
+                        ),
                     )
                 },
                 minLines = if (isBugMode) 4 else 3,
@@ -303,7 +312,7 @@ internal fun FeedbackBottomSheet(
             if (isBugMode) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Kekerapan Berlaku",
+                        text = stringResource(R.string.feedback_bug_freq_label),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -313,13 +322,13 @@ internal fun FeedbackBottomSheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         BUG_FREQUENCIES.forEach { freq ->
-                            val selected = bugFrequency == freq
+                            val selected = bugFreqKey == freq.wireKey
                             FilterChip(
                                 selected = selected,
-                                onClick = { if (!isSending && !sentSuccess) bugFrequency = freq },
+                                onClick = { if (!isSending && !sentSuccess) bugFreqKey = freq.wireKey },
                                 label = {
                                     Text(
-                                        text = freq,
+                                        text = stringResource(freq.labelRes),
                                         maxLines = 1,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                     )
@@ -352,15 +361,15 @@ internal fun FeedbackBottomSheet(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Screenshot Bukti (Pilihan)",
+                                text = stringResource(R.string.feedback_screenshots_title),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
                                 text = if (pickedUris.isEmpty()) {
-                                    "Lampirkan gambar masalah jika ada (max 5)"
+                                    stringResource(R.string.feedback_screenshots_empty)
                                 } else {
-                                    "${pickedUris.size}/5 gambar dipilih · auto-compress"
+                                    stringResource(R.string.feedback_screenshots_selected, pickedUris.size)
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -383,7 +392,13 @@ internal fun FeedbackBottomSheet(
                                 },
                                 label = {
                                     Text(
-                                        text = if (pickedUris.isEmpty()) "Pilih Gambar" else "Tambah",
+                                        text = stringResource(
+                                            if (pickedUris.isEmpty()) {
+                                                R.string.feedback_screenshots_pick
+                                            } else {
+                                                R.string.feedback_screenshots_add
+                                            },
+                                        ),
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                 },
@@ -407,7 +422,7 @@ internal fun FeedbackBottomSheet(
                                 ) {
                                     AsyncImage(
                                         model = uri,
-                                        contentDescription = "Screenshot",
+                                        contentDescription = stringResource(R.string.feedback_screenshots_title),
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize(),
                                     )
@@ -424,7 +439,7 @@ internal fun FeedbackBottomSheet(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Filled.Close,
-                                                contentDescription = "Buang",
+                                                contentDescription = stringResource(R.string.feedback_screenshots_remove),
                                                 tint = MaterialTheme.colorScheme.onPrimary,
                                                 modifier = Modifier.size(13.dp),
                                             )
@@ -522,7 +537,7 @@ internal fun FeedbackBottomSheet(
                             return@Button
                         }
                         val formattedBody = if (isBugMode) {
-                            "[Area: $bugArea] [Freq: $bugFrequency]\n\nSteps to Reproduce:\n${body.trim()}"
+                            "[Area: $bugAreaKey] [Freq: $bugFreqKey]\n\nSteps to Reproduce:\n${body.trim()}"
                         } else {
                             body.trim()
                         }
@@ -569,7 +584,9 @@ internal fun FeedbackBottomSheet(
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = if (isBugMode) "Hantar Laporan Bug" else stringResource(R.string.feedback_send),
+                            text = stringResource(
+                                if (isBugMode) R.string.feedback_send_bug else R.string.feedback_send,
+                            ),
                             fontWeight = FontWeight.Bold,
                         )
                     }

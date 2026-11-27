@@ -1461,5 +1461,29 @@
     <string name="feedback_error_short">Inserisci almeno 3 caratteri per il titolo e 5 per i dettagli.</string>
     <string name="feedback_error_rate_limit">Troppi invii ravvicinati. Riprova tra qualche minuto.</string>
     <string name="feedback_error_failed">Invio non riuscito. Controlla la connessione.</string>
+    <string name="feedback_bug_sub">Scegli la sezione coinvolta, descrivi i passaggi e allega screenshot se utile</string>
+    <string name="feedback_bug_area_label">Sezione interessata</string>
+    <string name="feedback_area_playback">Riproduzione</string>
+    <string name="feedback_area_miniplayer">MiniPlayer</string>
+    <string name="feedback_area_lyrics">Testi</string>
+    <string name="feedback_area_downloads">Download</string>
+    <string name="feedback_area_usb_dac">USB DAC</string>
+    <string name="feedback_area_search">Cerca</string>
+    <string name="feedback_area_ui_theme">UI / Tema</string>
+    <string name="feedback_area_other">Altro</string>
+    <string name="feedback_bug_title_label">Titolo del problema</string>
+    <string name="feedback_bug_title_hint">es. L\'audio si ferma aprendo la scheda Coda</string>
+    <string name="feedback_bug_steps_label">Passaggi per riprodurre</string>
+    <string name="feedback_bug_steps_hint">1. Apri…\n2. Tocca…\n3. Cosa succede…</string>
+    <string name="feedback_bug_freq_label">Frequenza</string>
+    <string name="feedback_freq_always">Sempre</string>
+    <string name="feedback_freq_sometimes">A volte</string>
+    <string name="feedback_freq_once">Una volta</string>
+    <string name="feedback_screenshots_title">Screenshot (opzionale)</string>
+    <string name="feedback_screenshots_empty">Allega screenshot del problema (max 5)</string>
+    <string name="feedback_screenshots_selected">%1$d/5 selezionati · compressi auto</string>
+    <string name="feedback_screenshots_pick">Aggiungi foto</string>
+    <string name="feedback_screenshots_add">Aggiungi altri</string>
+    <string name="feedback_screenshots_remove">Rimuovi</string>
+    <string name="feedback_send_bug">Invia segnalazione</string>
 </resources>
-
