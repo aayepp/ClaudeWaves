@@ -814,7 +814,7 @@
     <string name="set_sys_fx_off">Разрешить приложениям Dolby/эквалайзера обрабатывать воспроизведение</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">Эксклюзивный USB-выход</string>
-    <string name="set_usb_old">Требуется Android 10 или новее.</string>
+    <string name="set_usb_old">Требуется Android 9 или новее.</string>
     <string name="set_usb_on">Направьте usbdevfs на ЦАП. • Bit-Perfect включает это автоматически.</string>
     <string name="set_usb_off">Выкл. • Требуется USB-ЦАП и Bit-Perfect (или этот переключатель)</string>
     <string name="set_yt_hist_on">Вкл. • Песни, которые вы слушаете в ClaudeWaves, включая файлы без потерь и загрузки, отображаются в вашей истории YouTube Music.</string>
@@ -858,7 +858,7 @@
     <string name="toast_yt_channels_fail">Не удалось загрузить каналы YouTube. Пожалуйста, попробуйте еще раз.</string>
     <string name="toast_yt_switched">Переключился на %1$s — обновление библиотеки…</string>
     <string name="toast_usb_on">Эксклюзивное использование USB — Bit-Perfect будет использовать usbdevfs, когда будет предоставлен ЦАП.</string>
-    <string name="toast_usb_old">Эксклюзивный USB требует Android 10 или новее.</string>
+    <string name="toast_usb_old">Эксклюзивный USB требует Android 9 или новее.</string>
     <string name="toast_backup_ok">Резервная копия успешно сохранена (%1$d КБ)</string>
     <string name="toast_backup_fail">Не удалось выполнить резервное копирование: %1$s.</string>
     <string name="toast_backup_empty">Не удалось создать резервную копию: пустые данные</string>
@@ -1094,10 +1094,6 @@
     <string name="toast_spotify_disconnected">Аккаунт Spotify отключен</string>
     <string name="settings_quality_follows_output">Качество по выходу</string>
     <string name="settings_quality_follows_output_sub">Hi-Res и Lossless на проводных IEM и USB-ЦАП, 320 кбит/с на динамике и Bluetooth</string>
-    <string name="ly_karaoke_mode">Режим караоке</string>
-    <string name="ly_karaoke_on">Включить караоке</string>
-    <string name="ly_karaoke_off">Выключить караоке</string>
-    <string name="ly_karaoke_vocal_level">Вокал %1$d%%</string>
     <string name="settings_feedback_title">Отзывы и предложения</string>
     <string name="settings_feedback_sub">Сообщить об ошибке или предложить идею разработчику</string>
     <string name="feedback_sheet_title">Отзывы и предложения</string>
@@ -1118,10 +1114,4 @@
     <string name="feedback_error_short">Введите минимум 3 символа для заголовка и 5 для описания.</string>
     <string name="feedback_error_rate_limit">Слишком много запросов. Попробуйте позже.</string>
     <string name="feedback_error_failed">Ошибка отправки. Проверьте подключение.</string>
-    <string name="ly_karaoke_removal_level">Убрать вокал %1$d%%</string>
-    <string name="ly_karaoke_ai_active">ИИ активен</string>
-    <string name="ly_karaoke_ai_preparing">Подготовка ИИ…</string>
-    <string name="ly_karaoke_ai_downloading">ИИ %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">Мгновенно</string>
-    <string name="ly_karaoke_ai_retry">Повторить ИИ</string>
 </resources>

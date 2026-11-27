@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "KaraokeStft.h"
 #include "ParametricEq.h"
 
 namespace lastwave::audio {
@@ -24,7 +23,6 @@ public:
     void setStudioMasterClarity(bool enabled) noexcept;
     void setBitPerfect(bool enabled) noexcept;
     void setPeakProtectionEnabled(bool enabled) noexcept;
-    void setKaraoke(bool enabled, float vocalLevel) noexcept;
     void setEqualizer(
         bool enabled,
         const float* gainsDb,
@@ -59,7 +57,6 @@ public:
     static void broadcastClarityTrims(const float* trimsDb, std::size_t trimCount);
     static void broadcastClarityPreset(int preset);
     static void broadcastClarityAtmosBypass(bool bypass);
-    static void broadcastKaraoke(bool enabled, float vocalLevel);
     void process(
         float* interleaved,
         std::int32_t frameCount,
@@ -222,12 +219,6 @@ private:
     Biquad airDetail_{};
     Biquad monoBassFilter_{};
     Biquad airExciterFilter_{};
-    std::atomic<bool> targetKaraokeEnabled_{false};
-    std::atomic<float> targetKaraokeVocalLevel_{0.0F};
-    float currentKaraokeWet_{0.0F};
-    float currentKaraokeVocalLevel_{0.0F};
-    bool karaokeChainActive_{false};
-    KaraokeStftProcessor karaokeStft_{};
     Crossfeed crossfeed_{};
     // AutoEQ / manual parametric EQ. Runs first in the chain and, unlike
     // the rest of the DSP, also while Bit-Perfect is on: the user asked for

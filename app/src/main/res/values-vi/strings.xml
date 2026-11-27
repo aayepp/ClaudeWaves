@@ -995,7 +995,7 @@
     <string name="set_sys_fx_off">Để Dolby / ứng dụng equalizer xử lý âm thanh phát</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">Đầu ra USB độc quyền</string>
-    <string name="set_usb_old">Yêu cầu Android 10 trở lên</string>
+    <string name="set_usb_old">Yêu cầu Android 9 trở lên</string>
     <string name="set_usb_on">usbdevfs trực tiếp đến DAC • Bit-Perfect tự động kích hoạt chế độ này</string>
     <string name="set_usb_off">Tắt • Cần DAC USB và Bit-Perfect (hoặc bật mục này)</string>
     <string name="set_yt_hist_on">Bật • các bài bạn nghe trong ClaudeWaves, kể cả lossless &amp; bản tải xuống, sẽ xuất hiện trong lịch sử YouTube Music</string>
@@ -1039,7 +1039,7 @@
     <string name="toast_yt_channels_fail">Không thể tải các kênh YouTube. Vui lòng thử lại.</string>
     <string name="toast_yt_switched">Đã chuyển sang %1$s — đang làm mới thư viện…</string>
     <string name="toast_usb_on">Đã bật USB độc quyền — Bit-Perfect sẽ dùng usbdevfs khi DAC được cấp quyền</string>
-    <string name="toast_usb_old">USB độc quyền yêu cầu Android 10 trở lên</string>
+    <string name="toast_usb_old">USB độc quyền yêu cầu Android 9 trở lên</string>
     <string name="toast_backup_ok">Đã lưu sao lưu thành công (%1$d KB)</string>
     <string name="toast_backup_fail">Sao lưu thất bại: %1$s</string>
     <string name="toast_backup_empty">Tạo bản sao lưu thất bại: dữ liệu trống</string>
@@ -1391,10 +1391,6 @@
     <string name="spotify_liked_songs_sub">Mục thích trên Spotify của bạn</string>
     <string name="settings_quality_follows_output">Chất lượng theo đầu ra</string>
     <string name="settings_quality_follows_output_sub">Hi-Res và Lossless trên IEM có dây và USB DAC; 320 kbps trên loa và Bluetooth</string>
-    <string name="ly_karaoke_mode">Chế độ Karaoke</string>
-    <string name="ly_karaoke_on">Bật chế độ Karaoke</string>
-    <string name="ly_karaoke_off">Tắt chế độ Karaoke</string>
-    <string name="ly_karaoke_vocal_level">Giọng hát %1$d%%</string>
     <string name="settings_feedback_title">Phản hồi &amp; Đề xuất</string>
     <string name="settings_feedback_sub">Báo lỗi hoặc đề xuất tính năng mới cho nhà phát triển</string>
     <string name="feedback_sheet_title">Phản hồi &amp; Đề xuất</string>
@@ -1415,10 +1411,4 @@
     <string name="feedback_error_short">Vui lòng nhập tiêu đề tối thiểu 3 ký tự và chi tiết 5 ký tự.</string>
     <string name="feedback_error_rate_limit">Bạn gửi quá nhiều lần. Vui lòng thử lại sau.</string>
     <string name="feedback_error_failed">Gửi thất bại. Kiểm tra lại kết nối mạng.</string>
-    <string name="ly_karaoke_removal_level">Tách giọng %1$d%%</string>
-    <string name="ly_karaoke_ai_active">AI Đang bật</string>
-    <string name="ly_karaoke_ai_preparing">Đang chuẩn bị AI…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">Tức thì</string>
-    <string name="ly_karaoke_ai_retry">Thử lại AI</string>
 </resources>

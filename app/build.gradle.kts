@@ -582,10 +582,6 @@ dependencies {
 
     // Bit-perfect USB exclusive output: audio_engine UsbAudioDriver.
     implementation(project(":audio:decent-usb-audio-driver"))
-
-    // On-device GPU AI vocal separation via Google Play Services LiteRT/TFLite (~0.85 MB stubs, zero 30 MB runtime bloat).
-    implementation("com.google.android.gms:play-services-tflite-java:16.5.0")
-    implementation("com.google.android.gms:play-services-tflite-gpu:16.5.0")
 }
 
 kotlin {

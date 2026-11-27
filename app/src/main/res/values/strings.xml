@@ -1087,7 +1087,7 @@
     <string name="set_sys_fx_off">Let Dolby / equalizer apps process playback</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">USB Exclusive Output</string>
-    <string name="set_usb_old">Requires Android 10 or newer</string>
+    <string name="set_usb_old">Requires Android 9 or newer</string>
     <string name="set_usb_on">Direct usbdevfs to the DAC • Bit-Perfect engages this automatically</string>
     <string name="set_usb_off">Off • Needs a USB DAC and Bit-Perfect (or this toggle)</string>
     <string name="set_yt_hist_on">On • songs you listen to in ClaudeWaves, including lossless &amp; downloads, appear in your YouTube Music history</string>
@@ -1131,7 +1131,7 @@
     <string name="toast_yt_channels_fail">Couldn\'t load YouTube channels. Please try again.</string>
     <string name="toast_yt_switched">Switched to %1$s — refreshing library…</string>
     <string name="toast_usb_on">USB exclusive on — Bit-Perfect will use usbdevfs when a DAC is granted</string>
-    <string name="toast_usb_old">USB exclusive needs Android 10 or newer</string>
+    <string name="toast_usb_old">USB exclusive needs Android 9 or newer</string>
     <string name="toast_backup_ok">Backup saved successfully (%1$d KB)</string>
     <string name="toast_backup_fail">Backup failed: %1$s</string>
     <string name="toast_backup_empty">Backup creation failed: empty data</string>
@@ -1509,10 +1509,6 @@
         <item quantity="one">Addon link expired</item>
         <item quantity="other">%d addon links expired</item>
     </plurals>
-    <string name="ly_karaoke_mode">Karaoke Mode</string>
-    <string name="ly_karaoke_on">Enable Karaoke Mode</string>
-    <string name="ly_karaoke_off">Disable Karaoke Mode</string>
-    <string name="ly_karaoke_vocal_level">Vocal %1$d%%</string>
     <string name="settings_feedback_title">Feedback &amp; Suggestions</string>
     <string name="settings_feedback_sub">Report a bug or suggest a new feature to the developer</string>
     <string name="feedback_sheet_title">Feedback &amp; Suggestions</string>
@@ -1533,10 +1529,4 @@
     <string name="feedback_error_short">Please enter at least 3 chars for title and 5 chars for details.</string>
     <string name="feedback_error_rate_limit">Too many submissions right now. Please try again in a few minutes.</string>
     <string name="feedback_error_failed">Failed to send. Check your internet connection.</string>
-    <string name="ly_karaoke_removal_level">Vocal Removal %1$d%%</string>
-    <string name="ly_karaoke_ai_active">AI Active</string>
-    <string name="ly_karaoke_ai_preparing">Preparing AI…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">Instant</string>
-    <string name="ly_karaoke_ai_retry">Retry AI</string>
 </resources>

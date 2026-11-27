@@ -848,7 +848,7 @@
     <string name="set_sys_fx_off">Dolby / ekolayzer uygulamalarının işlemesine izin ver</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">USB Özel Çıkış</string>
-    <string name="set_usb_old">Android 10 veya üstü gerekir</string>
+    <string name="set_usb_old">Android 9 veya üstü gerekir</string>
     <string name="set_usb_on">DAC’a doğrudan usbdevfs • Bit-Perfect bunu otomatik açar</string>
     <string name="set_usb_off">Kapalı • USB DAC ve Bit-Perfect (veya bu düğme) gerekir</string>
     <string name="set_yt_hist_on">Açık • ClaudeWaves’de dinledikleriniz (kayıpsız ve indirmeler dahil) YouTube Music geçmişinizde görünür</string>
@@ -892,7 +892,7 @@
     <string name="toast_yt_channels_fail">YouTube kanalları yüklenemedi. Lütfen tekrar deneyin.</string>
     <string name="toast_yt_switched">%1$s geçildi — kitaplık yenileniyor…</string>
     <string name="toast_usb_on">USB özel açık — DAC izni verildiğinde Bit-Perfect usbdevfs kullanır</string>
-    <string name="toast_usb_old">USB özel için Android 10 veya üstü gerekir</string>
+    <string name="toast_usb_old">USB özel için Android 9 veya üstü gerekir</string>
     <string name="toast_backup_ok">Yedek başarıyla kaydedildi (%1$d KB)</string>
     <string name="toast_backup_fail">Yedekleme başarısız: %1$s</string>
     <string name="toast_backup_empty">Yedekleme başarısız: veri boş</string>
@@ -1188,10 +1188,6 @@
     <string name="toast_spotify_disconnected">Spotify hesabının bağlantısı kesildi</string>
     <string name="settings_quality_follows_output">Kalite çıkışa göre</string>
     <string name="settings_quality_follows_output_sub">Kablolu IEM ve USB DAC ile Hi-Res ve Lossless, hoparlör ve Bluetooth ile 320 kbps</string>
-    <string name="ly_karaoke_mode">Karaoke Modu</string>
-    <string name="ly_karaoke_on">Karaoke Modunu Aç</string>
-    <string name="ly_karaoke_off">Karaoke Modunu Kapat</string>
-    <string name="ly_karaoke_vocal_level">Vokal %1$d%%</string>
     <string name="settings_feedback_title">Geri Bildirim &amp; Öneriler</string>
     <string name="settings_feedback_sub">Hata bildirin veya geliştiriciye yeni özellik önerin</string>
     <string name="feedback_sheet_title">Geri Bildirim &amp; Öneriler</string>
@@ -1212,10 +1208,4 @@
     <string name="feedback_error_short">Başlık en az 3, ayrıntılar en az 5 karakter olmalıdır.</string>
     <string name="feedback_error_rate_limit">Çok fazla gönderim. Lütfen birkaç dakika sonra tekrar deneyin.</string>
     <string name="feedback_error_failed">Gönderilemedi. İnternet bağlantınızı kontrol edin.</string>
-    <string name="ly_karaoke_removal_level">Vokal Kaldırma %1$d%%</string>
-    <string name="ly_karaoke_ai_active">YZ Aktif</string>
-    <string name="ly_karaoke_ai_preparing">YZ Hazırlanıyor…</string>
-    <string name="ly_karaoke_ai_downloading">YZ %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">Anında</string>
-    <string name="ly_karaoke_ai_retry">YZ Tekrar</string>
 </resources>

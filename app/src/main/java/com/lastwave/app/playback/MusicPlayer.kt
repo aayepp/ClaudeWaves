@@ -200,7 +200,6 @@ class MusicPlayer @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val ytMusicAuthManager: YtMusicAuthManager,
     private val loudnessPrefs: LoudnessPrefs,
-    internal val aiKaraokeEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine,
 ) {
 
     private class VpnYoutubeLoginRequiredException(message: String) : java.io.IOException(message)
@@ -574,8 +573,6 @@ class MusicPlayer @Inject constructor(
     /** Local in-app playback volume (persisted). Never holds the cast level. */
     var appVolume: Float = 1f
         private set
-    internal var karaokeEnabled = false
-    internal var karaokeVocalLevel = 0.0f
     /** Last volume of the cast receiver; only meaningful while casting. */
     internal var castVolume: Float = 1f
     private var appVolumePersistJob: Job? = null
@@ -822,19 +819,6 @@ class MusicPlayer @Inject constructor(
         CacheDataSource.Factory()
             .setCache(mediaCache)
             .setUpstreamDataSourceFactory(chunkedUpstreamFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-    }
-
-    /** Read-only cache view for background AI vocal separation so it never acquires SimpleCache write locks. */
-    private val readOnlyCacheDataSourceFactory: CacheDataSource.Factory by lazy {
-        val defaultDataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpUpstreamFactory)
-        val chunkedUpstreamFactory = androidx.media3.datasource.DataSource.Factory {
-            ChunkedRangeDataSource(defaultDataSourceFactory.createDataSource(), refresher = ::refreshRejectedYouTubeUrl)
-        }
-        CacheDataSource.Factory()
-            .setCache(mediaCache)
-            .setUpstreamDataSourceFactory(chunkedUpstreamFactory)
-            .setCacheWriteDataSinkFactory(null)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
@@ -1272,15 +1256,6 @@ class MusicPlayer @Inject constructor(
                     if (nextIndex != C.INDEX_UNSET && nextIndex in 0 until player.mediaItemCount && nextIndex != currentIndex) {
                         preloadNextTrack(nextIndex, player.getMediaItemAt(nextIndex).toPlayableTrack())
                     }
-                }
-                if (karaokeEnabled) {
-                    audioSinks.forEach {
-                        it.clearSongClockAnchor()
-                        it.updateSongClockAnchor(targetPos, targetPlayer.isPlaying)
-                    }
-                    aiKaraokeEngine.onTrackChanged(buildCurrentKaraokeSource(), targetPos)
-                } else {
-                    audioSinks.forEach { it.clearSongClockAnchor() }
                 }
             }
         override fun onPlayerError(error: PlaybackException) {
@@ -1833,12 +1808,9 @@ class MusicPlayer @Inject constructor(
                             ?: fallbackDepth
                     }
                     val isSpatial = isSpatialAudioCodec(_state.value.audioCodec)
-                    createdSink.aiKaraokeEngine = aiKaraokeEngine
-                    createdSink.karaokeEnabled = karaokeEnabled
-                    createdSink.karaokeRemovalIntensity = (1f - karaokeVocalLevel).coerceIn(0f, 1f)
-                    createdSink.setBitPerfectRequested(!isSpatial && !karaokeEnabled && bitPerfectEnabled)
-                    createdSink.syncExclusiveUsb(handleAudioFocus && !isSpatial && !karaokeEnabled && exclusiveUsbWanted())
-                    createdSink.syncInternalDirect(handleAudioFocus && !isSpatial && !karaokeEnabled && internalDirectWanted())
+                    createdSink.setBitPerfectRequested(!isSpatial && bitPerfectEnabled)
+                    createdSink.syncExclusiveUsb(handleAudioFocus && !isSpatial && exclusiveUsbWanted())
+                    createdSink.syncInternalDirect(handleAudioFocus && !isSpatial && internalDirectWanted())
                     audioSinks.add(createdSink)
                     runCatching {
                         routedDacDeviceId?.let { id -> findOutputDevice(id)?.let(createdSink::setPreferredDevice) }
@@ -2162,7 +2134,6 @@ class MusicPlayer @Inject constructor(
     @MainThread
     fun release() {
         cancelCrossfade()
-        aiKaraokeEngine.onKaraokeStateChanged(false, null, 0L)
         activePlayer?.removeListener(listener)
         activePlayer?.release()
         activePlayer = null
@@ -2176,14 +2147,6 @@ class MusicPlayer @Inject constructor(
         applicationScope.launch {
             autoMixCoordinator.get().telemetry.collect { tel ->
                 _state.update { it.copy(deckBlendTelemetry = tel) }
-            }
-        }
-        applicationScope.launch {
-            aiKaraokeEngine.status.collect { status ->
-                _state.update { live ->
-                    val effective = if (live.karaokeEnabled) status else com.lastwave.app.playback.karaoke.KaraokeStatus.Off
-                    if (live.karaokeStatus == effective) live else live.copy(karaokeStatus = effective)
-                }
             }
         }
         val autoMixCoord = autoMixCoordinator.get()
@@ -2468,9 +2431,6 @@ class MusicPlayer @Inject constructor(
                     val tickerNow = SystemClock.elapsedRealtime()
                     updateRenderStallWatchdog(tickerNow)
                     val healthPlaying = player.isPlaying || _state.value.isPlaying
-                    if (karaokeEnabled) {
-                        playerToSink[player]?.updateSongClockAnchor(pos, healthPlaying)
-                    }
                     if (healthPlaying && tickerNow - lastSignalPathMs >= SIGNAL_PATH_TICK_MS) {
                         lastSignalPathMs = tickerNow
                         val exclusiveRate = exclusiveUsbOutput.currentRateHz()
@@ -3690,93 +3650,6 @@ class MusicPlayer @Inject constructor(
         }
     }
 
-    fun setKaraokeEnabled(enabled: Boolean) = onMain {
-        karaokeEnabled = enabled
-        val initialStatus = if (enabled) {
-            com.lastwave.app.playback.karaoke.KaraokeStatus.InstantStft
-        } else {
-            com.lastwave.app.playback.karaoke.KaraokeStatus.Off
-        }
-        _state.update {
-            it.copy(
-                karaokeEnabled = enabled,
-                karaokeVocalLevel = karaokeVocalLevel,
-                karaokeStatus = initialStatus,
-            )
-        }
-        audioSinks.forEach { sink ->
-            sink.karaokeEnabled = enabled
-            sink.karaokeRemovalIntensity = (1f - karaokeVocalLevel).coerceIn(0f, 1f)
-            if (enabled) {
-                sink.updateSongClockAnchor(currentPositionMs(), _state.value.isPlaying)
-            } else {
-                sink.clearSongClockAnchor()
-            }
-        }
-        runCatching { nativeAudioEngine.get().setKaraoke(enabled, karaokeVocalLevel) }
-        updateBitPerfectState()
-        applyDacRoutingFor(currentSourceRateHz())
-        aiKaraokeEngine.onKaraokeStateChanged(
-            enabled = enabled,
-            source = if (enabled) buildCurrentKaraokeSource() else null,
-            currentPositionMs = currentPositionMs(),
-        )
-    }
-
-    fun setKaraokeRemovalIntensity(intensity: Float) = onMain {
-        val clampedIntensity = if (intensity.isFinite()) intensity.coerceIn(0f, 1f) else 1f
-        val vocalLvl = (1f - clampedIntensity).coerceIn(0f, 1f)
-        karaokeVocalLevel = vocalLvl
-        _state.update { it.copy(karaokeVocalLevel = vocalLvl) }
-        audioSinks.forEach { it.karaokeRemovalIntensity = clampedIntensity }
-        runCatching { nativeAudioEngine.get().setKaraoke(karaokeEnabled, vocalLvl) }
-    }
-
-    fun setKaraokeVocalLevel(level: Float) {
-        val vocalLvl = if (level.isFinite()) level.coerceIn(0f, 1f) else 0f
-        setKaraokeRemovalIntensity(1f - vocalLvl)
-    }
-
-    fun retryKaraokeAiDownload() = onMain {
-        if (!karaokeEnabled) return@onMain
-        aiKaraokeEngine.retryModelDownload(
-            source = buildCurrentKaraokeSource(),
-            currentPositionMs = currentPositionMs(),
-        )
-    }
-
-    private fun createKaraokeMediaSourceFactory(): MediaSource.Factory {
-        val resolvingFactory = ResolvingDataSource.Factory(readOnlyCacheDataSourceFactory) { dataSpec ->
-            val stream = dataSpec.key?.let(preparedStreams::get)
-                ?: preparedStreams.values.firstOrNull { it.url == dataSpec.uri.toString() }
-            if (stream != null) {
-                dataSpec.buildUpon()
-                    .setKey(stream.cacheKey)
-                    .build()
-                    .withRequestHeaders(mediaRequestHeaders(stream))
-            } else {
-                dataSpec
-            }
-        }
-        return createAudioMediaSourceFactory(resolvingFactory)
-    }
-
-    private fun buildCurrentKaraokeSource(): com.lastwave.app.playback.karaoke.AiKaraokeEngine.TrackAudioSource? {
-        if (!playerDelegate.isInitialized()) return null
-        val item = player.currentMediaItem ?: return null
-        val uri = item.localConfiguration?.uri ?: return null
-        if (uri.scheme == "lastwave") return null
-        val key = item.mediaId.takeIf { it.isNotBlank() } ?: uri.toString()
-        val duration = player.duration.takeIf { it > 0L } ?: _state.value.durationMs
-        return com.lastwave.app.playback.karaoke.AiKaraokeEngine.TrackAudioSource(
-            trackKey = key,
-            uri = uri,
-            mediaItem = item,
-            durationMs = duration,
-            mediaSourceFactoryProvider = ::createKaraokeMediaSourceFactory,
-        )
-    }
-
     fun togglePlayPause() = onMain {
         if (isCasting) {
             if (_state.value.isPlaying || _state.value.isBuffering) pause() else resume()
@@ -3854,11 +3727,6 @@ class MusicPlayer @Inject constructor(
         playheadWallMs = now
         exclusiveUsbOutput.noteSeek(target * 1_000L)
         player.seekTo(target)
-        audioSinks.forEach {
-            it.clearSongClockAnchor()
-            if (karaokeEnabled) it.updateSongClockAnchor(target, _state.value.isPlaying)
-        }
-        aiKaraokeEngine.onSeek(target)
         _state.update { it.copy(positionMs = target, isBuffering = true) }
         checkpointPodcastProgress()
     }
@@ -4526,7 +4394,6 @@ class MusicPlayer @Inject constructor(
         abandonMediaAudioFocus()
         player.stop()
         player.clearMediaItems()
-        aiKaraokeEngine.onTrackChanged(null, 0L)
         // Shuffle is engine state that survives stop()/clearMediaItems(): without
         // this reset the next fresh queue silently inherits shuffle while the
         // fresh state says off â€” until the first refresh() flips it back on.

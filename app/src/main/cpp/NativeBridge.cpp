@@ -1,6 +1,5 @@
 #include "AudioEngine.h"
 #include "DspProcessor.h"
-#include "MdxStft.h"
 
 #include <jni.h>
 
@@ -122,16 +121,6 @@ Java_com_lastwave_app_playback_NativeAudioEngine_nativeSetStudioMasterClarity(
     if (auto* engine = fromHandle(handle); engine != nullptr) {
         engine->setStudioMasterClarity(enabled == JNI_TRUE);
     }
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_lastwave_app_playback_NativeAudioEngine_nativeSetKaraoke(
-    JNIEnv*,
-    jobject,
-    jlong,
-    jboolean enabled,
-    jfloat vocalLevel) {
-    lastwave::audio::DspProcessor::broadcastKaraoke(enabled == JNI_TRUE, vocalLevel);
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -520,53 +509,4 @@ Java_com_lastwave_app_playback_NativeAudioEngine_nativeRateAdaptationCount(
     jlong handle) {
     const auto* engine = fromHandle(handle);
     return engine == nullptr ? 0 : static_cast<jlong>(engine->rateAdaptationCount());
-}
-
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_lastwave_app_playback_karaoke_MdxStftNative_nativeComputeStft(
-    JNIEnv* env,
-    jobject,
-    jfloatArray stereoInput,
-    jobject outTensorBuffer) {
-    if (stereoInput == nullptr || outTensorBuffer == nullptr) return JNI_FALSE;
-    const jsize inputLen = env->GetArrayLength(stereoInput);
-    auto* outPtr = static_cast<float*>(env->GetDirectBufferAddress(outTensorBuffer));
-    const jlong outCap = env->GetDirectBufferCapacity(outTensorBuffer);
-    const std::size_t requiredInput = lastwave::audio::kMdxChunkSize * 2U;
-    const std::size_t requiredTensorBytes = lastwave::audio::kMdxTensorFloats * sizeof(float);
-    if (outPtr == nullptr || inputLen < 0 || outCap < 0 ||
-        static_cast<std::size_t>(inputLen) < requiredInput ||
-        static_cast<std::size_t>(outCap) < requiredTensorBytes) {
-        return JNI_FALSE;
-    }
-    jfloat* inPtr = env->GetFloatArrayElements(stereoInput, nullptr);
-    if (inPtr == nullptr) return JNI_FALSE;
-    const bool ok = lastwave::audio::computeMdxStft(inPtr, outPtr);
-    env->ReleaseFloatArrayElements(stereoInput, inPtr, JNI_ABORT);
-    return ok ? JNI_TRUE : JNI_FALSE;
-}
-
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_lastwave_app_playback_karaoke_MdxStftNative_nativeComputeIstft(
-    JNIEnv* env,
-    jobject,
-    jobject inTensorBuffer,
-    jfloatArray stereoOutput,
-    jfloat compensate) {
-    if (inTensorBuffer == nullptr || stereoOutput == nullptr) return JNI_FALSE;
-    auto* inPtr = static_cast<const float*>(env->GetDirectBufferAddress(inTensorBuffer));
-    const jlong inCap = env->GetDirectBufferCapacity(inTensorBuffer);
-    const jsize outputLen = env->GetArrayLength(stereoOutput);
-    const std::size_t requiredTensorBytes = lastwave::audio::kMdxTensorFloats * sizeof(float);
-    const std::size_t requiredOutput = lastwave::audio::kMdxGenSize * 2U;
-    if (inPtr == nullptr || inCap < 0 || outputLen < 0 ||
-        static_cast<std::size_t>(inCap) < requiredTensorBytes ||
-        static_cast<std::size_t>(outputLen) < requiredOutput) {
-        return JNI_FALSE;
-    }
-    jfloat* outPtr = env->GetFloatArrayElements(stereoOutput, nullptr);
-    if (outPtr == nullptr) return JNI_FALSE;
-    const bool ok = lastwave::audio::computeMdxIstft(inPtr, outPtr, compensate);
-    env->ReleaseFloatArrayElements(stereoOutput, outPtr, ok ? 0 : JNI_ABORT);
-    return ok ? JNI_TRUE : JNI_FALSE;
 }

@@ -814,7 +814,7 @@
     <string name="set_sys_fx_off">اسمح لتطبيقات Dolby / Equalizer بمعالجة التشغيل</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">مخرج USB حصري</string>
-    <string name="set_usb_old">يتطلب أندرويد 10 أو أحدث</string>
+    <string name="set_usb_old">يتطلب أندرويد 9 أو أحدث</string>
     <string name="set_usb_on">قم بتوجيه usbdevfs إلى DAC • يقوم Bit-Perfect بتشغيل هذا تلقائيًا</string>
     <string name="set_usb_off">متوقف • يحتاج إلى USB DAC وBit-Perfect (أو هذا التبديل)</string>
     <string name="set_yt_hist_on">في • الأغاني التي تستمع إليها في ClaudeWaves، بما في ذلك الأغاني التي لا تفقد البيانات والتنزيلات، تظهر في سجل YouTube Music الخاص بك</string>
@@ -858,7 +858,7 @@
     <string name="toast_yt_channels_fail">تعذر تحميل قنوات YouTube. يرجى المحاولة مرة أخرى.</string>
     <string name="toast_yt_switched">تم التبديل إلى %1$s — تحديث المكتبة...</string>
     <string name="toast_usb_on">USB حصريًا على — Bit-Perfect سيستخدم usbdevfs عند منح DAC</string>
-    <string name="toast_usb_old">يحتاج USB الحصري إلى نظام التشغيل Android 10 أو الأحدث</string>
+    <string name="toast_usb_old">يحتاج USB الحصري إلى نظام التشغيل Android 9 أو الأحدث</string>
     <string name="toast_backup_ok">تم حفظ النسخة الاحتياطية بنجاح (%1$d كيلوبايت)</string>
     <string name="toast_backup_fail">فشل النسخ الاحتياطي: %1$s</string>
     <string name="toast_backup_empty">فشل إنشاء النسخة الاحتياطية: بيانات فارغة</string>
@@ -1094,10 +1094,6 @@
     <string name="toast_spotify_disconnected">تم فصل حساب Spotify</string>
     <string name="settings_quality_follows_output">الجودة حسب المخرج</string>
     <string name="settings_quality_follows_output_sub">Hi-Res وLossless على السماعات السلكية وUSB DAC، و320 kbps على مكبر الصوت والبلوتوث</string>
-    <string name="ly_karaoke_mode">وضع الكاريوكي</string>
-    <string name="ly_karaoke_on">تفعيل وضع الكاريوكي</string>
-    <string name="ly_karaoke_off">إيقاف وضع الكاريوكي</string>
-    <string name="ly_karaoke_vocal_level">الصوت %1$d%%</string>
     <string name="settings_feedback_title">الملاحظات والاقتراحات</string>
     <string name="settings_feedback_sub">أبلغ عن خطأ أو اقترح ميزة جديدة للمطور</string>
     <string name="feedback_sheet_title">الملاحظات والاقتراحات</string>
@@ -1118,10 +1114,4 @@
     <string name="feedback_error_short">يرجى إدخال 3 أحرف للعنوان و5 أحرف للتفاصيل على الأقل.</string>
     <string name="feedback_error_rate_limit">طلبات كثيرة جدًا. حاول مرة أخرى لاحقًا.</string>
     <string name="feedback_error_failed">فشل الإرسال. تحقق من اتصالك بالإنترنت.</string>
-    <string name="ly_karaoke_removal_level">إزالة الصوت %1$d%%</string>
-    <string name="ly_karaoke_ai_active">الذكاء نشط</string>
-    <string name="ly_karaoke_ai_preparing">جارٍ تجهيز AI…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">فوري</string>
-    <string name="ly_karaoke_ai_retry">إعادة AI</string>
 </resources>

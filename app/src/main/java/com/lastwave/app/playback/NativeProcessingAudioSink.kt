@@ -169,18 +169,6 @@ class NativeProcessingAudioSink(
     /** Buffer already analysed: Media3 retries the same object until consumed. */
     private var hapticsBuffer: ByteBuffer? = null
 
-    /** Hybrid AI + C++ STFT karaoke mixer hooks. */
-    var aiKaraokeEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine? = null
-    @Volatile var karaokeEnabled: Boolean = false
-    @Volatile var karaokeRemovalIntensity: Float = 1.0f
-    private var aiMixScratch = FloatArray(0)
-    private var dryRefScratch = FloatArray(0)
-    private var aiCrossfade = 0f
-    @Volatile private var anchoredSongPosMs: Long = -1L
-    @Volatile private var anchoredWallElapsedMs: Long = 0L
-    @Volatile private var anchoredPlaying: Boolean = false
-    private var rendererOffsetUs: Long = Long.MIN_VALUE
-
     var onConfiguredFormat: ((sampleRateHz: Int, pcmEncoding: Int, channelCount: Int) -> Unit)? = null
     var bitDepthHintProvider: (() -> Int?)? = null
 
@@ -612,7 +600,6 @@ class NativeProcessingAudioSink(
     ): Boolean {
         maybeAdoptExclusiveUsb()
         maybeAdoptInternalDirect()
-        maybeEngageNativeForKaraoke()
         var presentationTimeUs = bufferPresentationTimeUs
         if (skipCheckedBuffer !== buffer) {
             skipCheckedBuffer = buffer
@@ -871,30 +858,9 @@ class NativeProcessingAudioSink(
     ): Boolean {
         if (pendingOutput == null) {
             if (!buffer.hasRemaining()) return true
-            val aiEngine = aiKaraokeEngine
-            var refDry: FloatArray? = null
-            var refFrames = 0
-            if (karaokeEnabled && outputChannelCount == 2 &&
-                aiEngine != null && !aiEngine.stemBuffer.isAlignmentLocked()
-            ) {
-                refFrames = extractDryStereoPreview(buffer, configuredFormat)
-                if (refFrames > 0) refDry = dryRefScratch
-            }
             processor.queueInput(buffer.duplicate())
             pendingInputLimit = buffer.limit()
             val output = processor.getOutput()
-            if (karaokeEnabled && outputChannelCount == 2 && output.hasRemaining() && aiEngine != null) {
-                blendAiKaraokeStem(
-                    output = output,
-                    presentationTimeUs = presentationTimeUs,
-                    sampleRate = processor.nativeOutputSampleRate,
-                    aiEngine = aiEngine,
-                    refDry = refDry,
-                    refFrames = refFrames,
-                )
-            } else if (!karaokeEnabled) {
-                aiCrossfade = 0f
-            }
             applyLoudness(output)
             pendingOutput = output
             pendingPresentationTimeUs = presentationTimeUs
@@ -1194,179 +1160,6 @@ class NativeProcessingAudioSink(
                 "resampled=${output.requiresResampling()} AudioTrack=idle",
         )
         return true
-    }
-
-    /**
-     * Mid-track engage when Karaoke activates while the sink was on a bypass route
-     * (e.g. Bit-Perfect direct AudioTrack). Runs safely on ExoPlayer's renderer thread.
-     */
-    private fun maybeEngageNativeForKaraoke() {
-        if (!karaokeEnabled || processingActive || bitPerfectRequested || exclusiveWanted || internalWanted) return
-        if (usbExclusive || internalActive || !hasConfigured || nativePathDisabled || !processor.isAvailable) return
-        if (pendingOutput != null || endOfStreamQueued) return
-        val format = configuredFormat ?: return
-        if (canProcess(format)) {
-            if (tryConfigureNativePath(format, configuredOutputChannels)) {
-                bitPerfectAtConfigure = false
-            }
-        }
-    }
-
-    private fun extractDryStereoPreview(buffer: ByteBuffer, format: Format?): Int {
-        if (format == null || format.sampleMimeType != MimeTypes.AUDIO_RAW) return 0
-        val channels = format.channelCount
-        if (channels !in 1..2) return 0
-        val bps = when (format.pcmEncoding) {
-            C.ENCODING_PCM_16BIT -> 2
-            C.ENCODING_PCM_24BIT -> 3
-            C.ENCODING_PCM_32BIT, C.ENCODING_PCM_FLOAT -> 4
-            else -> return 0
-        }
-        val availFrames = buffer.remaining() / (bps * channels)
-        val count = minOf(availFrames, 512)
-        if (count <= 0) return 0
-        if (dryRefScratch.size < count * 2) {
-            dryRefScratch = FloatArray(count * 2)
-        }
-        val dup = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        when (format.pcmEncoding) {
-            C.ENCODING_PCM_FLOAT -> {
-                for (i in 0 until count) {
-                    val l = dup.getFloat()
-                    val r = if (channels == 2) dup.getFloat() else l
-                    dryRefScratch[i * 2] = l
-                    dryRefScratch[i * 2 + 1] = r
-                }
-            }
-            C.ENCODING_PCM_24BIT -> {
-                val inv24 = 1f / 8_388_608f
-                for (i in 0 until count) {
-                    val l = (((dup.get().toInt() and 0xFF) or
-                        ((dup.get().toInt() and 0xFF) shl 8) or
-                        (dup.get().toInt() shl 16))) * inv24
-                    val r = if (channels == 2) {
-                        (((dup.get().toInt() and 0xFF) or
-                            ((dup.get().toInt() and 0xFF) shl 8) or
-                            (dup.get().toInt() shl 16))) * inv24
-                    } else l
-                    dryRefScratch[i * 2] = l
-                    dryRefScratch[i * 2 + 1] = r
-                }
-            }
-            C.ENCODING_PCM_32BIT -> {
-                val inv32 = 1f / 2_147_483_648f
-                for (i in 0 until count) {
-                    val l = dup.getInt() * inv32
-                    val r = if (channels == 2) dup.getInt() * inv32 else l
-                    dryRefScratch[i * 2] = l
-                    dryRefScratch[i * 2 + 1] = r
-                }
-            }
-            else -> {
-                for (i in 0 until count) {
-                    val l = dup.getShort() / 32768f
-                    val r = if (channels == 2) dup.getShort() / 32768f else l
-                    dryRefScratch[i * 2] = l
-                    dryRefScratch[i * 2 + 1] = r
-                }
-            }
-        }
-        return count
-    }
-
-    /** Called from main thread / progress ticker so renderer 1e12 timeline maps to 0-based song time. */
-    fun updateSongClockAnchor(songPositionMs: Long, isPlaying: Boolean) {
-        anchoredSongPosMs = songPositionMs.coerceAtLeast(0L)
-        anchoredWallElapsedMs = android.os.SystemClock.elapsedRealtime()
-        anchoredPlaying = isPlaying
-    }
-
-    fun clearSongClockAnchor() {
-        anchoredSongPosMs = -1L
-        anchoredWallElapsedMs = 0L
-        rendererOffsetUs = Long.MIN_VALUE
-    }
-
-    private fun resolveSongTimeUs(
-        presentationTimeUs: Long,
-        aiEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine,
-    ): Long {
-        if (presentationTimeUs < 0L || presentationTimeUs == C.TIME_UNSET) return -1L
-        val anchorMs = anchoredSongPosMs
-        val anchorWall = anchoredWallElapsedMs
-        if (anchorMs >= 0L && anchorWall > 0L) {
-            val sinkNowUs = runCatching { getCurrentPositionUs(false) }
-                .getOrDefault(AudioSink.CURRENT_POSITION_NOT_SET)
-            if (sinkNowUs != AudioSink.CURRENT_POSITION_NOT_SET && sinkNowUs >= 0L) {
-                val elapsedMs = if (anchoredPlaying) {
-                    (android.os.SystemClock.elapsedRealtime() - anchorWall).coerceIn(0L, 1_500L)
-                } else {
-                    0L
-                }
-                val estSongUs = (anchorMs + elapsedMs) * 1_000L
-                val candidateOffsetUs = sinkNowUs - estSongUs
-                if (rendererOffsetUs == Long.MIN_VALUE ||
-                    kotlin.math.abs(candidateOffsetUs - rendererOffsetUs) > 500_000L
-                ) {
-                    rendererOffsetUs = candidateOffsetUs
-                    aiEngine.stemBuffer.resetAlignment()
-                }
-            }
-        }
-        if (rendererOffsetUs == Long.MIN_VALUE) {
-            // Un-anchored Media3 timeline starts at ~1e12 us: wait briefly for AudioTrack clock
-            return if (presentationTimeUs >= 500_000_000_000L) -1L else presentationTimeUs
-        }
-        return (presentationTimeUs - rendererOffsetUs).coerceAtLeast(0L)
-    }
-
-    private fun blendAiKaraokeStem(
-        output: ByteBuffer,
-        presentationTimeUs: Long,
-        sampleRate: Int,
-        aiEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine,
-        refDry: FloatArray?,
-        refFrames: Int,
-    ) {
-        val frames = output.remaining() / (Float.SIZE_BYTES * 2)
-        if (frames <= 0 || sampleRate <= 0) return
-        val songTimeUs = resolveSongTimeUs(presentationTimeUs, aiEngine)
-        if (songTimeUs < 0L) return
-        if (aiMixScratch.size < frames * 2) {
-            aiMixScratch = FloatArray(frames * 2)
-        }
-        val hasAi = aiEngine.tryReadMixedStereoFloat(
-            presentationTimeUs = songTimeUs,
-            frameCount = frames,
-            outputSampleRate = sampleRate,
-            removalIntensity = karaokeRemovalIntensity,
-            outInterleavedFloat = aiMixScratch,
-            refDryStereoFloat = refDry,
-            refDryFrames = refFrames,
-        )
-        val target = if (hasAi) 1f else 0f
-        if (aiCrossfade <= 0f && target <= 0f) return
-
-        val rampStep = 1f / (sampleRate * 0.05f).coerceAtLeast(1f)
-        val fb = output.duplicate().order(ByteOrder.nativeOrder()).asFloatBuffer()
-        for (f in 0 until frames) {
-            aiCrossfade = if (aiCrossfade < target) {
-                minOf(target, aiCrossfade + rampStep)
-            } else if (aiCrossfade > target) {
-                maxOf(target, aiCrossfade - rampStep)
-            } else {
-                aiCrossfade
-            }
-            val w = aiCrossfade
-            val idxL = f * 2
-            val idxR = idxL + 1
-            val stftL = fb.get(idxL)
-            val stftR = fb.get(idxR)
-            val aiL = aiMixScratch[idxL]
-            val aiR = aiMixScratch[idxR]
-            fb.put(idxL, (stftL + (aiL - stftL) * w).coerceIn(-0.98f, 0.98f))
-            fb.put(idxR, (stftR + (aiR - stftR) * w).coerceIn(-0.98f, 0.98f))
-        }
     }
 
     /**
@@ -1886,8 +1679,6 @@ class NativeProcessingAudioSink(
     }
 
     override fun flush() {
-        aiCrossfade = 0f
-        rendererOffsetUs = Long.MIN_VALUE
         directEq.reset()
         directEqBuffer = null
         eqCopySource = null
@@ -1931,8 +1722,6 @@ class NativeProcessingAudioSink(
     }
 
     override fun reset() {
-        aiCrossfade = 0f
-        rendererOffsetUs = Long.MIN_VALUE
         directEq.reset()
         directEqBuffer = null
         eqCopySource = null

@@ -814,7 +814,7 @@
     <string name="set_sys_fx_off">ドルビー/イコライザーアプリに再生処理を任せる</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">USB専用出力</string>
-    <string name="set_usb_old">Android 10以降が必要です</string>
+    <string name="set_usb_old">Android 9以降が必要です</string>
     <string name="set_usb_on">usbdevfs を DAC に直接接続します。 • Bit-Perfect がこれを自動的に実行します。</string>
     <string name="set_usb_off">オフ • USB DAC と Bit-Perfect (またはこのトグル) が必要です</string>
     <string name="set_yt_hist_on">オン • ClaudeWaves で聴いた曲 (ロスレスやダウンロードを含む) が YouTube Music の履歴に表示されます。</string>
@@ -858,7 +858,7 @@
     <string name="toast_yt_channels_fail">YouTube チャンネルを読み込めませんでした。もう一度試してください。</string>
     <string name="toast_yt_switched">%1$s に切り替え — ライブラリを更新中…</string>
     <string name="toast_usb_on">USB 排他オン — DAC が許可されている場合、Bit-Perfect は usbdevfs を使用します</string>
-    <string name="toast_usb_old">USB専用にはAndroid 10以降が必要です</string>
+    <string name="toast_usb_old">USB専用にはAndroid 9以降が必要です</string>
     <string name="toast_backup_ok">バックアップが正常に保存されました (%1$d KB)</string>
     <string name="toast_backup_fail">バックアップに失敗しました: %1$s</string>
     <string name="toast_backup_empty">バックアップの作成に失敗しました: データが空です</string>
@@ -1094,10 +1094,6 @@
     <string name="toast_spotify_disconnected">Spotify アカウントの連携を解除しました</string>
     <string name="settings_quality_follows_output">出力に合わせた音質</string>
     <string name="settings_quality_follows_output_sub">有線IEMとUSB DACではHi-ResとLossless、スピーカーとBluetoothでは320 kbps</string>
-    <string name="ly_karaoke_mode">カラオケモード</string>
-    <string name="ly_karaoke_on">カラオケモードをオン</string>
-    <string name="ly_karaoke_off">カラオケモードをオフ</string>
-    <string name="ly_karaoke_vocal_level">ボーカル %1$d%%</string>
     <string name="settings_feedback_title">フィードバック・要望</string>
     <string name="settings_feedback_sub">バグ報告や新機能のアイデアを開発者へ送信</string>
     <string name="feedback_sheet_title">フィードバック・要望</string>
@@ -1118,10 +1114,4 @@
     <string name="feedback_error_short">タイトルは3文字以上、詳細は5文字以上入力してください。</string>
     <string name="feedback_error_rate_limit">送信回数が多すぎます。しばらくしてからお試しください。</string>
     <string name="feedback_error_failed">送信に失敗しました。通信環境をご確認ください。</string>
-    <string name="ly_karaoke_removal_level">ボーカル除去 %1$d%%</string>
-    <string name="ly_karaoke_ai_active">AI稼働中</string>
-    <string name="ly_karaoke_ai_preparing">AI準備中…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">即時</string>
-    <string name="ly_karaoke_ai_retry">AI再試行</string>
 </resources>

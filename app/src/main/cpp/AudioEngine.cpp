@@ -396,11 +396,6 @@ void AudioEngine::setStudioMasterClarity(bool enabled) noexcept {
     mediaDsp_.setStudioMasterClarity(enabled);
 }
 
-void AudioEngine::setKaraoke(bool enabled, float vocalLevel) noexcept {
-    oboeDsp_.setKaraoke(enabled, vocalLevel);
-    mediaDsp_.setKaraoke(enabled, vocalLevel);
-}
-
 void AudioEngine::setBitPerfect(bool enabled) noexcept {
     oboeDsp_.setBitPerfect(enabled);
     mediaDsp_.setBitPerfect(enabled);

@@ -56,7 +56,6 @@ public:
     void setOutputVolume(float volume) noexcept;
 
     void setStudioMasterClarity(bool enabled) noexcept;
-    void setKaraoke(bool enabled, float vocalLevel) noexcept;
     void setBitPerfect(bool enabled) noexcept;
     // Read-back for UI truthfulness: true only when both DSP instances
     // actually bypass. Lets the signal-path verdict distinguish

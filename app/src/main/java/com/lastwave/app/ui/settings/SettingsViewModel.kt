@@ -679,7 +679,7 @@ class SettingsViewModel @Inject constructor(
             .stateIn(viewModelScope, SettingsSharing, false)
 
     fun setUsbExclusiveEnabled(enabled: Boolean) = launchSettingsAction("update USB exclusive output") {
-        if (enabled && android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+        if (enabled && android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.P) {
             _uiState.update { it.copy(toastMessage = appContext.getString(com.lastwave.app.R.string.toast_usb_old)) }
             return@launchSettingsAction
         }

@@ -818,7 +818,7 @@
     <string name="set_sys_fx_off">डॉल्बी/इक्वलाइज़र ऐप्स को प्लेबैक प्रोसेस करने दें</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">यूएसबी एक्सक्लूसिव आउटपुट</string>
-    <string name="set_usb_old">Android 10 या नए संस्करण की आवश्यकता है</string>
+    <string name="set_usb_old">Android 9 या नए संस्करण की आवश्यकता है</string>
     <string name="set_usb_on">usbdevfs को DAC पर निर्देशित करें • Bit-Perfect इसे स्वचालित रूप से संलग्न करता है</string>
     <string name="set_usb_off">बंद • USB DAC और Bit-Perfect (या यह टॉगल) की आवश्यकता है</string>
     <string name="set_yt_hist_on">ClaudeWaves में आपके द्वारा सुने जाने वाले • गाने, दोषरहित और डाउनलोड सहित, आपके YouTube Music इतिहास में दिखाई देते हैं</string>
@@ -862,7 +862,7 @@
     <string name="toast_yt_channels_fail">यूट्यूब चैनल लोड नहीं किये जा सके. कृपया पुन: प्रयास करें।</string>
     <string name="toast_yt_switched">%1$s पर स्विच किया गया - ताज़ा लाइब्रेरी...</string>
     <string name="toast_usb_on">USB एक्सक्लूसिव ऑन - Bit-Perfect DAC दिए जाने पर usbdevfs का उपयोग करेगा</string>
-    <string name="toast_usb_old">USB एक्सक्लूसिव के लिए Android 10 या नए संस्करण की आवश्यकता है</string>
+    <string name="toast_usb_old">USB एक्सक्लूसिव के लिए Android 9 या नए संस्करण की आवश्यकता है</string>
     <string name="toast_backup_ok">बैकअप सफलतापूर्वक सहेजा गया (%1$d KB)</string>
     <string name="toast_backup_fail">बैकअप विफल: %1$s</string>
     <string name="toast_backup_empty">बैकअप निर्माण विफल: खाली डेटा</string>
@@ -1098,10 +1098,6 @@
     <string name="toast_spotify_disconnected">Spotify खाता डिस्कनेक्ट हो गया</string>
     <string name="settings_quality_follows_output">आउटपुट के अनुसार क्वालिटी</string>
     <string name="settings_quality_follows_output_sub">वायर्ड IEM और USB DAC पर Hi-Res और Lossless; स्पीकर और ब्लूटूथ पर 320 kbps</string>
-    <string name="ly_karaoke_mode">कराओके मोड</string>
-    <string name="ly_karaoke_on">कराओके मोड चालू करें</string>
-    <string name="ly_karaoke_off">कराओके मोड बंद करें</string>
-    <string name="ly_karaoke_vocal_level">वोकल %1$d%%</string>
     <string name="settings_feedback_title">फ़ीडबैक और सुझाव</string>
     <string name="settings_feedback_sub">बग रिपोर्ट करें या डेवलपर को नया फ़ीचर सुझाएँ</string>
     <string name="feedback_sheet_title">फ़ीडबैक और सुझाव</string>
@@ -1122,10 +1118,4 @@
     <string name="feedback_error_short">शीर्षक कम से कम 3 और विवरण 5 अक्षर का लिखें।</string>
     <string name="feedback_error_rate_limit">बहुत अधिक अनुरोध। कृपया थोड़ी देर बाद प्रयास करें।</string>
     <string name="feedback_error_failed">भेजने में विफल। इंटरनेट कनेक्शन जांचें।</string>
-    <string name="ly_karaoke_removal_level">वोकल हटाएं %1$d%%</string>
-    <string name="ly_karaoke_ai_active">AI सक्रिय</string>
-    <string name="ly_karaoke_ai_preparing">AI तैयार हो रहा…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">तुरंत</string>
-    <string name="ly_karaoke_ai_retry">AI पुनः प्रयास</string>
 </resources>

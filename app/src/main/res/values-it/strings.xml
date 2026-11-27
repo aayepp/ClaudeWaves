@@ -868,7 +868,7 @@
     <string name="set_sys_fx_off">Lascia elaborare la riproduzione a Dolby o alle app di equalizzazione</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">Uscita USB esclusiva</string>
-    <string name="set_usb_old">Richiede Android 10 o successivo</string>
+    <string name="set_usb_old">Richiede Android 9 o successivo</string>
     <string name="set_usb_on">usbdevfs diretto verso il DAC • il bit-perfect lo attiva in automatico</string>
     <string name="set_usb_off">Disattivo • serve un DAC USB e il bit-perfect (o questo interruttore)</string>
     <string name="set_yt_hist_on">Attivo • i brani ascoltati in ClaudeWaves, anche lossless e download, compaiono nella cronologia di YouTube Music</string>
@@ -912,7 +912,7 @@
     <string name="toast_yt_channels_fail">Impossibile caricare i canali YouTube. Riprova.</string>
     <string name="toast_yt_switched">Passato a %1$s — aggiornamento della libreria…</string>
     <string name="toast_usb_on">USB esclusiva attiva — il bit-perfect userà usbdevfs quando un DAC è autorizzato</string>
-    <string name="toast_usb_old">L\'USB esclusiva richiede Android 10 o successivo</string>
+    <string name="toast_usb_old">L\'USB esclusiva richiede Android 9 o successivo</string>
     <string name="toast_backup_ok">Backup salvato (%1$d KB)</string>
     <string name="toast_backup_fail">Backup non riuscito: %1$s</string>
     <string name="toast_backup_empty">Creazione del backup non riuscita: dati vuoti</string>
@@ -1441,10 +1441,6 @@
     <string name="spotify_liked_songs_sub">I tuoi mi piace di Spotify</string>
     <string name="settings_quality_follows_output">Qualità in base all’uscita</string>
     <string name="settings_quality_follows_output_sub">Hi-Res e Lossless su IEM cablati e DAC USB, 320 kbps su altoparlante e Bluetooth</string>
-    <string name="ly_karaoke_mode">Modalità Karaoke</string>
-    <string name="ly_karaoke_on">Attiva modalità karaoke</string>
-    <string name="ly_karaoke_off">Disattiva modalità karaoke</string>
-    <string name="ly_karaoke_vocal_level">Voce %1$d%%</string>
     <string name="settings_feedback_title">Feedback e Suggerimenti</string>
     <string name="settings_feedback_sub">Segnala un bug o proponi una funzione</string>
     <string name="feedback_sheet_title">Feedback e Suggerimenti</string>
@@ -1465,11 +1461,5 @@
     <string name="feedback_error_short">Inserisci almeno 3 caratteri per il titolo e 5 per i dettagli.</string>
     <string name="feedback_error_rate_limit">Troppi invii ravvicinati. Riprova tra qualche minuto.</string>
     <string name="feedback_error_failed">Invio non riuscito. Controlla la connessione.</string>
-    <string name="ly_karaoke_removal_level">Rimuovi voce %1$d%%</string>
-    <string name="ly_karaoke_ai_active">IA Attiva</string>
-    <string name="ly_karaoke_ai_preparing">Preparazione IA…</string>
-    <string name="ly_karaoke_ai_downloading">IA %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">Istantaneo</string>
-    <string name="ly_karaoke_ai_retry">Riprova IA</string>
 </resources>
 

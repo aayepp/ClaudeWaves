@@ -817,7 +817,7 @@
     <string name="set_sys_fx_off">让杜比/均衡器应用程序处理播放</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">USB专用输出</string>
-    <string name="set_usb_old">需要 Android 10 或更高版本</string>
+    <string name="set_usb_old">需要 Android 9 或更高版本</string>
     <string name="set_usb_on">将usbdevfs 直接连接到DAC • Bit-Perfect 自动启用此功能</string>
     <string name="set_usb_off">关 • 需要 USB DAC 和 Bit-Perfect（或此切换）</string>
     <string name="set_yt_hist_on">• 您在ClaudeWaves 中收听的歌曲（包括无损歌曲和下载歌曲）会出现在您的YouTube Music 历史记录中</string>
@@ -861,7 +861,7 @@
     <string name="toast_yt_channels_fail">无法加载 YouTube 频道。请再试一次。</string>
     <string name="toast_yt_switched">切换到 %1$s — 刷新库......</string>
     <string name="toast_usb_on">当授予 DAC 时，USB 独占 — Bit-Perfect 将使用 usbdevfs</string>
-    <string name="toast_usb_old">USB 独占需要 Android 10 或更高版本</string>
+    <string name="toast_usb_old">USB 独占需要 Android 9 或更高版本</string>
     <string name="toast_backup_ok">备份已成功保存 (%1$d KB)</string>
     <string name="toast_backup_fail">备份失败：%1$s</string>
     <string name="toast_backup_empty">备份创建失败：数据为空</string>
@@ -1097,10 +1097,6 @@
     <string name="toast_spotify_disconnected">Spotify 账号已断开连接</string>
     <string name="settings_quality_follows_output">音质跟随输出</string>
     <string name="settings_quality_follows_output_sub">有线耳机和 USB DAC 播放 Hi-Res 与无损，扬声器和蓝牙播放 320 kbps</string>
-    <string name="ly_karaoke_mode">卡拉OK模式</string>
-    <string name="ly_karaoke_on">开启卡拉OK模式</string>
-    <string name="ly_karaoke_off">关闭卡拉OK模式</string>
-    <string name="ly_karaoke_vocal_level">人声 %1$d%%</string>
     <string name="settings_feedback_title">反馈与建议</string>
     <string name="settings_feedback_sub">向开发者报告 Bug 或提出新功能建议</string>
     <string name="feedback_sheet_title">反馈与建议</string>
@@ -1121,10 +1117,4 @@
     <string name="feedback_error_short">标题至少 3 个字，详情至少 5 个字。</string>
     <string name="feedback_error_rate_limit">提交过于频繁，请稍后再试。</string>
     <string name="feedback_error_failed">发送失败，请检查网络连接。</string>
-    <string name="ly_karaoke_removal_level">消除人声 %1$d%%</string>
-    <string name="ly_karaoke_ai_active">AI已启用</string>
-    <string name="ly_karaoke_ai_preparing">正在准备AI…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">即时</string>
-    <string name="ly_karaoke_ai_retry">重试AI</string>
 </resources>

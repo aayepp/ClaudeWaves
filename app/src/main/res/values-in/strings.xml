@@ -814,7 +814,7 @@
     <string name="set_sys_fx_off">Biarkan aplikasi Dolby/equalizer memproses pemutaran</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">Keluaran Eksklusif USB</string>
-    <string name="set_usb_old">Membutuhkan Android 10 atau lebih baru</string>
+    <string name="set_usb_old">Membutuhkan Android 9 atau lebih baru</string>
     <string name="set_usb_on">Arahkan usbdevfs ke DAC • Bit-Perfect mengaktifkan ini secara otomatis</string>
     <string name="set_usb_off">Mati • Membutuhkan USB DAC dan Bit-Perfect (atau tombol ini)</string>
     <string name="set_yt_hist_on">Pada • lagu yang Anda dengarkan di ClaudeWaves, termasuk lossless &amp; unduhan, muncul di riwayat YouTube Music Anda</string>
@@ -858,7 +858,7 @@
     <string name="toast_yt_channels_fail">Tidak dapat memuat saluran YouTube. Silakan coba lagi.</string>
     <string name="toast_yt_switched">Beralih ke %1$s — menyegarkan perpustakaan…</string>
     <string name="toast_usb_on">USB eksklusif aktif — Bit-Perfect akan menggunakan usbdevfs ketika DAC diberikan</string>
-    <string name="toast_usb_old">Eksklusif USB memerlukan Android 10 atau lebih baru</string>
+    <string name="toast_usb_old">Eksklusif USB memerlukan Android 9 atau lebih baru</string>
     <string name="toast_backup_ok">Cadangan berhasil disimpan (%1$d KB)</string>
     <string name="toast_backup_fail">Pencadangan gagal: %1$s</string>
     <string name="toast_backup_empty">Pembuatan cadangan gagal: data kosong</string>
@@ -1094,10 +1094,6 @@
     <string name="toast_spotify_disconnected">Akun Spotify terputus</string>
     <string name="settings_quality_follows_output">Kualitas mengikuti output</string>
     <string name="settings_quality_follows_output_sub">Hi-Res dan Lossless di IEM kabel dan USB DAC; 320 kbps di speaker dan Bluetooth</string>
-    <string name="ly_karaoke_mode">Mode Karaoke</string>
-    <string name="ly_karaoke_on">Aktifkan Mode Karaoke</string>
-    <string name="ly_karaoke_off">Matikan Mode Karaoke</string>
-    <string name="ly_karaoke_vocal_level">Vokal %1$d%%</string>
     <string name="settings_feedback_title">Masukan &amp; Saran</string>
     <string name="settings_feedback_sub">Laporkan bug atau kirim ide fitur baru ke developer</string>
     <string name="feedback_sheet_title">Masukan &amp; Saran</string>
@@ -1118,10 +1114,4 @@
     <string name="feedback_error_short">Judul minimal 3 karakter dan detail minimal 5 karakter.</string>
     <string name="feedback_error_rate_limit">Terlalu sering mengirim. Coba lagi beberapa menit lagi.</string>
     <string name="feedback_error_failed">Gagal mengirim. Periksa koneksi internet Anda.</string>
-    <string name="ly_karaoke_removal_level">Buang Vokal %1$d%%</string>
-    <string name="ly_karaoke_ai_active">AI Aktif</string>
-    <string name="ly_karaoke_ai_preparing">Menyediakan AI…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">Segera</string>
-    <string name="ly_karaoke_ai_retry">Cuba AI</string>
 </resources>

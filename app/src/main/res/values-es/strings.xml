@@ -814,7 +814,7 @@
     <string name="set_sys_fx_off">Deje que las aplicaciones Dolby/ecualizador procesen la reproducción</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">Salida exclusiva USB</string>
-    <string name="set_usb_old">Requiere Android 10 o más reciente</string>
+    <string name="set_usb_old">Requiere Android 9 o más reciente</string>
     <string name="set_usb_on">Dirija usbdevfs al DAC • Bit-Perfect activa esto automáticamente</string>
     <string name="set_usb_off">Apagado • Necesita un DAC USB y Bit-Perfect (o este interruptor)</string>
     <string name="set_yt_hist_on">En • las canciones que escuchas en ClaudeWaves, incluidas las descargas y sin pérdida, aparecen en tu historial de YouTube Music</string>
@@ -858,7 +858,7 @@
     <string name="toast_yt_channels_fail">No se pudieron cargar los canales de YouTube. Por favor inténtalo de nuevo.</string>
     <string name="toast_yt_switched">Cambiado a %1$s - biblioteca refrescante...</string>
     <string name="toast_usb_on">USB exclusivo activado: Bit-Perfect usará usbdevfs cuando se otorgue un DAC</string>
-    <string name="toast_usb_old">El USB exclusivo necesita Android 10 o posterior</string>
+    <string name="toast_usb_old">El USB exclusivo necesita Android 9 o posterior</string>
     <string name="toast_backup_ok">Copia de seguridad guardada correctamente (%1$d KB)</string>
     <string name="toast_backup_fail">Error de copia de seguridad: %1$s</string>
     <string name="toast_backup_empty">Error al crear la copia de seguridad: datos vacíos</string>
@@ -1094,10 +1094,6 @@
     <string name="toast_spotify_disconnected">Cuenta de Spotify desconectada</string>
     <string name="settings_quality_follows_output">Calidad según la salida</string>
     <string name="settings_quality_follows_output_sub">Hi-Res y Lossless con IEM con cable y DAC USB; 320 kbps en el altavoz y Bluetooth</string>
-    <string name="ly_karaoke_mode">Modo Karaoke</string>
-    <string name="ly_karaoke_on">Activar modo karaoke</string>
-    <string name="ly_karaoke_off">Desactivar modo karaoke</string>
-    <string name="ly_karaoke_vocal_level">Voz %1$d%%</string>
     <string name="settings_feedback_title">Comentarios y sugerencias</string>
     <string name="settings_feedback_sub">Reporta un error o sugiere una nueva función</string>
     <string name="feedback_sheet_title">Comentarios y sugerencias</string>
@@ -1118,10 +1114,4 @@
     <string name="feedback_error_short">Ingresa al menos 3 caracteres en título y 5 en detalles.</string>
     <string name="feedback_error_rate_limit">Demasiados envíos seguidos. Intenta en unos minutos.</string>
     <string name="feedback_error_failed">Error al enviar. Revisa tu conexión.</string>
-    <string name="ly_karaoke_removal_level">Quitar voz %1$d%%</string>
-    <string name="ly_karaoke_ai_active">IA Activa</string>
-    <string name="ly_karaoke_ai_preparing">Preparando IA…</string>
-    <string name="ly_karaoke_ai_downloading">IA %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">Instantáneo</string>
-    <string name="ly_karaoke_ai_retry">Reintentar IA</string>
 </resources>

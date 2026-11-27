@@ -52,8 +52,6 @@ add_library(
     DirectOutputBridge.cpp
     DirectOutputStream.cpp
     DspProcessor.cpp
-    KaraokeStft.cpp
-    MdxStft.cpp
     ParametricEq.cpp
     ParametricEqBridge.cpp
     NativeBridge.cpp

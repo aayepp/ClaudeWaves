@@ -814,7 +814,7 @@
     <string name="set_sys_fx_off">Dolby/이퀄라이저 앱이 재생을 처리하도록 허용</string>
     <string name="set_clarity_row">%1$s • %2$s</string>
     <string name="set_usb_title">USB 전용 출력</string>
-    <string name="set_usb_old">Android 10 이상이 필요합니다.</string>
+    <string name="set_usb_old">Android 9 이상이 필요합니다.</string>
     <string name="set_usb_on">usbdevfs을 DAC에 직접 연결 • Bit-Perfect은 이를 자동으로 실행합니다.</string>
     <string name="set_usb_off">꺼짐 • USB DAC 및 Bit-Perfect(또는 이 토글)이 필요합니다.</string>
     <string name="set_yt_hist_on">켜기 • 무손실 및 다운로드를 포함하여 ClaudeWaves에서 듣는 노래가 YouTube Music 기록에 표시됩니다.</string>
@@ -858,7 +858,7 @@
     <string name="toast_yt_channels_fail">YouTube 채널을 로드할 수 없습니다. 다시 시도해 주세요.</string>
     <string name="toast_yt_switched">%1$s(으)로 전환됨 — 라이브러리 새로 고침…</string>
     <string name="toast_usb_on">USB 독점 사용 — DAC가 승인되면 Bit-Perfect은 usbdevfs을 사용합니다.</string>
-    <string name="toast_usb_old">USB 전용에는 Android 10 이상이 필요합니다.</string>
+    <string name="toast_usb_old">USB 전용에는 Android 9 이상이 필요합니다.</string>
     <string name="toast_backup_ok">백업이 성공적으로 저장되었습니다(%1$dKB).</string>
     <string name="toast_backup_fail">백업 실패: %1$s</string>
     <string name="toast_backup_empty">백업 생성 실패: 데이터가 비어 있음</string>
@@ -1094,10 +1094,6 @@
     <string name="toast_spotify_disconnected">Spotify 계정 연결이 해제되었습니다</string>
     <string name="settings_quality_follows_output">출력에 맞춘 음질</string>
     <string name="settings_quality_follows_output_sub">유선 IEM과 USB DAC에서는 Hi-Res와 Lossless, 스피커와 블루투스에서는 320 kbps</string>
-    <string name="ly_karaoke_mode">노래방 모드</string>
-    <string name="ly_karaoke_on">노래방 모드 켜기</string>
-    <string name="ly_karaoke_off">노래방 모드 끄기</string>
-    <string name="ly_karaoke_vocal_level">보컬 %1$d%%</string>
     <string name="settings_feedback_title">피드백 및 제안</string>
     <string name="settings_feedback_sub">버그를 신고하거나 개발자에게 새 기능을 제안하세요</string>
     <string name="feedback_sheet_title">피드백 및 제안</string>
@@ -1118,10 +1114,4 @@
     <string name="feedback_error_short">제목은 3자 이상, 내용은 5자 이상 입력하세요.</string>
     <string name="feedback_error_rate_limit">요청이 너무 많습니다. 잠시 후 다시 시도하세요.</string>
     <string name="feedback_error_failed">전송 실패. 인터넷 연결을 확인하세요.</string>
-    <string name="ly_karaoke_removal_level">보컬 제거 %1$d%%</string>
-    <string name="ly_karaoke_ai_active">AI 활성</string>
-    <string name="ly_karaoke_ai_preparing">AI 준비 중…</string>
-    <string name="ly_karaoke_ai_downloading">AI %1$d%%</string>
-    <string name="ly_karaoke_stft_instant">즉시</string>
-    <string name="ly_karaoke_ai_retry">AI 재시도</string>
 </resources>

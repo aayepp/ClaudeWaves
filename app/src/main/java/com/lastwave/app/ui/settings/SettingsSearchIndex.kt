@@ -364,7 +364,7 @@ object SettingsSearchIndex {
                 SettingsEntry(
                     id = "audio.usb_exclusive",
                     title = "USB Exclusive Output",
-                    subtitle = "Direct usbdevfs communication with external USB DACs (Android 10+)",
+                    subtitle = "Direct usbdevfs communication with external USB DACs (Android 9+)",
                     keywords = listOf(
                         "usb", "dac", "exclusive", "usb exclusive", "usbdevfs", "external dac",
                         "hardware volume", "headphone amp", "dongle dac"

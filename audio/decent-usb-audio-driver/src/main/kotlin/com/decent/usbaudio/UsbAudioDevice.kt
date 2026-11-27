@@ -152,10 +152,11 @@ class UsbAudioDevice private constructor(private val context: Context) {
 
         val intent = Intent(context.packageName + ACTION_USB_PERMISSION_SUFFIX)
         intent.setPackage(context.packageName)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         val permissionIntent = PendingIntent.getBroadcast(
                 context, 0,
                 intent,
-                PendingIntent.FLAG_MUTABLE
+                flags
         )
 
         val receiver = object : BroadcastReceiver() {

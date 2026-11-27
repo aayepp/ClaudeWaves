@@ -1197,7 +1197,7 @@ fun SettingsScreen(
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 title = stringResource(R.string.set_usb_title),
-                                subtitle = if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+                                subtitle = if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.P) {
                                     stringResource(R.string.set_usb_old)
                                 } else if (usbExclusiveEnabled || misc.isBitPerfectEnabled) {
                                     stringResource(R.string.set_usb_on)

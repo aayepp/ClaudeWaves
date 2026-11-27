@@ -82,18 +82,11 @@ std::vector<DspProcessor*>& clarityRegistry() {
     return instances;
 }
 
-std::atomic<bool> gKaraokeEnabled{false};
-std::atomic<float> gKaraokeVocalLevel{0.0F};
-
 }  // namespace
 
 DspProcessor::DspProcessor() noexcept {
     for (auto& gain : targetEqGainsDb_) gain.store(0.0F, std::memory_order_relaxed);
     for (auto& trim : targetClarityTrimsDb_) trim.store(0.0F, std::memory_order_relaxed);
-    targetKaraokeEnabled_.store(
-        gKaraokeEnabled.load(std::memory_order_acquire), std::memory_order_relaxed);
-    targetKaraokeVocalLevel_.store(
-        gKaraokeVocalLevel.load(std::memory_order_acquire), std::memory_order_relaxed);
     std::lock_guard<std::mutex> registryLock(clarityRegistryMutex());
     clarityRegistry().push_back(this);
 }
@@ -148,8 +141,6 @@ void DspProcessor::configure(double sampleRate) noexcept {
     monoBassFilter_ = Biquad::highPass(sampleRate_, 130.0, 0.7071067811865476);
     // 8. Harmonic air exciter: 6000 Hz highpass to isolate highs for tape-style harmonic sheen
     airExciterFilter_ = Biquad::highPass(sampleRate_, 6000.0, 0.7071067811865476);
-    // 9. Karaoke Mode phase-aware STFT vocal reducer
-    karaokeStft_.configure(sampleRate_);
     crossfeed_.configure(sampleRate_, 700.0, 4.5);
     rampPerFrame_ = static_cast<float>(1.0 / (sampleRate_ * 0.050));
     equalizerGainSmoothing_ = static_cast<float>(1.0 - std::exp(
@@ -204,10 +195,6 @@ void DspProcessor::configure(double sampleRate) noexcept {
     appliedEqualizerRevision_ = targetEqualizerRevision_.load(std::memory_order_acquire);
     limiterGain_ = 1.0F;
     clarityChainActive_ = currentWet_ > 0.0F;
-    currentKaraokeWet_ = targetKaraokeEnabled_.load(std::memory_order_acquire) ? 1.0F : 0.0F;
-    currentKaraokeVocalLevel_ = std::clamp(
-        targetKaraokeVocalLevel_.load(std::memory_order_acquire), 0.0F, 1.0F);
-    karaokeChainActive_ = currentKaraokeWet_ > 0.0F;
     parametricEq_.configure(sampleRate_, 2);
     reset();
 }
@@ -221,7 +208,6 @@ void DspProcessor::reset() noexcept {
     airDetail_.clear();
     monoBassFilter_.clear();
     airExciterFilter_.clear();
-    karaokeStft_.reset();
     crossfeed_.clear();
     for (auto& band : equalizerBands_) band.clear();
     parametricEq_.reset();
@@ -241,14 +227,6 @@ void DspProcessor::setBitPerfect(bool enabled) noexcept {
 
 void DspProcessor::setPeakProtectionEnabled(bool enabled) noexcept {
     peakProtectionEnabled_.store(enabled, std::memory_order_release);
-}
-
-void DspProcessor::setKaraoke(bool enabled, float vocalLevel) noexcept {
-    const float safeLevel = std::isfinite(vocalLevel)
-        ? std::clamp(vocalLevel, 0.0F, 1.0F)
-        : 0.0F;
-    targetKaraokeVocalLevel_.store(safeLevel, std::memory_order_release);
-    targetKaraokeEnabled_.store(enabled, std::memory_order_release);
 }
 
 void DspProcessor::setEqualizer(
@@ -335,19 +313,6 @@ void DspProcessor::broadcastClarityAtmosBypass(bool bypass) {
     }
 }
 
-void DspProcessor::broadcastKaraoke(bool enabled, float vocalLevel) {
-    const float safeLevel = std::isfinite(vocalLevel)
-        ? std::clamp(vocalLevel, 0.0F, 1.0F)
-        : 0.0F;
-    gKaraokeVocalLevel.store(safeLevel, std::memory_order_release);
-    gKaraokeEnabled.store(enabled, std::memory_order_release);
-    std::lock_guard<std::mutex> registryLock(clarityRegistryMutex());
-    for (auto* instance : clarityRegistry()) {
-        if (instance != nullptr) instance->setKaraoke(enabled, safeLevel);
-    }
-}
-
-
 void DspProcessor::applyClarityTrim(std::size_t stage, float trimDb) noexcept {
     const double trim = static_cast<double>(trimDb);
     switch (stage) {
@@ -416,11 +381,6 @@ void DspProcessor::process(
         equalizerHeadroomCountdown_ = 0;
     }
     if (target > 0.0F) clarityChainActive_ = true;
-    const float karaokeTarget = (channelCount == 2 &&
-        targetKaraokeEnabled_.load(std::memory_order_acquire))
-        ? 1.0F
-        : 0.0F;
-    if (karaokeTarget > 0.0F) karaokeChainActive_ = true;
 
     bool targetEqualizerHasGain = false;
     if (targetEqualizerEnabled_.load(std::memory_order_acquire)) {
@@ -432,9 +392,8 @@ void DspProcessor::process(
             }
         }
     }
-    const bool enhancementTargeted = target > 0.0F || karaokeTarget > 0.0F || targetEqualizerHasGain;
+    const bool enhancementTargeted = target > 0.0F || targetEqualizerHasGain;
     const bool enhancementStateActive = currentWet_ > 0.0F ||
-        currentKaraokeWet_ > 0.0F ||
         activeEqualizerBands_ != 0U ||
         std::abs(currentPreampGain_ - 1.0F) >= 0.00001F ||
         std::abs(limiterGain_ - 1.0F) >= 0.00001F;
@@ -445,7 +404,6 @@ void DspProcessor::process(
         (enhancementTargeted || enhancementStateActive);
     const bool controlsBypassed = !enhancementTargeted && !protectionRequired;
     const bool stateBypassed = currentWet_ == 0.0F &&
-        currentKaraokeWet_ == 0.0F &&
         activeEqualizerBands_ == 0U &&
         std::abs(currentPreampGain_ - 1.0F) < 0.00001F &&
         std::abs(limiterGain_ - 1.0F) < 0.00001F;
@@ -470,19 +428,6 @@ void DspProcessor::process(
             currentClarityWet_ = std::min(targetClarityMix, currentClarityWet_ + rampPerFrame_);
         } else if (currentClarityWet_ > targetClarityMix) {
             currentClarityWet_ = std::max(targetClarityMix, currentClarityWet_ - rampPerFrame_);
-        }
-        if (currentKaraokeWet_ < karaokeTarget) {
-            currentKaraokeWet_ = std::min(karaokeTarget, currentKaraokeWet_ + rampPerFrame_);
-        } else if (currentKaraokeWet_ > karaokeTarget) {
-            currentKaraokeWet_ = std::max(karaokeTarget, currentKaraokeWet_ - rampPerFrame_);
-        }
-        const float targetVocalLvl = std::clamp(
-            targetKaraokeVocalLevel_.load(std::memory_order_acquire), 0.0F, 1.0F);
-        const float vocalRampStep = rampPerFrame_ * 2.0F;
-        if (currentKaraokeVocalLevel_ < targetVocalLvl) {
-            currentKaraokeVocalLevel_ = std::min(targetVocalLvl, currentKaraokeVocalLevel_ + vocalRampStep);
-        } else if (currentKaraokeVocalLevel_ > targetVocalLvl) {
-            currentKaraokeVocalLevel_ = std::max(targetVocalLvl, currentKaraokeVocalLevel_ - vocalRampStep);
         }
 
         if (equalizerUpdateCountdown_-- <= 0) {
@@ -725,24 +670,6 @@ void DspProcessor::process(
     for (Biquad* filter : {&subBassHighPass_, &bassFoundation_, &lowMidSeparation_, &boxinessControl_,
              &presenceDetail_, &airDetail_, &monoBassFilter_, &airExciterFilter_}) {
         filter->settle();
-    }
-    if (karaokeChainActive_ && channelCount == 2) {
-        karaokeStft_.process(
-            samples,
-            frameCount,
-            currentKaraokeVocalLevel_,
-            currentKaraokeWet_);
-        const std::size_t sampleCount = static_cast<std::size_t>(frameCount) * 2U;
-        for (std::size_t i = 0U; i < sampleCount; ++i) {
-            const float v = samples[i];
-            samples[i] = std::isfinite(v)
-                ? std::clamp(v, -kOutputCeiling, kOutputCeiling)
-                : 0.0F;
-        }
-    }
-    if (karaokeTarget == 0.0F && currentKaraokeWet_ == 0.0F && karaokeChainActive_) {
-        karaokeStft_.reset();
-        karaokeChainActive_ = false;
     }
     if (target == 0.0F && currentWet_ == 0.0F && clarityChainActive_) {
         // Once bypass has fully crossfaded, stop burning CPU on a result that

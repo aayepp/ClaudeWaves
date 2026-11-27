@@ -189,7 +189,7 @@ internal fun MusicPlayer.applyDacRoutingFor(resolved: ResolvedStream) {
 
 internal fun MusicPlayer.exclusiveUsbWanted(streamCodec: String? = null): Boolean {
         if (isCasting) return false
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return false
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.P) return false
         if (!bitPerfectEnabled || !usbExclusivePrefEnabled || usbDacReleasedOnTaskRemoval) return false
         // E-AC-3 JOC / 360 RA is multichannel. Exclusive USB is stereo PCM
         // only — keep Android's decoder+mixer so Atmos actually plays.
@@ -339,14 +339,14 @@ internal fun MusicPlayer.applyDacRoutingFor(sourceRateHz: Int?, streamCodec: Str
         val isSpatial = isSpatialAudioCodec(streamCodec) || isSpatialAudioCodec(_state.value.audioCodec)
         val effectiveRateHz = if (isSpatial) 48000 else sourceRateHz
         val dac = usbDacMonitor.state.value.dac
-        val exclusiveWanted = !isSpatial && !karaokeEnabled && exclusiveUsbWanted(streamCodec)
+        val exclusiveWanted = !isSpatial && exclusiveUsbWanted(streamCodec)
         exclusiveUsbOutput.setWanted(exclusiveWanted)
-        val internalWanted = !isSpatial && !karaokeEnabled && internalDirectWanted()
+        val internalWanted = !isSpatial && internalDirectWanted()
         internalDirectOutput.setWanted(internalWanted)
         // Both decks share the endpoint; only the playing one may hold it.
         val liveSink = activePlayer?.let { playerToSink[it] }
         audioSinks.forEach { sink ->
-            sink.setBitPerfectRequested(!isSpatial && !karaokeEnabled && bitPerfectEnabled)
+            sink.setBitPerfectRequested(!isSpatial && bitPerfectEnabled)
             sink.syncExclusiveUsb(exclusiveWanted)
             sink.syncInternalDirect(internalWanted && sink === liveSink)
         }
