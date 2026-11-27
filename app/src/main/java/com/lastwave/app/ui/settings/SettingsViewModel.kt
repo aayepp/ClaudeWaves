@@ -111,6 +111,7 @@ class SettingsViewModel @Inject constructor(
     val innerTube: com.lastwave.app.data.music.InnerTubeMusicApi,
     val appUpdateManager: com.lastwave.app.data.update.AppUpdateManager,
     val appChangelogManager: com.lastwave.app.data.update.AppChangelogManager,
+    private val broadcastManager: com.lastwave.app.data.update.BroadcastManager,
     private val spotifyPreferences: com.lastwave.app.data.spotify.SpotifyPreferences,
     private val autoMixPreferences: com.lastwave.app.playback.automix.api.AutoMixPreferences,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
@@ -1370,6 +1371,8 @@ class SettingsViewModel @Inject constructor(
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
     }
+
+    fun isDeveloperAccessPermanentlyLocked(): Boolean = broadcastManager.isDevAccessPermanentlyLocked()
 
     fun clearSearch() {
         _searchQuery.value = ""

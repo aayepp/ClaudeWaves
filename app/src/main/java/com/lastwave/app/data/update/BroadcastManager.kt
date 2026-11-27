@@ -63,6 +63,16 @@ data class BroadcastUiState(
     val showDialog: Boolean = false,
 )
 
+sealed interface DevLockState {
+    data class Open(
+        val remainingAttempts: Int,
+        val isFinalChanceAfterCooldown: Boolean,
+    ) : DevLockState
+
+    data class Cooldown24h(val unlockAtWallMs: Long) : DevLockState
+    data object PermanentlyLocked : DevLockState
+}
+
 /**
  * Polls owner-authored GitHub issues labeled `broadcast` and manages
  * optional local-PAT admin actions (never ships any token in APK).
@@ -138,6 +148,73 @@ class BroadcastManager @Inject constructor(
 
     fun savedOwnerLogin(): String? = prefs.getString(KEY_OWNER_LOGIN, null)
 
+    fun getDevLockState(nowMs: Long = System.currentTimeMillis()): DevLockState {
+        if (hasOwnerToken()) {
+            return DevLockState.Open(
+                remainingAttempts = MAX_INITIAL_ATTEMPTS,
+                isFinalChanceAfterCooldown = false,
+            )
+        }
+        val stage = prefs.getInt(KEY_DEV_LOCK_STAGE, 0)
+        if (stage >= 2) return DevLockState.PermanentlyLocked
+        if (stage == 1) {
+            val untilMs = prefs.getLong(KEY_DEV_LOCK_UNTIL_MS, 0L)
+            return if (nowMs < untilMs) {
+                DevLockState.Cooldown24h(untilMs)
+            } else {
+                DevLockState.Open(
+                    remainingAttempts = 1,
+                    isFinalChanceAfterCooldown = true,
+                )
+            }
+        }
+        val failed = prefs.getInt(KEY_DEV_FAILED_ATTEMPTS, 0)
+        val remaining = (MAX_INITIAL_ATTEMPTS - failed).coerceIn(1, MAX_INITIAL_ATTEMPTS)
+        return DevLockState.Open(
+            remainingAttempts = remaining,
+            isFinalChanceAfterCooldown = false,
+        )
+    }
+
+    fun isDevAccessPermanentlyLocked(): Boolean =
+        !hasOwnerToken() && prefs.getInt(KEY_DEV_LOCK_STAGE, 0) >= 2
+
+    private fun recordFailedDevLoginAttempt(nowMs: Long = System.currentTimeMillis()): String {
+        val stage = prefs.getInt(KEY_DEV_LOCK_STAGE, 0)
+        return if (stage >= 1) {
+            prefs.edit()
+                .putInt(KEY_DEV_LOCK_STAGE, 2)
+                .putInt(KEY_DEV_FAILED_ATTEMPTS, 0)
+                .putLong(KEY_DEV_LOCK_UNTIL_MS, 0L)
+                .apply()
+            "Percubaan gagal selepas tempoh kunci. Akses developer dikunci secara kekal."
+        } else {
+            val newFailed = prefs.getInt(KEY_DEV_FAILED_ATTEMPTS, 0) + 1
+            if (newFailed >= MAX_INITIAL_ATTEMPTS) {
+                prefs.edit()
+                    .putInt(KEY_DEV_LOCK_STAGE, 1)
+                    .putInt(KEY_DEV_FAILED_ATTEMPTS, 0)
+                    .putLong(KEY_DEV_LOCK_UNTIL_MS, nowMs + COOLDOWN_DURATION_MS)
+                    .apply()
+                "3 percubaan gagal. Halaman login dikunci selama 24 jam."
+            } else {
+                prefs.edit()
+                    .putInt(KEY_DEV_FAILED_ATTEMPTS, newFailed)
+                    .apply()
+                val left = MAX_INITIAL_ATTEMPTS - newFailed
+                "Token tidak sah (baki $left percubaan)"
+            }
+        }
+    }
+
+    private fun resetDevLockout() {
+        prefs.edit()
+            .remove(KEY_DEV_LOCK_STAGE)
+            .remove(KEY_DEV_FAILED_ATTEMPTS)
+            .remove(KEY_DEV_LOCK_UNTIL_MS)
+            .apply()
+    }
+
     fun clearOwnerToken() {
         prefs.edit()
             .remove(KEY_OWNER_TOKEN)
@@ -174,7 +251,7 @@ class BroadcastManager @Inject constructor(
         return ENC_PREFIX + Base64.encodeToString(combined, Base64.NO_WRAP)
     }
 
-    private fun readOwnerToken(): String? {
+    internal fun readOwnerToken(): String? {
         val stored = prefs.getString(KEY_OWNER_TOKEN, null)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         if (!stored.startsWith(ENC_PREFIX)) {
             runCatching { encryptToken(stored) }.getOrNull()?.let { encrypted ->
@@ -194,6 +271,13 @@ class BroadcastManager @Inject constructor(
     }
 
     suspend fun saveAndVerifyOwnerToken(rawToken: String): Result<String> = withContext(Dispatchers.IO) {
+        when (getDevLockState()) {
+            DevLockState.PermanentlyLocked ->
+                return@withContext Result.failure(IllegalStateException("Akses developer dikunci secara kekal"))
+            is DevLockState.Cooldown24h ->
+                return@withContext Result.failure(IllegalStateException("Halaman login dikunci selama 24 jam"))
+            is DevLockState.Open -> Unit
+        }
         val token = rawToken.trim()
         if (token.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Token kosong"))
         try {
@@ -205,17 +289,23 @@ class BroadcastManager @Inject constructor(
             okHttpClient.newCall(request).execute().use { response ->
                 val bodyStr = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
+                    if (response.code == 401 || response.code == 403 || response.code == 404) {
+                        val lockMsg = recordFailedDevLoginAttempt()
+                        return@withContext Result.failure(IllegalStateException(lockMsg))
+                    }
                     return@withContext Result.failure(IllegalStateException(extractGithubError(response.code, bodyStr)))
                 }
                 val login = JSONObject(bodyStr).optString("login").trim()
                 if (!login.equals(OWNER_LOGIN, ignoreCase = true)) {
-                    return@withContext Result.failure(IllegalStateException("Token bukan milik akaun $OWNER_LOGIN"))
+                    val lockMsg = recordFailedDevLoginAttempt()
+                    return@withContext Result.failure(IllegalStateException("Akaun bukan $OWNER_LOGIN. $lockMsg"))
                 }
                 val encryptedToken = encryptToken(token)
                 prefs.edit()
                     .putString(KEY_OWNER_TOKEN, encryptedToken)
                     .putString(KEY_OWNER_LOGIN, login)
                     .apply()
+                resetDevLockout()
                 Result.success(login)
             }
         } catch (e: Exception) {
@@ -494,6 +584,11 @@ class BroadcastManager @Inject constructor(
         private const val KEY_CACHED_JSON = "cached_json"
         private const val KEY_OWNER_TOKEN = "owner_token"
         private const val KEY_OWNER_LOGIN = "owner_login"
+        private const val KEY_DEV_LOCK_STAGE = "dev_lock_stage"
+        private const val KEY_DEV_FAILED_ATTEMPTS = "dev_failed_attempts"
+        private const val KEY_DEV_LOCK_UNTIL_MS = "dev_lock_until_ms"
+        private const val MAX_INITIAL_ATTEMPTS = 3
+        private const val COOLDOWN_DURATION_MS = 24L * 60L * 60L * 1000L
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val KEYSTORE_ALIAS = "claudewaves_broadcast_pat_v1"
         private const val AES_GCM_TRANSFORMATION = "AES/GCM/NoPadding"

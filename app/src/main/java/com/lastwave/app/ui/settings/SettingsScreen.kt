@@ -384,6 +384,7 @@ fun SettingsScreen(
     onOpenSpotifyLogin: () -> Unit = {},
     onOpenSpotifyTokenImport: () -> Unit = {},
     onOpenDiscordSettings: () -> Unit = {},
+    onOpenDeveloperConsole: () -> Unit = {},
     onRepeatTutorial: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     jamViewModel: LastWaveJamViewModel = hiltViewModel(),
@@ -2457,16 +2458,15 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                     }
 
-                    var showBroadcastAdmin by remember { mutableStateOf(false) }
-                    if (showBroadcastAdmin) {
-                        BroadcastAdminSheet(onDismiss = { showBroadcastAdmin = false })
-                    }
-
                     AboutCard(
                         versionName = appVersionName(context),
                         appIcon = theme?.appIcon ?: AppIcon.DEFAULT,
                         onOpenChangelog = viewModel::openChangelog,
-                        onSecretAdminTrigger = { showBroadcastAdmin = true },
+                        onSecretAdminTrigger = {
+                            if (!viewModel.isDeveloperAccessPermanentlyLocked()) {
+                                onOpenDeveloperConsole()
+                            }
+                        },
                     )
 
                     var showGesturesSheet by remember { mutableStateOf(false) }

@@ -37,6 +37,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
     interface Deps {
         fun appUpdateManager(): AppUpdateManager
         fun broadcastManager(): BroadcastManager
+        fun appStatsManager(): AppStatsManager
     }
 
     override suspend fun doWork(): Result {
@@ -65,6 +66,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
             notifyBroadcast(announcement)
             broadcasts.showDialog()
         }
+        runCatching { deps.appStatsManager().sendHeartbeatIfDue() }
         return Result.success()
     }
 

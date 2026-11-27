@@ -48,6 +48,7 @@ class LastWaveApplication : Application(), ImageLoaderFactory {
     @Inject lateinit var discordPresenceManager: dagger.Lazy<com.lastwave.app.presence.DiscordPresenceManager>
     @Inject lateinit var appLocaleManager: dagger.Lazy<com.lastwave.app.util.AppLocaleManager>
     @Inject lateinit var addonHealthMonitor: dagger.Lazy<com.lastwave.app.data.addon.AddonHealthMonitor>
+    @Inject lateinit var appStatsManager: dagger.Lazy<com.lastwave.app.data.update.AppStatsManager>
     @Inject lateinit var settingsPreferences: SettingsPreferences
 
     @Volatile private var isHelperProcess = false
@@ -197,6 +198,7 @@ class LastWaveApplication : Application(), ImageLoaderFactory {
         applicationScope.launch(Dispatchers.IO) {
             delay(OPTIONAL_STARTUP_DELAY_MS)
             runCatching { addonHealthMonitor.get().checkAll() }
+            runCatching { appStatsManager.get().sendHeartbeatIfDue() }
         }
         StartupTrail.mark("app.onCreate.end")
     }

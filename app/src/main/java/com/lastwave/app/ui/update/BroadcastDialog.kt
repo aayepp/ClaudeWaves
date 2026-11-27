@@ -103,7 +103,7 @@ fun BroadcastDialogHost(
 }
 
 @Composable
-private fun BroadcastDialog(
+internal fun BroadcastDialog(
     message: BroadcastMessage,
     onDismiss: () -> Unit,
 ) {

@@ -2,5 +2,6 @@
 <full-backup-content>
     <exclude domain="sharedpref" path="downloads_restore_prefs.xml" />
     <exclude domain="sharedpref" path="lastwave_broadcast.xml" />
+    <exclude domain="sharedpref" path="lastwave_stats_prefs.xml" />
     <exclude domain="file" path="datastore/lastwave_prefs.preferences_pb" />
 </full-backup-content>
