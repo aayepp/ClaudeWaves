@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.51] - 2026-11-27
+
+### Added
+- **Hybrid AI ONNX + Instant C++ STFT Karaoke:** replaced legacy Mid-Side biquads with a 2048-point phase-aware C++ STFT vocal canceller for instant separation, paired with automatic background on-device UVR-MDX-NET AI stem separation (`onnxruntime-android` + 5120-pt mixed-radix native STFT/iSTFT) and a live status pill (`Segera` / `Menyediakan AI` / `AI Aktif` / `Muat Turun`).
+- **Persistent Developer Console card:** after signing in to Developer Console once, the shortcut card stays pinned on the Settings dashboard (still protected by device biometric/PIN), with a one-tap `Sembunyi` button inside the console.
+
+### Changed
+- **1-tap Karaoke UX:** enabling Karaoke Mode now defaults directly to **100% vocal removal** (`Buang Vokal 100%`), with direction intuitively reversed so sliding right increases vocal removal (`0%` = original voice, `100%` = instrumental only).
+
+### Fixed
+- **Karaoke slider having no effect & 4.6s AudioTrack latency:** broadcast Karaoke state across all `DspProcessor` decks (including AutoMix/Crossfade secondary decks), bypassed `systemFlattened` drops and active Bit-Perfect/Direct sink routes mid-track so PCM always enters the native vocal separator, and pinned default `OutputBufferSizing.speedHeadroom = 1.0` so slider adjustments respond immediately instead of lagging behind a 4.6s mixer buffer.
+
 ## [1.0.50] - 2026-11-27
 
 ### Added
