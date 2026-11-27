@@ -34,6 +34,12 @@ import java.util.concurrent.TimeUnit
 class Ipv4FirstDnsResolver(
     private val bootstrapClient: OkHttpClient? = null,
     private val context: Context? = null,
+    /**
+     * DNS filters (Private DNS ad blockers, security managers) block a domain by answering
+     * 127.0.0.1 or 0.0.0.0, which is a successful lookup, so the DoH fallback never ran and
+     * the connection went to the phone itself. When set, those answers count as failures.
+     */
+    private val rejectSinkholes: Boolean = false,
 ) : Dns {
 
     private val dohClient: OkHttpClient by lazy {
@@ -68,7 +74,7 @@ class Ipv4FirstDnsResolver(
 
     private fun resolveUncached(hostname: String, vpnActive: Boolean): List<InetAddress> {
         try {
-            val systemAddresses = Dns.SYSTEM.lookup(hostname)
+            val systemAddresses = Dns.SYSTEM.lookup(hostname).filterNot(::isSinkhole)
             if (systemAddresses.isNotEmpty()) {
                 // If on VPN, preserve system DNS order directly to honor the VPN's internal routing
                 return if (vpnActive) systemAddresses else sortIpv4First(systemAddresses)
@@ -77,13 +83,16 @@ class Ipv4FirstDnsResolver(
             Log.w(TAG, "System DNS lookup failed for $hostname (${e.message}), falling back to DoH")
         }
 
-        val dohResults = resolveDoh(hostname, wantIpv6First = vpnActive)
+        val dohResults = resolveDoh(hostname, wantIpv6First = vpnActive).filterNot(::isSinkhole)
         if (dohResults.isNotEmpty()) {
             return if (vpnActive) dohResults else sortIpv4First(dohResults)
         }
 
         throw UnknownHostException("Unable to resolve host '$hostname' via system DNS or DoH fallback")
     }
+
+    private fun isSinkhole(address: InetAddress): Boolean =
+        rejectSinkholes && (address.isLoopbackAddress || address.isAnyLocalAddress)
 
     private fun isVpnActiveCached(): Boolean {
         val now = android.os.SystemClock.elapsedRealtime()

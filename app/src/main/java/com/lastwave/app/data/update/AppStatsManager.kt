@@ -121,6 +121,13 @@ class AppStatsManager @Inject constructor(
             .build()
     }
 
+    /** Developer dashboard calls: a blocked worker domain must fall back to DoH, not 127.0.0.1. */
+    private val developerClient: OkHttpClient by lazy {
+        pingClient.newBuilder()
+            .dns(com.lastwave.app.data.network.Ipv4FirstDnsResolver(context = context, rejectSinkholes = true))
+            .build()
+    }
+
     private fun getOrCreateInstallId(): String {
         val existing = prefs.getString(KEY_INSTALL_ID, null)?.trim()
         if (!existing.isNullOrBlank()) return existing
@@ -246,7 +253,7 @@ class AppStatsManager @Inject constructor(
             .get()
             .build()
         try {
-            pingClient.newCall(request).execute().use { response ->
+            developerClient.newCall(request).execute().use { response ->
                 val respBody = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     val msg = runCatching { JSONObject(respBody).optString("error") }.getOrNull().orEmpty()
@@ -310,7 +317,7 @@ class AppStatsManager @Inject constructor(
             .patch(payload.toRequestBody(JSON_MEDIA_TYPE))
             .build()
         try {
-            pingClient.newCall(request).execute().use { response ->
+            developerClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) Result.success(Unit)
                 else Result.failure(IllegalStateException("HTTP ${response.code}"))
             }
@@ -331,7 +338,7 @@ class AppStatsManager @Inject constructor(
             .delete()
             .build()
         try {
-            pingClient.newCall(request).execute().use { response ->
+            developerClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) Result.success(Unit)
                 else Result.failure(IllegalStateException("HTTP ${response.code}"))
             }
@@ -370,7 +377,7 @@ class AppStatsManager @Inject constructor(
             .get()
             .build()
         return try {
-            pingClient.newCall(request).execute().use { response ->
+            developerClient.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     val msg = runCatching { JSONObject(body).optString("error") }.getOrNull().orEmpty()
