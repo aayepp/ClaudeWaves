@@ -70,6 +70,39 @@ data class DeveloperStatsSnapshot(
     val fetchedAtMs: Long,
 )
 
+enum class FeedbackCategory(val wireKey: String) {
+    BUG("bug"),
+    SUGGESTION("suggestion"),
+    FEEDBACK("feedback");
+
+    companion object {
+        fun fromWire(raw: String?): FeedbackCategory =
+            entries.firstOrNull { it.wireKey.equals(raw?.trim(), ignoreCase = true) } ?: FEEDBACK
+    }
+}
+
+data class UserFeedbackItem(
+    val id: Long,
+    val category: FeedbackCategory,
+    val title: String,
+    val body: String,
+    val contact: String,
+    val appVersion: String,
+    val androidApi: Int,
+    val deviceModel: String,
+    val status: String,
+    val createdAtSec: Long,
+) {
+    val isResolved: Boolean get() = status == "resolved"
+}
+
+data class DeveloperFeedbackSnapshot(
+    val items: List<UserFeedbackItem>,
+    val unreadCount: Int,
+    val totalCount: Int,
+    val error: String?,
+)
+
 /**
  * Sends anonymous install heartbeats (random UUIDv4 + app version + Android API level;
  * zero PII) to the Cloudflare Worker backend and fetches live DAU/WAU/MAU plus
@@ -134,6 +167,177 @@ class AppStatsManager @Inject constructor(
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
             false
+        }
+    }
+
+    suspend fun submitFeedback(
+        category: FeedbackCategory,
+        title: String,
+        body: String,
+        contact: String,
+        includeDeviceInfo: Boolean,
+    ): Result<Long> = withContext(Dispatchers.IO) {
+        val cleanTitle = title.trim().take(120)
+        val cleanBody = body.trim().take(1500)
+        if (cleanTitle.length < 3 || cleanBody.length < 5) {
+            return@withContext Result.failure(IllegalArgumentException("FEEDBACK_SHORT"))
+        }
+        val pkgInfo = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
+        val versionName = if (includeDeviceInfo) {
+            pkgInfo?.versionName?.trim()?.takeIf { it.isNotBlank() } ?: "unknown"
+        } else ""
+        val apiLevel = if (includeDeviceInfo) Build.VERSION.SDK_INT else 0
+        val deviceModel = if (includeDeviceInfo) {
+            "${Build.MANUFACTURER.orEmpty()} ${Build.MODEL.orEmpty()}".trim().take(80)
+        } else ""
+
+        val payload = JSONObject().apply {
+            put("installId", getOrCreateInstallId())
+            put("category", category.wireKey)
+            put("title", cleanTitle)
+            put("body", cleanBody)
+            put("contact", contact.trim().take(80))
+            put("appVersion", versionName.take(32))
+            put("androidApi", apiLevel)
+            put("deviceModel", deviceModel)
+        }.toString()
+
+        val request = Request.Builder()
+            .url("$WORKER_BASE_URL/feedback")
+            .header("User-Agent", USER_AGENT)
+            .cacheControl(CacheControl.FORCE_NETWORK)
+            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+
+        try {
+            pingClient.newCall(request).execute().use { response ->
+                val respBody = response.body?.string().orEmpty()
+                if (response.code == 429) {
+                    return@withContext Result.failure(IllegalStateException("FEEDBACK_RATE_LIMIT"))
+                }
+                if (!response.isSuccessful) {
+                    val msg = runCatching { JSONObject(respBody).optString("error") }.getOrNull().orEmpty()
+                    return@withContext Result.failure(IllegalStateException(msg.ifBlank { "HTTP ${response.code}" }))
+                }
+                val rowId = runCatching { JSONObject(respBody).optLong("id", 0L) }.getOrDefault(0L)
+                Result.success(rowId)
+            }
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchDeveloperFeedback(): DeveloperFeedbackSnapshot = withContext(Dispatchers.IO) {
+        val token = broadcastManager.readOwnerToken()
+        if (token.isNullOrBlank()) {
+            return@withContext DeveloperFeedbackSnapshot(
+                items = emptyList(),
+                unreadCount = 0,
+                totalCount = 0,
+                error = "Masukkan GitHub PAT (ikon kunci) untuk buka Inbox",
+            )
+        }
+        val request = Request.Builder()
+            .url("$WORKER_BASE_URL/feedback")
+            .header("Authorization", "Bearer $token")
+            .header("User-Agent", USER_AGENT)
+            .cacheControl(CacheControl.FORCE_NETWORK)
+            .get()
+            .build()
+        try {
+            pingClient.newCall(request).execute().use { response ->
+                val respBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val msg = runCatching { JSONObject(respBody).optString("error") }.getOrNull().orEmpty()
+                    return@withContext DeveloperFeedbackSnapshot(
+                        items = emptyList(),
+                        unreadCount = 0,
+                        totalCount = 0,
+                        error = msg.ifBlank { "Worker HTTP ${response.code}" },
+                    )
+                }
+                val root = JSONObject(respBody)
+                val arr = root.optJSONArray("items") ?: JSONArray()
+                val items = buildList {
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        add(
+                            UserFeedbackItem(
+                                id = obj.optLong("id", 0L),
+                                category = FeedbackCategory.fromWire(obj.optString("category")),
+                                title = obj.optString("title", ""),
+                                body = obj.optString("body", ""),
+                                contact = obj.optString("contact", ""),
+                                appVersion = obj.optString("appVersion", ""),
+                                androidApi = obj.optInt("androidApi", 0),
+                                deviceModel = obj.optString("deviceModel", ""),
+                                status = obj.optString("status", "new"),
+                                createdAtSec = obj.optLong("createdAt", 0L),
+                            ),
+                        )
+                    }
+                }
+                DeveloperFeedbackSnapshot(
+                    items = items,
+                    unreadCount = root.optInt("unreadCount", items.count { !it.isResolved }),
+                    totalCount = root.optInt("totalCount", items.size),
+                    error = null,
+                )
+            }
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            DeveloperFeedbackSnapshot(
+                items = emptyList(),
+                unreadCount = 0,
+                totalCount = 0,
+                error = e.message ?: "Gagal sambung ke Cloudflare Worker",
+            )
+        }
+    }
+
+    suspend fun setFeedbackResolved(id: Long, resolved: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = broadcastManager.readOwnerToken()
+            ?: return@withContext Result.failure(IllegalStateException("Tiada token developer"))
+        val payload = JSONObject().apply {
+            put("status", if (resolved) "resolved" else "new")
+        }.toString()
+        val request = Request.Builder()
+            .url("$WORKER_BASE_URL/feedback/$id")
+            .header("Authorization", "Bearer $token")
+            .header("User-Agent", USER_AGENT)
+            .cacheControl(CacheControl.FORCE_NETWORK)
+            .patch(payload.toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+        try {
+            pingClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) Result.success(Unit)
+                else Result.failure(IllegalStateException("HTTP ${response.code}"))
+            }
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteFeedback(id: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = broadcastManager.readOwnerToken()
+            ?: return@withContext Result.failure(IllegalStateException("Tiada token developer"))
+        val request = Request.Builder()
+            .url("$WORKER_BASE_URL/feedback/$id")
+            .header("Authorization", "Bearer $token")
+            .header("User-Agent", USER_AGENT)
+            .cacheControl(CacheControl.FORCE_NETWORK)
+            .delete()
+            .build()
+        try {
+            pingClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) Result.success(Unit)
+                else Result.failure(IllegalStateException("HTTP ${response.code}"))
+            }
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(e)
         }
     }
 
@@ -311,7 +515,7 @@ class AppStatsManager @Inject constructor(
         }
     }
 
-    private fun androidApiLabel(api: Int?): String = when (api) {
+    internal fun androidApiLabel(api: Int?): String = when (api) {
         36 -> "Android 16"
         35 -> "Android 15"
         34 -> "Android 14"

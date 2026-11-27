@@ -225,6 +225,8 @@ data class MusicPlayerState(
     val qualitySwitch: QualitySwitch? = null,
     val appVolume: Float = 1f,
     val isCasting: Boolean = false,
+    val karaokeEnabled: Boolean = false,
+    val karaokeVocalLevel: Float = 0.15f,
 )
 
 
@@ -288,6 +290,8 @@ internal fun MusicPlayerState.withSubsystemStateFrom(live: MusicPlayerState): Mu
         isJamActive = live.isJamActive,
         appVolume = live.appVolume,
         isCasting = live.isCasting,
+        karaokeEnabled = live.karaokeEnabled,
+        karaokeVocalLevel = live.karaokeVocalLevel,
     )
 
 /** The small, frequently changing state consumed only by progress UI. */

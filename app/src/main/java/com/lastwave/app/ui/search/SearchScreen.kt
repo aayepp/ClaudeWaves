@@ -5,6 +5,7 @@ import com.lastwave.app.ui.comic.clipOnly
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.headerLiquidGlass
 import com.lastwave.app.ui.theme.comicIndicationOrNull
+import com.lastwave.app.ui.theme.sakugaTypingInput
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -606,13 +607,14 @@ fun SearchScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Spacer(Modifier.width(12.dp))
+                    val searchTextStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     BasicTextField(
                         value = state.query,
                         onValueChange = viewModel::setQuery,
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                        ),
+                        textStyle = searchTextStyle,
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(
@@ -631,7 +633,8 @@ fun SearchScreen(
                         ),
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp),
+                            .height(46.dp)
+                            .sakugaTypingInput(text = state.query, textStyle = searchTextStyle, leadingPadding = 16.dp),
                         decorationBox = { innerTextField ->
                             Row(
                                 modifier = Modifier

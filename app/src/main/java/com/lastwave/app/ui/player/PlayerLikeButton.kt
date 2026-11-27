@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,11 +30,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.lastwave.app.ui.common.ExpressiveMotion
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.lastwave.app.ui.theme.LiquidGlassPreset
 import com.lastwave.app.ui.theme.LiquidGlassSurface
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalLiquidGlass
 import com.lastwave.app.ui.theme.LocalLiquidGlassBackdrop
+import com.lastwave.app.ui.theme.LocalSakugaFx
+import com.lastwave.app.ui.theme.LocalSakugaTheme
 import com.lastwave.app.ui.theme.isLiquidGlassBackdropSupported
 import com.lastwave.app.ui.theme.liquidGlassChrome
 import com.lastwave.app.ui.theme.liquidGlassContainerColor
@@ -69,6 +75,9 @@ internal fun PlayerLikeButton(
     )
 
     val isComic = LocalComicTheme.current
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    var buttonBounds by remember { androidx.compose.runtime.mutableStateOf<Rect?>(null) }
     val isGlassActive = LocalLiquidGlass.current && isLiquidGlassBackdropSupported() && LocalLiquidGlassBackdrop.current != null
     val background by animateColorAsState(
         targetValue = when {
@@ -94,7 +103,12 @@ internal fun PlayerLikeButton(
             LiquidGlassPreset.PlayerControls,
             interactionSource = interaction,
         ),
-        onClick = onClick,
+        onClick = {
+            if (isSakuga && !liked) {
+                buttonBounds?.let { b -> sakugaFx?.emitLikeBurst(b.center) }
+            }
+            onClick()
+        },
         interactionSource = interaction,
         shape = CircleShape,
         color = liquidGlassContainerColor(background),
@@ -102,6 +116,7 @@ internal fun PlayerLikeButton(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         modifier = modifier
+            .onGloballyPositioned { if (it.isAttached) buttonBounds = it.boundsInRoot() }
             .likeSparkles(tapMotion, likedTint)
             .size(size)
             .waterDropJiggle(amplitude = 0.082f, tiltDegrees = 2.8f, dipDp = 3.dp)

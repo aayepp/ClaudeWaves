@@ -23,6 +23,7 @@ public:
     void setStudioMasterClarity(bool enabled) noexcept;
     void setBitPerfect(bool enabled) noexcept;
     void setPeakProtectionEnabled(bool enabled) noexcept;
+    void setKaraoke(bool enabled, float vocalLevel) noexcept;
     void setEqualizer(
         bool enabled,
         const float* gainsDb,
@@ -81,6 +82,7 @@ private:
         std::array<double, 2> z2{};
 
         static Biquad highPass(double sampleRate, double frequency, double q) noexcept;
+        static Biquad lowPass(double sampleRate, double frequency, double q) noexcept;
         static Biquad peaking(
             double sampleRate,
             double frequency,
@@ -218,6 +220,15 @@ private:
     Biquad airDetail_{};
     Biquad monoBassFilter_{};
     Biquad airExciterFilter_{};
+    std::atomic<bool> targetKaraokeEnabled_{false};
+    std::atomic<float> targetKaraokeVocalLevel_{0.15F};
+    float currentKaraokeWet_{0.0F};
+    float currentKaraokeVocalLevel_{0.15F};
+    bool karaokeChainActive_{false};
+    Biquad karaokeMidLowPass1_{};
+    Biquad karaokeMidLowPass2_{};
+    Biquad karaokeMidHighPass1_{};
+    Biquad karaokeMidHighPass2_{};
     Crossfeed crossfeed_{};
     // AutoEQ / manual parametric EQ. Runs first in the chain and, unlike
     // the rest of the DSP, also while Bit-Perfect is on: the user asked for

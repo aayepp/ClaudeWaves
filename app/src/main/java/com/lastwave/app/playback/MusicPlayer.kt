@@ -573,6 +573,8 @@ class MusicPlayer @Inject constructor(
     /** Local in-app playback volume (persisted). Never holds the cast level. */
     var appVolume: Float = 1f
         private set
+    private var karaokeEnabled = false
+    private var karaokeVocalLevel = 0.15f
     /** Last volume of the cast receiver; only meaningful while casting. */
     internal var castVolume: Float = 1f
     private var appVolumePersistJob: Job? = null
@@ -3645,6 +3647,24 @@ class MusicPlayer @Inject constructor(
             delay(APP_VOLUME_PERSIST_DEBOUNCE_MS)
             settingsPreferences.setAppVolume(clamped)
         }
+    }
+
+    fun setKaraokeEnabled(enabled: Boolean) = onMain {
+        karaokeEnabled = enabled
+        _state.update { it.copy(karaokeEnabled = enabled, karaokeVocalLevel = karaokeVocalLevel) }
+        runCatching { nativeAudioEngine.get().setKaraoke(enabled, karaokeVocalLevel) }
+        if (enabled && bitPerfectEnabled) {
+            runCatching { nativeAudioEngine.get().setBitPerfect(false) }
+        } else if (!enabled && bitPerfectEnabled) {
+            runCatching { nativeAudioEngine.get().setBitPerfect(true) }
+        }
+    }
+
+    fun setKaraokeVocalLevel(level: Float) = onMain {
+        val clamped = if (level.isFinite()) level.coerceIn(0f, 1f) else 0.15f
+        karaokeVocalLevel = clamped
+        _state.update { it.copy(karaokeVocalLevel = clamped) }
+        runCatching { nativeAudioEngine.get().setKaraoke(karaokeEnabled, clamped) }
     }
 
     fun togglePlayPause() = onMain {

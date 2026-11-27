@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MusicOff
@@ -476,6 +477,72 @@ internal fun ModernLyricsControls(
             }
         }
 
+        AnimatedVisibility(
+            visible = state.karaokeEnabled && controlsVisible,
+            enter = fadeIn(tween(150)) + expandVertically(tween(200)),
+            exit = fadeOut(tween(150)) + shrinkVertically(tween(200)),
+        ) {
+            var localVocal by remember(state.karaokeVocalLevel) { mutableFloatStateOf(state.karaokeVocalLevel) }
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = liquidGlassContainerColor(PlayerPalette.shade.copy(alpha = 0.42f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.ly_karaoke_mode),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PlayerPalette.ink.copy(alpha = 0.92f),
+                        )
+                        Text(
+                            text = stringResource(R.string.ly_karaoke_vocal_level, (localVocal * 100f).roundToInt()),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = PlayerPalette.ink.copy(alpha = 0.92f),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = PlayerPalette.ink.copy(alpha = 0.78f),
+                        )
+                        Slider(
+                            value = localVocal,
+                            onValueChange = {
+                                localVocal = it
+                                player.setKaraokeVocalLevel(it)
+                            },
+                            valueRange = 0f..1f,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = PlayerPalette.ink.copy(alpha = 0.92f),
+                        )
+                    }
+                }
+            }
+        }
+
         var showLyricsOptions by remember { mutableStateOf(false) }
         val isShortViewport = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 560
         val utilBtnSize = if (isShortViewport) 36.dp else 44.dp
@@ -490,6 +557,51 @@ internal fun ModernLyricsControls(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val karaokeInteraction = remember { MutableInteractionSource() }
+            val isKaraokePressed by karaokeInteraction.collectIsPressedAsState()
+            val karaokeScale by animateFloatAsState(
+                targetValue = if (isKaraokePressed) 0.82f else 1.0f,
+                animationSpec = ExpressiveMotion.spatialSpring(),
+                label = "karaokeBtnScale",
+            )
+            IconButton(
+                onClick = hapticClick(
+                    if (state.karaokeEnabled) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn,
+                ) { player.setKaraokeEnabled(!state.karaokeEnabled) },
+                enabled = controlsVisible,
+                interactionSource = karaokeInteraction,
+                modifier = Modifier
+                    .size(utilBtnSize)
+                    .graphicsLayer {
+                        scaleX = karaokeScale
+                        scaleY = karaokeScale
+                    }
+                    .clip(CircleShape)
+                    .liquidGlassChrome(CircleShape, LocalLiquidGlass.current, LiquidGlassPreset.FloatingControls, interactionSource = karaokeInteraction)
+                    .background(
+                        if (state.karaokeEnabled) {
+                            primaryColor.copy(alpha = 0.88f)
+                        } else {
+                            liquidGlassContainerColor(PlayerPalette.ink.copy(alpha = 0.14f))
+                        },
+                    ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Mic,
+                    contentDescription = stringResource(
+                        if (state.karaokeEnabled) R.string.ly_karaoke_off else R.string.ly_karaoke_on,
+                    ),
+                    modifier = Modifier.size(if (isShortViewport) 20.dp else 22.dp),
+                    tint = if (state.karaokeEnabled) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        PlayerPalette.ink.copy(alpha = 0.90f)
+                    },
+                )
+            }
+
+            Spacer(Modifier.width(if (isShortViewport) 8.dp else 10.dp))
+
             if (onToggleFullscreen != null) {
                 val playerInteraction = remember { MutableInteractionSource() }
                 val isPlayerPressed by playerInteraction.collectIsPressedAsState()
@@ -571,6 +683,8 @@ internal fun ModernLyricsControls(
                 translationAvailable = translationAvailable,
                 onToggleTranslation = onToggleTranslation,
                 onToggleRomanization = onToggleRomanization,
+                karaokeEnabled = state.karaokeEnabled,
+                onToggleKaraoke = { player.setKaraokeEnabled(!state.karaokeEnabled) },
                 lyricsOffsetMs = lyricsOffsetMs,
                 onOpenLyricsOffset = onOpenLyricsOffset,
             )
@@ -750,9 +864,15 @@ internal fun LyricsOptionsMenuDialog(
     translationAvailable: Boolean,
     onToggleTranslation: () -> Unit,
     onToggleRomanization: () -> Unit,
+    karaokeEnabled: Boolean = false,
+    onToggleKaraoke: () -> Unit = {},
     lyricsOffsetMs: Long,
     onOpenLyricsOffset: (() -> Unit)?,
 ) {
+    val onToggleKaraokeHaptic = hapticClick(
+        if (karaokeEnabled) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn,
+        onToggleKaraoke,
+    )
     val onOpenLyricsSource = onOpenLyricsSource?.let { hapticClick(action = it) }
     val onShareLyrics = hapticClick(action = onShareLyrics)
     val onToggleTranslation = hapticClick(
@@ -961,6 +1081,23 @@ internal fun LyricsOptionsMenuDialog(
                                 )
                                 Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                             }
+                        }
+
+                        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onToggleKaraokeHaptic)
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Icon(Icons.Filled.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Text(stringResource(R.string.ly_karaoke_mode), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            Switch(
+                                checked = karaokeEnabled,
+                                onCheckedChange = { onToggleKaraokeHaptic() },
+                            )
                         }
                     }
                 }

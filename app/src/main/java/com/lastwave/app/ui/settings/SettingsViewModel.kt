@@ -112,6 +112,7 @@ class SettingsViewModel @Inject constructor(
     val appUpdateManager: com.lastwave.app.data.update.AppUpdateManager,
     val appChangelogManager: com.lastwave.app.data.update.AppChangelogManager,
     private val broadcastManager: com.lastwave.app.data.update.BroadcastManager,
+    private val appStatsManager: com.lastwave.app.data.update.AppStatsManager,
     private val spotifyPreferences: com.lastwave.app.data.spotify.SpotifyPreferences,
     private val autoMixPreferences: com.lastwave.app.playback.automix.api.AutoMixPreferences,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
@@ -125,6 +126,14 @@ class SettingsViewModel @Inject constructor(
     fun checkForUpdates() = appUpdateManager.checkForUpdate(isSilent = false)
     fun openUpdate(context: android.content.Context) = appUpdateManager.openUpdate(context)
     fun openChangelog() = appChangelogManager.openChangelog()
+
+    suspend fun submitUserFeedback(
+        category: com.lastwave.app.data.update.FeedbackCategory,
+        title: String,
+        body: String,
+        contact: String,
+        includeDeviceInfo: Boolean,
+    ): Result<Long> = appStatsManager.submitFeedback(category, title, body, contact, includeDeviceInfo)
 
     fun saveCustomProfileName(name: String) {
         viewModelScope.launch {
@@ -544,6 +553,8 @@ class SettingsViewModel @Inject constructor(
     fun setUiHaptics(enabled: Boolean) = launchSettingsAction("update Haptic Feedback") { themeRepository.setUiHaptics(enabled) }
     fun setRefreshRate(hz: Int) = launchSettingsAction("update refresh rate") { themeRepository.setRefreshRate(hz) }
     fun setComicTheme(enabled: Boolean) = launchSettingsAction("update comic theme") { themeRepository.setComicTheme(enabled) }
+    fun setSakugaTheme(enabled: Boolean) = launchSettingsAction("update Anime Sakuga theme") { themeRepository.setSakugaTheme(enabled) }
+    fun setSakugaMangaSfx(enabled: Boolean) = launchSettingsAction("update Sakuga Manga SFX") { themeRepository.setSakugaMangaSfx(enabled) }
     fun setAccentMode(mode: AccentMode) = launchSettingsAction("update accent mode") { themeRepository.setMode(mode) }
     fun setManualAccent(color: Color) = launchSettingsAction("update accent color") { themeRepository.setManualAccent(color) }
     fun openColorWheel() = _uiState.update { it.copy(showColorWheel = true) }

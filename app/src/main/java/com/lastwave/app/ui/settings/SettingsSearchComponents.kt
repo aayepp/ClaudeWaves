@@ -47,6 +47,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
+import com.lastwave.app.ui.theme.sakugaTypingInput
 import com.lastwave.app.ui.common.HeaderActionIcon
 import android.content.Intent
 import android.net.Uri
@@ -394,10 +395,13 @@ internal fun SettingsSearchBar(
         focusRequester.requestFocus()
     }
 
+    val inputStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier.focusRequester(focusRequester),
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .sakugaTypingInput(text = query, textStyle = inputStyle, leadingPadding = 52.dp),
         shape = RoundedCornerShape(20.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -433,7 +437,7 @@ internal fun SettingsSearchBar(
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        textStyle = inputStyle,
     )
 }
 

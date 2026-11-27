@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import com.lastwave.app.ui.jam.LastWaveJamSheet
 import com.lastwave.app.ui.jam.LastWaveJamViewModel
 import com.lastwave.app.ui.comic.IconButton
@@ -469,6 +470,7 @@ fun SettingsScreen(
     var showCookieLoginDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showJamSheet by remember { mutableStateOf(false) }
+    var showFeedbackSheet by rememberSaveable { mutableStateOf(false) }
     var activeToggleDetail by remember { mutableStateOf<ToggleDetailInfo?>(null) }
     val currentLanguage = remember(misc.appLanguageTag) { AppLanguage.fromTag(misc.appLanguageTag) }
 
@@ -789,6 +791,19 @@ fun SettingsScreen(
                                     title = stringResource(R.string.set_discord_title),
                                     subtitle = discordSubtitle,
                                     onClick = onOpenDiscordSettings,
+                                    position = position,
+                                )
+                            }
+                        }
+                        item {
+                            SettingsGroup(rowCount = 1) { _, position ->
+                                SettingsActionCard(
+                                    icon = Icons.Filled.ChatBubbleOutline,
+                                    iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    title = stringResource(R.string.settings_feedback_title),
+                                    subtitle = stringResource(R.string.settings_feedback_sub),
+                                    onClick = { showFeedbackSheet = true },
                                     position = position,
                                 )
                             }
@@ -1308,9 +1323,11 @@ fun SettingsScreen(
 
                     SettingsTab.APPEARANCE -> {
                         item {
+                val showSakugaSfx = theme?.isSakuga == true
+                val sfxOffset = if (showSakugaSfx) 1 else 0
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionLabel(stringResource(R.string.settings_section_appearance))
-                    SettingsGroup(rowCount = 16) { index, position ->
+                    SettingsGroup(rowCount = 17 + sfxOffset) { index, position ->
                         when (index) {
                             0 -> ThemeModeSelectorCard(
                                 currentThemeMode = theme?.themeMode ?: ThemeMode.LIGHT,
@@ -1333,6 +1350,27 @@ fun SettingsScreen(
                                 icon = Icons.Filled.AutoAwesome,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = "Anime Sakuga",
+                                subtitle = "Two-tone anime cel shading, squash bounce, dust & Manga SFX",
+                                checked = theme?.isSakuga == true,
+                                onCheckedChange = viewModel::setSakugaTheme,
+                                position = position,
+                                isHighlighted = (highlightedSettingId == "appearance.sakuga_theme"),
+                            )
+                            3 if showSakugaSfx -> SettingsToggleCard(
+                                icon = Icons.Filled.TextFields,
+                                iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                title = "Manga SFX Lettering",
+                                subtitle = "Show Japanese katakana action words (ドン!・シュッ)",
+                                checked = theme?.sakugaMangaSfx ?: true,
+                                onCheckedChange = viewModel::setSakugaMangaSfx,
+                                position = position,
+                            )
+                            3 + sfxOffset -> SettingsToggleCard(
+                                icon = Icons.Filled.AutoAwesome,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 title = stringResource(R.string.settings_lastwave_theme),
                                 subtitle = stringResource(R.string.settings_lastwave_theme_sub),
                                 checked = theme?.isLastWaveTheme ?: false,
@@ -1340,7 +1378,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.lastwave_theme"),
                             )
-                            3 -> SettingsToggleCard(
+                            4 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.Contrast,
                                 iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1352,7 +1390,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.amoled"),
                             )
-                            4 -> SettingsToggleCard(
+                            5 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.Palette,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1368,7 +1406,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.dynamic_color"),
                             )
-                            5 -> Column {
+                            6 + sfxOffset -> Column {
                                 SettingsToggleCard(
                                     icon = Icons.Filled.BubbleChart,
                                     iconContainer = MaterialTheme.colorScheme.primaryContainer,
@@ -1380,7 +1418,7 @@ fun SettingsScreen(
                                     position = position,
                                     isHighlighted = (highlightedSettingId == "appearance.liquid_glass"),
                                 )
-                                // Hidden where it can't act: glass off, or Comic Pop (always opaque).
+                                // Hidden where it can't act: glass off, or flat cel themes (Comic Pop / Anime Sakuga).
                                 if (theme?.liquidGlass != false && !com.lastwave.app.ui.theme.LocalComicTheme.current) {
                                     LiquidGlassIntensitySlider(
                                         saved = theme?.liquidGlassIntensity ?: com.lastwave.app.data.local.DEFAULT_LIQUID_GLASS_INTENSITY,
@@ -1388,7 +1426,7 @@ fun SettingsScreen(
                                     )
                                 }
                             }
-                            6 -> SettingsToggleCard(
+                            7 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.Apps,
                                 iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1399,7 +1437,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.md3_nav_bar"),
                             )
-                            7 -> SettingsToggleCard(
+                            8 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.VisibilityOff,
                                 iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1410,7 +1448,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.hide_nav_tabs"),
                             )
-                            8 -> SettingsToggleCard(
+                            9 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.Album,
                                 iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1421,7 +1459,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.dynamic_now_playing"),
                             )
-                            9 -> SettingsToggleCard(
+                            10 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.TextFields,
                                 iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1432,7 +1470,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.app_font"),
                             )
-                            10 -> SettingsToggleCard(
+                            11 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.FormatBold,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1442,7 +1480,7 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setUseBoldFont,
                                 position = position,
                             )
-                            11 -> SettingsToggleCard(
+                            12 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.Vibration,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1453,7 +1491,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
                             )
-                            12 -> SettingsToggleCard(
+                            13 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.Apps,
                                 iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1464,13 +1502,13 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.collapsing_nav_bar"),
                             )
-                            13 -> RefreshRateSelectorCard(
+                            14 + sfxOffset -> RefreshRateSelectorCard(
                                 currentRate = theme?.refreshRate ?: 0,
                                 onSelectRate = viewModel::setRefreshRate,
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.refresh_rate"),
                             )
-                            14 -> SettingsToggleCard(
+                            15 + sfxOffset -> SettingsToggleCard(
                                 icon = Icons.Filled.Home,
                                 iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1481,7 +1519,7 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.home_button_right"),
                             )
-                            15 -> {
+                            16 + sfxOffset -> {
                                 val activeShortcut = HomeHoldShortcut.fromId(misc.homeHoldShortcut)
                                 SettingsActionCard(
                                     icon = activeShortcut.icon(),
@@ -1521,7 +1559,9 @@ fun SettingsScreen(
                                 currentMode = theme?.mode ?: AccentMode.MANUAL,
                                 selectedHex = theme?.accentColorHex,
                                 comic = theme?.isComic == true,
+                                sakuga = theme?.isSakuga == true,
                                 onPickComic = { viewModel.setAccentMode(AccentMode.COMIC) },
+                                onPickSakuga = { viewModel.setAccentMode(AccentMode.SAKUGA) },
                                 onPickPreset = { hex ->
                                     if (theme?.isLastWaveTheme == true) {
                                         viewModel.setLastWaveTheme(false)
@@ -2530,9 +2570,19 @@ fun SettingsScreen(
                     )
 
                     SectionLabel("Links & Support")
-                    SettingsGroup(rowCount = 3) { index, position ->
+                    SettingsGroup(rowCount = 4) { index, position ->
                         when (index) {
                             0 -> SettingsActionCard(
+                                icon = Icons.Filled.ChatBubbleOutline,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = stringResource(R.string.settings_feedback_title),
+                                subtitle = stringResource(R.string.settings_feedback_sub),
+                                onClick = { showFeedbackSheet = true },
+                                position = position,
+                                isHighlighted = (highlightedSettingId == "about.feedback"),
+                            )
+                            1 -> SettingsActionCard(
                                 icon = Icons.Filled.Code,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -2546,7 +2596,7 @@ fun SettingsScreen(
                                 },
                                 position = position,
                             )
-                            1 -> SettingsActionCard(
+                            2 -> SettingsActionCard(
                                 icon = Icons.Filled.BugReport,
                                 iconContainer = MaterialTheme.colorScheme.errorContainer,
                                 iconTint = MaterialTheme.colorScheme.onErrorContainer,
@@ -2567,7 +2617,7 @@ fun SettingsScreen(
                                 },
                                 position = position,
                             )
-                            2 -> SettingsActionCard(
+                            3 -> SettingsActionCard(
                                 icon = Icons.Filled.Share,
                                 iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -2607,6 +2657,13 @@ fun SettingsScreen(
     }
 
     // -- Edit Profile sheet (username & avatar) --
+    if (showFeedbackSheet) {
+        FeedbackBottomSheet(
+            onDismiss = { showFeedbackSheet = false },
+            onSubmit = viewModel::submitUserFeedback,
+        )
+    }
+
     if (showEditProfileSheet) {
         val profileSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         var draftName by remember(customProfile.name) { mutableStateOf(customProfile.name) }

@@ -29,6 +29,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -143,6 +144,8 @@ fun LastWaveTheme(
     }
 
     val comic = themeState.isComic
+    val sakuga = themeState.isSakuga
+    val flatCel = comic || sakuga
     val typography = remember(themeState.useCustomFont, themeState.useBoldFont, comic) {
         when {
             !themeState.useCustomFont -> if (themeState.useBoldFont) SystemBoldTypography else SystemTypography
@@ -157,7 +160,20 @@ fun LastWaveTheme(
         shapes = LastWaveShapes,
     ) {
         val scheme = MaterialTheme.colorScheme
-        val glass = themeState.liquidGlass && !comic
+        val glass = themeState.liquidGlass && !flatCel
+        val sakugaPalette = remember(scheme, isDark, themeState.mode) {
+            deriveSakugaPalette(
+                scheme = scheme,
+                isDark = isDark,
+                useOwnPalette = themeState.mode == com.lastwave.app.data.local.AccentMode.SAKUGA,
+            )
+        }
+        val sakugaFx = remember { SakugaFxController() }
+        SideEffect {
+            sakugaFx.enabled = sakuga
+            sakugaFx.mangaSfxEnabled = themeState.sakugaMangaSfx
+            sakugaFx.palette = sakugaPalette
+        }
         Surface(
             modifier = Modifier.fillMaxSize().drawBehind {
                 drawPageWash(scheme.background, scheme.primary, scheme.tertiary, glass, isDark)
@@ -202,25 +218,45 @@ fun LastWaveTheme(
                 LocalDensity provides compactDensity,
                 LocalFontFamilyResolver provides fontResolver,
                 LocalHapticFeedback provides appHaptics,
-                // Comic panels are flat ink and paper; glass would blur the line work.
-                LocalLiquidGlass provides (themeState.liquidGlass && !comic),
-                LocalComicTheme provides comic,
-                // The comic night scheme's primary is the skin's yellow, or the picked accent's light tone.
-                LocalComicAccent provides if (comic) themeState.darkColorScheme.primary else ComicGold,
+                // Comic/Sakuga panels are flat ink and paper; glass would blur the line work.
+                LocalLiquidGlass provides (themeState.liquidGlass && !flatCel),
+                LocalComicTheme provides flatCel,
+                LocalSakugaTheme provides sakuga,
+                LocalSakugaMangaSfx provides themeState.sakugaMangaSfx,
+                LocalSakugaPalette provides sakugaPalette,
+                LocalSakugaFx provides if (sakuga) sakugaFx else null,
+                // Sakuga uses its anime accent; Comic night uses yellow or the picked accent's light tone.
+                LocalComicAccent provides when {
+                    sakuga -> sakugaPalette.accent
+                    comic -> themeState.darkColorScheme.primary
+                    else -> ComicGold
+                },
                 // Material pads small controls out to a 48dp box and applies the caller's
-                // modifier to that box, so a comic outline drawn there sat outside the
+                // modifier to that box, so a comic/sakuga outline drawn there sat outside the
                 // control: a second ring around every chip and icon button. Touch reach is
                 // unaffected: hit testing still extends small targets (ViewConfiguration).
                 LocalMinimumInteractiveComponentSize provides
-                    if (comic) Dp.Unspecified else LocalMinimumInteractiveComponentSize.current,
+                    if (flatCel) Dp.Unspecified else LocalMinimumInteractiveComponentSize.current,
                 LocalComicLine provides activeColorScheme.outline,
-                LocalIndication provides if (comic) ComicIndication else LocalIndication.current,
+                LocalIndication provides when {
+                    sakuga -> SakugaIndication
+                    comic -> ComicIndication
+                    else -> LocalIndication.current
+                },
                 LocalMd3NavBar provides themeState.md3NavBar,
                 LocalHideNavTabs provides themeState.hideNavTabs,
                 LocalUseBoldFont provides themeState.useBoldFont,
                 LocalIsDarkTheme provides isDark,
             ) {
-                content()
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    content()
+                    if (sakuga) {
+                        SakugaFxOverlay(
+                            controller = sakugaFx,
+                            modifier = Modifier.fillMaxSize().zIndex(1000f),
+                        )
+                    }
+                }
             }
         }
     }

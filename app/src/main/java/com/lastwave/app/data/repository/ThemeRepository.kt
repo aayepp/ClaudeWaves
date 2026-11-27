@@ -71,6 +71,10 @@ data class ThemeUiState(
     val isLastWaveTheme: Boolean = false,
     /** Comic Pop skin is on; [mode] still names where its accent comes from. */
     val isComic: Boolean = false,
+    /** Anime Sakuga cel-shaded skin + 165Hz Canvas VFX is on. */
+    val isSakuga: Boolean = false,
+    /** Katakana SFX words (ドン!, カチッ, ズザッ) enabled on Sakuga VFX reactions. */
+    val sakugaMangaSfx: Boolean = true,
     val appIcon: AppIcon = AppIcon.DEFAULT,
 )
 
@@ -255,10 +259,12 @@ class ThemeRepository @Inject constructor(
     ) { prefs: ThemePrefs, dynamic: String?, nowPlaying: ArtworkAccent?, misc: MiscSettings ->
         val isAmoled = prefs.amoled
         val isLastWave = prefs.lastWaveTheme
-        val isComic = prefs.comicTheme && !isLastWave
-        // Comic panels are opaque; a glass accent scheme would carry translucent containers into them.
-        val isGlass = prefs.liquidGlass && !isComic
-        val nowPlayingActive = misc.dynamicNowPlayingEnabled && nowPlaying != null && !isLastWave && !isComic
+        val isSakuga = prefs.sakugaTheme && !isLastWave
+        val isComic = prefs.comicTheme && !isLastWave && !isSakuga
+        val isFlatCel = isComic || isSakuga
+        // Comic/Sakuga panels are opaque; a glass accent scheme would carry translucent containers into them.
+        val isGlass = prefs.liquidGlass && !isFlatCel
+        val nowPlayingActive = misc.dynamicNowPlayingEnabled && nowPlaying != null && !isLastWave && !isFlatCel
         // Real wallpaper Monet on S+. Built here (not only in LastWaveTheme)
         // so widgets and the media notification use the same colors as the UI.
         val systemDynamic = if (prefs.accentMode == AccentMode.DYNAMIC && !isLastWave) systemDynamicSchemes(isAmoled) else null
@@ -291,10 +297,19 @@ class ThemeRepository @Inject constructor(
                 dark to light
             }
         }.let { (dark, light) ->
-            if (!isComic) return@let dark to light
-            val own = prefs.accentMode == AccentMode.COMIC
-            Md3SchemeBuilder.buildComicDarkScheme(dark.takeUnless { own }) to
-                Md3SchemeBuilder.buildComicLightScheme(light.takeUnless { own })
+            when {
+                isSakuga -> {
+                    val own = prefs.accentMode == AccentMode.SAKUGA
+                    Md3SchemeBuilder.buildSakugaDarkScheme(dark.takeUnless { own }, isAmoled) to
+                        Md3SchemeBuilder.buildSakugaLightScheme(light.takeUnless { own })
+                }
+                isComic -> {
+                    val own = prefs.accentMode == AccentMode.COMIC
+                    Md3SchemeBuilder.buildComicDarkScheme(dark.takeUnless { own }) to
+                        Md3SchemeBuilder.buildComicLightScheme(light.takeUnless { own })
+                }
+                else -> dark to light
+            }
         }
         // The cover owns the palette while there is one: blended 40% into the
         // wallpaper theme and muted, every song ended up the same generic tint.
@@ -322,6 +337,8 @@ class ThemeRepository @Inject constructor(
             isNowPlayingThemed = nowPlayingActive,
             isLastWaveTheme = isLastWave,
             isComic = isComic,
+            isSakuga = isSakuga,
+            sakugaMangaSfx = prefs.sakugaMangaSfx,
             appIcon = prefs.appIcon,
         )
     }.stateIn(
@@ -376,6 +393,10 @@ class ThemeRepository @Inject constructor(
     }
 
     suspend fun setComicTheme(enabled: Boolean) = themePreferences.setComicTheme(enabled)
+
+    suspend fun setSakugaTheme(enabled: Boolean) = themePreferences.setSakugaTheme(enabled)
+
+    suspend fun setSakugaMangaSfx(enabled: Boolean) = themePreferences.setSakugaMangaSfx(enabled)
 
     suspend fun setAmoled(enabled: Boolean) = themePreferences.setAmoled(enabled)
 

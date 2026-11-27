@@ -282,7 +282,9 @@ internal fun AccentPresetGrid(
     currentMode: AccentMode,
     selectedHex: String?,
     comic: Boolean,
+    sakuga: Boolean = false,
     onPickComic: () -> Unit,
+    onPickSakuga: () -> Unit = {},
     onPickPreset: (String) -> Unit,
     onPickMono: () -> Unit,
     onPickCustom: () -> Unit,
@@ -296,9 +298,17 @@ internal fun AccentPresetGrid(
         selectedHex != null &&
         ACCENT_PRESETS.none { it.hex.equals(selectedHex, ignoreCase = true) }
 
-    // One 4-column tile grid. Comic Pop's own palette is a tile only while the skin is on,
-    // so users who dislike it can pick any other accent without leaving the skin.
+    // One 4-column tile grid. Comic Pop / Anime Sakuga own palettes appear while their
+    // skin is active, while all presets, Mono & Custom Color Wheel remain selectable.
     val tiles = buildList<@Composable (Modifier) -> Unit> {
+        if (sakuga) add { m ->
+            ColorTile("Sakuga", currentMode == AccentMode.SAKUGA, m, onPickSakuga) {
+                val shades = remember {
+                    listOf(Color(0xFF8F8DF7), Color(0xFFB8B3FF), Color(0xFFFF5FA8), Color(0xFF1D1A4A))
+                }
+                PaletteTilePreview(shades)
+            }
+        }
         if (comic) add { m ->
             ColorTile("Comic", currentMode == AccentMode.COMIC, m, onPickComic) {
                 val shades = remember {

@@ -4,6 +4,28 @@ package com.lastwave.app.ui.comic
 
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalIsDarkTheme
+import com.lastwave.app.ui.theme.LocalSakugaFx
+import com.lastwave.app.ui.theme.LocalSakugaPalette
+import com.lastwave.app.ui.theme.LocalSakugaTheme
+import com.lastwave.app.ui.theme.SakugaDefaultLightPalette
+import android.os.SystemClock
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlin.math.sqrt
+import kotlinx.coroutines.launch
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -150,8 +172,19 @@ private fun Modifier.comicCard(shape: Shape, colors: CardColors): Modifier =
 private fun Modifier.comicButton(shape: Shape, source: MutableInteractionSource, enabled: Boolean, colors: ButtonColors): Modifier {
     if (!enabled) return this
     val held by source.collectIsPressedAsState()
+    val isSakuga = LocalSakugaTheme.current
     val pushed by animateFloatAsState(if (held) 1f else 0f, spring(stiffness = 900f), label = "comicButtonPush")
-    return comicPress(source).comicPanel(shape, offset = 3.dp, translucent = colors.containerColor.alpha < 1f, pressed = { pushed })
+    val sy by animateFloatAsState(
+        targetValue = if (isSakuga && held) 0.80f else 1f,
+        animationSpec = if (held) spring(stiffness = 1100f) else spring(dampingRatio = 0.36f, stiffness = 520f),
+        label = "sakugaBtnSquash",
+    )
+    val sx = if (isSakuga) 1f / sqrt(sy.coerceIn(0.65f, 1.35f)) else 1f
+    return comicPress(source)
+        .comicPanel(shape, offset = 3.dp, translucent = colors.containerColor.alpha < 1f, pressed = { pushed })
+        .let { m ->
+            if (isSakuga) m.graphicsLayer { scaleX = sx; scaleY = sy } else m
+        }
 }
 
 @Composable
@@ -209,7 +242,48 @@ fun Button(
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    M3Button(onClick, modifier.comicButton(shape, source, enabled, colors), enabled, shape, colors, elevation, border, contentPadding, source, content)
+    val isSakuga = LocalSakugaTheme.current
+    val fx = LocalSakugaFx.current
+    var bounds by remember { mutableStateOf<Rect?>(null) }
+    var invertFlash by remember { mutableStateOf(false) }
+    val held by source.collectIsPressedAsState()
+    LaunchedEffect(held, isSakuga) {
+        if (isSakuga && held) {
+            bounds?.let { b -> fx?.emitButtonPress(b.center, b.width, b.height) }
+        }
+    }
+    LaunchedEffect(invertFlash) {
+        if (invertFlash) {
+            delay(95L)
+            invertFlash = false
+        }
+    }
+    val effectiveColors = if (isSakuga && invertFlash) {
+        ButtonDefaults.buttonColors(
+            containerColor = colors.contentColor,
+            contentColor = colors.containerColor,
+        )
+    } else colors
+    val tilt by animateFloatAsState(
+        targetValue = if (isSakuga && invertFlash) -3.2f else 0f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 680f),
+        label = "sakugaBtnTilt",
+    )
+    M3Button(
+        onClick = {
+            if (isSakuga) {
+                invertFlash = true
+                bounds?.let { b -> fx?.emitPrimaryImpact(b.center, b.width, b.height) }
+            }
+            onClick()
+        },
+        modifier = modifier
+            .onGloballyPositioned { if (it.isAttached) bounds = it.boundsInRoot() }
+            .then(if (isSakuga) Modifier.graphicsLayer { rotationZ = tilt } else Modifier)
+            .comicButton(shape, source, enabled, colors),
+        enabled = enabled, shape = shape, colors = effectiveColors, elevation = elevation, border = border,
+        contentPadding = contentPadding, interactionSource = source, content = content,
+    )
 }
 
 @Composable
@@ -226,7 +300,20 @@ fun FilledTonalButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    M3FilledTonalButton(onClick, modifier.comicButton(shape, source, enabled, colors), enabled, shape, colors, elevation, border, contentPadding, source, content)
+    val isSakuga = LocalSakugaTheme.current
+    val fx = LocalSakugaFx.current
+    var bounds by remember { mutableStateOf<Rect?>(null) }
+    M3FilledTonalButton(
+        onClick = {
+            if (isSakuga) bounds?.let { b -> fx?.emitPrimaryImpact(b.center, b.width, b.height, withDonSfx = false) }
+            onClick()
+        },
+        modifier = modifier
+            .onGloballyPositioned { if (it.isAttached) bounds = it.boundsInRoot() }
+            .comicButton(shape, source, enabled, colors),
+        enabled = enabled, shape = shape, colors = colors, elevation = elevation, border = border,
+        contentPadding = contentPadding, interactionSource = source, content = content,
+    )
 }
 
 @Composable
@@ -243,7 +330,20 @@ fun OutlinedButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    M3OutlinedButton(onClick, modifier.comicButton(shape, source, enabled, colors), enabled, shape, colors, elevation, border, contentPadding, source, content)
+    val isSakuga = LocalSakugaTheme.current
+    val fx = LocalSakugaFx.current
+    var bounds by remember { mutableStateOf<Rect?>(null) }
+    M3OutlinedButton(
+        onClick = {
+            if (isSakuga) bounds?.let { b -> fx?.emitSecondaryTap(b.topRight) }
+            onClick()
+        },
+        modifier = modifier
+            .onGloballyPositioned { if (it.isAttached) bounds = it.boundsInRoot() }
+            .comicButton(shape, source, enabled, colors),
+        enabled = enabled, shape = shape, colors = colors, elevation = elevation, border = border,
+        contentPadding = contentPadding, interactionSource = source, content = content,
+    )
 }
 
 /**
@@ -278,9 +378,23 @@ fun IconButton(
     content: @Composable () -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    val density = LocalDensity.current
+    var btnBounds by remember { mutableStateOf<Rect?>(null) }
     M3IconButton(
-        onClick = onClick,
-        modifier = modifier.comicPress(source),
+        onClick = {
+            if (isSakuga) {
+                btnBounds?.let { b ->
+                    val pad = with(density) { 4.dp.toPx() }
+                    sakugaFx?.emitSecondaryTap(Offset(b.right - pad, b.top + pad))
+                }
+            }
+            onClick()
+        },
+        modifier = modifier
+            .let { m -> if (isSakuga) m.onGloballyPositioned { if (it.isAttached) btnBounds = it.boundsInRoot() } else m }
+            .comicPress(source),
         enabled = enabled,
         colors = colors,
         interactionSource = source,
@@ -299,7 +413,29 @@ fun FilledTonalIconButton(
     content: @Composable () -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    M3FilledTonalIconButton(onClick, modifier.comicPress(source).comicPanel(shape, offset = 2.dp), enabled, shape, colors, source) {
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    val density = LocalDensity.current
+    var btnBounds by remember { mutableStateOf<Rect?>(null) }
+    M3FilledTonalIconButton(
+        onClick = {
+            if (isSakuga) {
+                btnBounds?.let { b ->
+                    val pad = with(density) { 4.dp.toPx() }
+                    sakugaFx?.emitSecondaryTap(Offset(b.right - pad, b.top + pad))
+                }
+            }
+            onClick()
+        },
+        modifier = modifier
+            .let { m -> if (isSakuga) m.onGloballyPositioned { if (it.isAttached) btnBounds = it.boundsInRoot() } else m }
+            .comicPress(source)
+            .comicPanel(shape, offset = 2.dp),
+        enabled = enabled,
+        shape = shape,
+        colors = colors,
+        interactionSource = source,
+    ) {
         PressBounce(source, content)
     }
 }
@@ -429,9 +565,31 @@ fun TextButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    val density = LocalDensity.current
+    var btnBounds by remember { mutableStateOf<Rect?>(null) }
     M3TextButton(
-        onClick = onClick, modifier = modifier.comicPress(source), enabled = enabled, shape = shape, colors = colors,
-        elevation = elevation, border = border, contentPadding = contentPadding, interactionSource = source, content = content,
+        onClick = {
+            if (isSakuga) {
+                btnBounds?.let { b ->
+                    val pad = with(density) { 4.dp.toPx() }
+                    sakugaFx?.emitSecondaryTap(Offset(b.right - pad, b.top + pad))
+                }
+            }
+            onClick()
+        },
+        modifier = modifier
+            .let { m -> if (isSakuga) m.onGloballyPositioned { if (it.isAttached) btnBounds = it.boundsInRoot() } else m }
+            .comicPress(source),
+        enabled = enabled,
+        shape = shape,
+        colors = colors,
+        elevation = elevation,
+        border = border,
+        contentPadding = contentPadding,
+        interactionSource = source,
+        content = content,
     )
 }
 
@@ -446,9 +604,29 @@ fun FilledIconButton(
     content: @Composable () -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    val density = LocalDensity.current
+    var btnBounds by remember { mutableStateOf<Rect?>(null) }
     M3FilledIconButton(
-        onClick = onClick, modifier = modifier.comicPress(source).comicPanel(shape, offset = 2.dp), enabled = enabled,
-        shape = shape, colors = colors, interactionSource = source, content = { PressBounce(source, content) },
+        onClick = {
+            if (isSakuga) {
+                btnBounds?.let { b ->
+                    val pad = with(density) { 4.dp.toPx() }
+                    sakugaFx?.emitSecondaryTap(Offset(b.right - pad, b.top + pad))
+                }
+            }
+            onClick()
+        },
+        modifier = modifier
+            .let { m -> if (isSakuga) m.onGloballyPositioned { if (it.isAttached) btnBounds = it.boundsInRoot() } else m }
+            .comicPress(source)
+            .comicPanel(shape, offset = 2.dp),
+        enabled = enabled,
+        shape = shape,
+        colors = colors,
+        interactionSource = source,
+        content = { PressBounce(source, content) },
     )
 }
 
@@ -468,13 +646,30 @@ fun FilterChip(
     interactionSource: MutableInteractionSource? = null,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    val density = LocalDensity.current
+    var chipBounds by remember { mutableStateOf<Rect?>(null) }
     M3FilterChip(
-        selected = selected, onClick = onClick, label = label,
-        modifier = modifier.comicPress(source).comicPanel(
-            shape, offset = 2.dp, stroke = 2.dp,
-            // An unselected chip is see-through; without the cut-out its shadow fills it pink at night.
-            translucent = !selected,
-        ),
+        selected = selected,
+        onClick = {
+            if (isSakuga) {
+                chipBounds?.let { b ->
+                    val pad = with(density) { 4.dp.toPx() }
+                    sakugaFx?.emitChipTap(b.center, Offset(b.right - pad, b.top + pad))
+                }
+            }
+            onClick()
+        },
+        label = label,
+        modifier = modifier
+            .let { m -> if (isSakuga) m.onGloballyPositioned { if (it.isAttached) chipBounds = it.boundsInRoot() } else m }
+            .comicPress(source)
+            .comicPanel(
+                shape, offset = 2.dp, stroke = 2.dp,
+                // An unselected chip is see-through; without the cut-out its shadow fills it pink at night.
+                translucent = !selected,
+            ),
         enabled = enabled, leadingIcon = leadingIcon, trailingIcon = trailingIcon, shape = shape, colors = colors,
         elevation = elevation, border = border, interactionSource = source,
     )
@@ -495,9 +690,25 @@ fun AssistChip(
     interactionSource: MutableInteractionSource? = null,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    val density = LocalDensity.current
+    var chipBounds by remember { mutableStateOf<Rect?>(null) }
     M3AssistChip(
-        onClick = onClick, label = label,
-        modifier = modifier.comicPress(source).comicPanel(shape, offset = 2.dp, stroke = 2.dp, translucent = colors.containerColor.alpha < 1f),
+        onClick = {
+            if (isSakuga) {
+                chipBounds?.let { b ->
+                    val pad = with(density) { 4.dp.toPx() }
+                    sakugaFx?.emitChipTap(b.center, Offset(b.right - pad, b.top + pad))
+                }
+            }
+            onClick()
+        },
+        label = label,
+        modifier = modifier
+            .let { m -> if (isSakuga) m.onGloballyPositioned { if (it.isAttached) chipBounds = it.boundsInRoot() } else m }
+            .comicPress(source)
+            .comicPanel(shape, offset = 2.dp, stroke = 2.dp, translucent = colors.containerColor.alpha < 1f),
         enabled = enabled, leadingIcon = leadingIcon, trailingIcon = trailingIcon, shape = shape, colors = colors,
         elevation = elevation, border = border, interactionSource = source,
     )
@@ -514,13 +725,8 @@ fun Switch(
     interactionSource: MutableInteractionSource? = null,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    if (LocalComicTheme.current) {
-        M3Switch(
-            checked = checked, onCheckedChange = onCheckedChange, modifier = modifier.comicPress(source),
-            thumbContent = thumbContent, enabled = enabled, colors = colors, interactionSource = source,
-        )
-    } else {
-        LiquidGlassSwitch(
+    when {
+        LocalSakugaTheme.current -> SakugaSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             modifier = modifier,
@@ -528,6 +734,159 @@ fun Switch(
             enabled = enabled,
             interactionSource = source,
         )
+        LocalComicTheme.current -> M3Switch(
+            checked = checked, onCheckedChange = onCheckedChange, modifier = modifier.comicPress(source),
+            thumbContent = thumbContent, enabled = enabled, colors = colors, interactionSource = source,
+        )
+        else -> LiquidGlassSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = modifier,
+            thumbContent = thumbContent,
+            enabled = enabled,
+            interactionSource = source,
+        )
+    }
+}
+
+@Composable
+private fun SakugaSwitch(
+    checked: Boolean,
+    onCheckedChange: ((Boolean) -> Unit)?,
+    modifier: Modifier = Modifier,
+    thumbContent: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
+    interactionSource: MutableInteractionSource,
+) {
+    val pal = LocalSakugaPalette.current
+    val fx = LocalSakugaFx.current
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+        animationSpec = spring(stiffness = 780f, dampingRatio = 0.85f),
+        label = "sakugaSwitchBg",
+    )
+    val pos by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.56f, stiffness = 580f),
+        label = "sakugaSwitchPos",
+    )
+    val smear = remember { Animatable(0f) }
+    var initialized by remember { mutableStateOf(false) }
+    LaunchedEffect(checked) {
+        if (!initialized) {
+            initialized = true
+            return@LaunchedEffect
+        }
+        smear.snapTo(if (checked) 1f else -1f)
+        smear.animateTo(0f, spring(dampingRatio = 0.48f, stiffness = 520f))
+    }
+    var bounds by remember { mutableStateOf<Rect?>(null) }
+
+    Box(
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .onGloballyPositioned { if (it.isAttached) bounds = it.boundsInRoot() }
+            .alpha(if (enabled) 1f else 0.45f)
+            .size(width = 54.dp, height = 30.dp)
+            .semantics {
+                role = Role.Switch
+                toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                if (enabled && onCheckedChange != null) {
+                    onClick { onCheckedChange(!checked); true }
+                }
+            }
+            .then(
+                if (enabled && onCheckedChange != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = {
+                            val next = !checked
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            bounds?.let { b ->
+                                val targetFrac = if (next) 1f else 0f
+                                val thumbCenterX = b.left + b.height / 2f + targetFrac * (b.width - b.height)
+                                fx?.emitToggleFlip(Offset(thumbCenterX, b.center.y), next)
+                            }
+                            scope.launch {
+                                smear.snapTo(if (next) 1f else -1f)
+                                smear.animateTo(0f, spring(dampingRatio = 0.48f, stiffness = 520f))
+                            }
+                            onCheckedChange(next)
+                        },
+                    )
+                } else Modifier,
+            ),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val h = size.height
+            val w = size.width
+            val r = CornerRadius(h / 2f, h / 2f)
+            val off = 2.dp.toPx()
+            val strokePx = 2.dp.toPx()
+            drawRoundRect(
+                color = pal.shadow,
+                topLeft = Offset(off, off),
+                size = Size(w, h),
+                cornerRadius = r,
+            )
+            drawRoundRect(
+                color = trackColor,
+                size = Size(w, h),
+                cornerRadius = r,
+            )
+            drawRoundRect(
+                color = pal.ink,
+                size = Size(w, h),
+                cornerRadius = r,
+                style = Stroke(strokePx),
+            )
+            val pad = 4.dp.toPx()
+            val knobSize = h - pad * 2f
+            val travel = (w - pad * 2f - knobSize).coerceAtLeast(0f)
+            val xLeft = pad + pos.coerceIn(0f, 1f) * travel
+            val stretch = 7.dp.toPx() * abs(smear.value)
+            val pillLeft = (xLeft - if (smear.value > 0f) stretch else 0f).coerceAtLeast(pad)
+            val pillW = (knobSize + stretch).coerceAtMost(w - pad * 2f)
+            drawRoundRect(
+                color = pal.shadow.copy(alpha = 0.5f),
+                topLeft = Offset(pillLeft + 1.dp.toPx(), pad + 1.dp.toPx()),
+                size = Size(pillW, knobSize),
+                cornerRadius = CornerRadius(knobSize / 2f, knobSize / 2f),
+            )
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(pillLeft, pad),
+                size = Size(pillW, knobSize),
+                cornerRadius = CornerRadius(knobSize / 2f, knobSize / 2f),
+            )
+            drawRoundRect(
+                color = pal.ink,
+                topLeft = Offset(pillLeft, pad),
+                size = Size(pillW, knobSize),
+                cornerRadius = CornerRadius(knobSize / 2f, knobSize / 2f),
+                style = Stroke(strokePx),
+            )
+        }
+        if (thumbContent != null) {
+            Box(
+                modifier = Modifier
+                    .offset {
+                        val hPx = 30.dp.toPx()
+                        val pad = 4.dp.toPx()
+                        val knobSize = hPx - pad * 2f
+                        val travel = (54.dp.toPx() - pad * 2f - knobSize).coerceAtLeast(0f)
+                        IntOffset((pad + pos.coerceIn(0f, 1f) * travel).roundToInt(), 0)
+                    }
+                    .size(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                thumbContent()
+            }
+        }
     }
 }
 
@@ -809,6 +1168,18 @@ fun Slider(
     colors: SliderColors = SliderDefaults.colors(),
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
+    if (LocalSakugaTheme.current) {
+        SakugaSlider(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = modifier,
+            enabled = enabled,
+            valueRange = valueRange,
+            steps = steps,
+            onValueChangeFinished = onValueChangeFinished,
+        )
+        return
+    }
     if (LocalComicTheme.current) {
         M3Slider(
             value = value,
@@ -1048,8 +1419,219 @@ fun Checkbox(
     interactionSource: MutableInteractionSource? = null,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    var boxBounds by remember { mutableStateOf<Rect?>(null) }
+    val popAnim = remember { Animatable(1f) }
+    var initialized by remember { mutableStateOf(false) }
+    LaunchedEffect(checked, isSakuga) {
+        if (!initialized) {
+            initialized = true
+            return@LaunchedEffect
+        }
+        if (isSakuga) {
+            popAnim.snapTo(1.22f)
+            popAnim.animateTo(1f, spring(dampingRatio = 0.42f, stiffness = 620f))
+        }
+    }
     M3Checkbox(
-        checked = checked, onCheckedChange = onCheckedChange, modifier = modifier.comicPress(source), enabled = enabled,
-        colors = colors, interactionSource = source,
+        checked = checked,
+        onCheckedChange = if (onCheckedChange == null) null else { next ->
+            if (isSakuga) {
+                boxBounds?.let { b -> sakugaFx?.emitCheckboxChange(b.center, next) }
+            }
+            onCheckedChange(next)
+        },
+        modifier = modifier
+            .let { m ->
+                if (isSakuga) {
+                    m.onGloballyPositioned { if (it.isAttached) boxBounds = it.boundsInRoot() }
+                        .graphicsLayer { scaleX = popAnim.value; scaleY = 2f - popAnim.value }
+                } else m
+            }
+            .comicPress(source),
+        enabled = enabled,
+        colors = colors,
+        interactionSource = source,
     )
+}
+
+@Composable
+private fun SakugaSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    steps: Int = 0,
+    onValueChangeFinished: (() -> Unit)? = null,
+) {
+    val pal = LocalSakugaPalette.current
+    val fx = LocalSakugaFx.current
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val span = (valueRange.endInclusive - valueRange.start).coerceAtLeast(1e-6f)
+    val fraction = ((value - valueRange.start) / span).coerceIn(0f, 1f)
+
+    val latestOnChange by rememberUpdatedState(onValueChange)
+    val latestOnFinished by rememberUpdatedState(onValueChangeFinished)
+    val latestEnabled by rememberUpdatedState(enabled)
+    val latestRange by rememberUpdatedState(valueRange)
+    val latestSteps by rememberUpdatedState(steps)
+
+    var trackWidthPx by remember { mutableIntStateOf(1) }
+    var bounds by remember { mutableStateOf<Rect?>(null) }
+    var prevFrac by remember { mutableStateOf<Float?>(null) }
+    var prevNanos by remember { mutableLongStateOf(0L) }
+    var rawVel by remember { mutableFloatStateOf(0f) }
+    var lastDir by remember { mutableFloatStateOf(0f) }
+    val smoothVel by animateFloatAsState(
+        targetValue = rawVel,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 700f),
+        label = "sakugaSliderVel",
+    )
+    val tailPath = remember { Path() }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val trackBg = MaterialTheme.colorScheme.surfaceContainerHighest
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(34.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+            .onSizeChanged { trackWidthPx = it.width.coerceAtLeast(1) }
+            .onGloballyPositioned { if (it.isAttached) bounds = it.boundsInRoot() }
+            .pointerInput(Unit) {
+                val thumbPadPx = with(density) { 12.dp.toPx() }
+                fun fractionForX(x: Float): Float {
+                    val usable = (trackWidthPx.toFloat() - thumbPadPx * 2f).coerceAtLeast(1f)
+                    val f = ((x - thumbPadPx) / usable).coerceIn(0f, 1f)
+                    val s = latestSteps
+                    return if (s > 0) (f * (s + 1)).roundToInt().toFloat() / (s + 1) else f
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (!latestEnabled) return@awaitEachGesture
+                    down.consume()
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val initialFrac = fractionForX(down.position.x)
+                    prevFrac = initialFrac
+                    prevNanos = SystemClock.elapsedRealtimeNanos()
+                    rawVel = 0f
+                    lastDir = 0f
+                    latestOnChange(latestRange.start + initialFrac * (latestRange.endInclusive - latestRange.start))
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        if (change.positionChange() != Offset.Zero) {
+                            change.consume()
+                            val newFrac = fractionForX(change.position.x)
+                            val now = SystemClock.elapsedRealtimeNanos()
+                            val old = prevFrac
+                            if (old != null) {
+                                val dtSec = ((now - prevNanos) / 1_000_000_000f).coerceAtLeast(0.004f)
+                                val delta = newFrac - old
+                                if (abs(delta) > 0.0005f) {
+                                    val inst = (delta / dtSec / 2.2f).coerceIn(-1f, 1f)
+                                    rawVel = (rawVel * 0.45f + inst * 0.55f).coerceIn(-1f, 1f)
+                                    lastDir = sign(rawVel)
+                                    if (abs(rawVel) > 0.14f) {
+                                        bounds?.let { b ->
+                                            val pad = with(density) { 12.dp.toPx() }
+                                            val usable = (b.width - pad * 2f).coerceAtLeast(1f)
+                                            val cx = b.left + pad + newFrac * usable
+                                            fx?.emitSliderCloud(Offset(cx, b.center.y), sign(rawVel), abs(rawVel))
+                                        }
+                                    }
+                                }
+                            }
+                            prevFrac = newFrac
+                            prevNanos = now
+                            latestOnChange(latestRange.start + newFrac * (latestRange.endInclusive - latestRange.start))
+                        }
+                    }
+
+                    val relFrac = prevFrac ?: fraction
+                    if (abs(rawVel) > 0.12f || lastDir != 0f) {
+                        bounds?.let { b ->
+                            val pad = with(density) { 12.dp.toPx() }
+                            val usable = (b.width - pad * 2f).coerceAtLeast(1f)
+                            val cx = b.left + pad + relFrac * usable
+                            fx?.emitSliderRelease(Offset(cx, b.center.y), if (lastDir != 0f) lastDir else 1f)
+                        }
+                    }
+                    prevFrac = null
+                    rawVel = 0f
+                    lastDir = 0f
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    latestOnFinished?.invoke()
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val pad = 12.dp.toPx()
+            val trackH = 8.dp.toPx()
+            val usable = (size.width - pad * 2f).coerceAtLeast(1f)
+            val cy = size.height / 2f
+            val corner = CornerRadius(trackH / 2f, trackH / 2f)
+            val strokePx = 2.dp.toPx()
+
+            drawRoundRect(
+                color = pal.shadow,
+                topLeft = Offset(pad + 1.5.dp.toPx(), cy - trackH / 2f + 1.5.dp.toPx()),
+                size = Size(usable, trackH),
+                cornerRadius = corner,
+            )
+            drawRoundRect(
+                color = trackBg,
+                topLeft = Offset(pad, cy - trackH / 2f),
+                size = Size(usable, trackH),
+                cornerRadius = corner,
+            )
+            val fillW = (fraction * usable).coerceIn(0f, usable)
+            if (fillW > 0f) {
+                drawRoundRect(
+                    color = primaryColor,
+                    topLeft = Offset(pad, cy - trackH / 2f),
+                    size = Size(fillW, trackH),
+                    cornerRadius = corner,
+                )
+            }
+            drawRoundRect(
+                color = pal.ink,
+                topLeft = Offset(pad, cy - trackH / 2f),
+                size = Size(usable, trackH),
+                cornerRadius = corner,
+                style = Stroke(strokePx),
+            )
+
+            val r = 9.5.dp.toPx()
+            val thumbCenter = Offset(pad + fillW, cy)
+            val tailLen = (abs(smoothVel) * 16.dp.toPx()).coerceAtMost(20.dp.toPx())
+            if (tailLen < 1.2f) {
+                drawCircle(color = pal.shadow.copy(alpha = 0.55f), radius = r, center = thumbCenter + Offset(1.5.dp.toPx(), 1.5.dp.toPx()))
+                drawCircle(color = Color.White, radius = r, center = thumbCenter)
+                drawCircle(color = pal.ink, radius = r, center = thumbCenter, style = Stroke(strokePx))
+            } else {
+                val dir = if (smoothVel >= 0f) 1f else -1f
+                val tipX = thumbCenter.x - dir * (r + tailLen)
+                tailPath.reset()
+                tailPath.moveTo(tipX, cy)
+                tailPath.quadraticTo(thumbCenter.x - dir * r * 0.55f, cy - r, thumbCenter.x, cy - r)
+                tailPath.arcTo(
+                    rect = Rect(thumbCenter.x - r, cy - r, thumbCenter.x + r, cy + r),
+                    startAngleDegrees = -90f,
+                    sweepAngleDegrees = dir * 180f,
+                    forceMoveTo = false,
+                )
+                tailPath.quadraticTo(thumbCenter.x - dir * r * 0.55f, cy + r, tipX, cy)
+                tailPath.close()
+                drawPath(path = tailPath, color = Color.White)
+                drawPath(path = tailPath, color = pal.ink, style = Stroke(width = strokePx, cap = StrokeCap.Round))
+            }
+        }
+    }
 }

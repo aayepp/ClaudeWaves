@@ -4,7 +4,10 @@ import com.lastwave.app.ui.comic.clipOnly
 import com.lastwave.app.ui.theme.ComicInk
 import com.lastwave.app.ui.theme.ComicAccent
 import com.lastwave.app.ui.theme.LocalComicTheme
+import com.lastwave.app.ui.theme.LocalSakugaFx
+import com.lastwave.app.ui.theme.LocalSakugaTheme
 import com.lastwave.app.ui.theme.comicPanel
+import androidx.compose.ui.layout.boundsInRoot
 import com.lastwave.app.ui.theme.rememberPageWash
 import androidx.compose.ui.draw.drawBehind
 import android.os.Build
@@ -802,6 +805,19 @@ private fun FloatingNavBar(
                 val latestSelectedIndex by androidx.compose.runtime.rememberUpdatedState(selectedIndex)
                 val latestOnSelect by androidx.compose.runtime.rememberUpdatedState(onSelect)
                 val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+                val isSakugaDock = LocalSakugaTheme.current
+                val sakugaFxDock = LocalSakugaFx.current
+                val dockTabRootBounds = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateMapOf<Int, androidx.compose.ui.geometry.Rect>() }
+                var prevSakugaTab by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(selectedIndex) }
+                androidx.compose.runtime.LaunchedEffect(selectedIndex, isSakugaDock) {
+                    if (isSakugaDock && selectedIndex != prevSakugaTab) {
+                        val dir = if (selectedIndex >= prevSakugaTab) 1f else -1f
+                        dockTabRootBounds[selectedIndex]?.let { b ->
+                            sakugaFxDock?.emitTabLand(b.center, b.width, b.height, dir)
+                        }
+                    }
+                    prevSakugaTab = selectedIndex
+                }
                 Box(Modifier.padding(4.dp)) {
                 NavSelectionPill(target = glassNavBounds[selectedIndex], backdrop = if (liquidGlass) backdrop else null)
                 Row(
@@ -846,6 +862,7 @@ private fun FloatingNavBar(
                             adaptiveUseLightInk = if (glassActive) dockUseLightInk[if (dockRtl) tabs.size - 1 - index else index] else null,
                             modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
                                 glassNavBounds[index] = coords.boundsInParent()
+                                if (coords.isAttached) dockTabRootBounds[index] = coords.boundsInRoot()
                             },
                         )
                     }

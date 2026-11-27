@@ -551,6 +551,22 @@ object SettingsSearchIndex {
             )
             add(
                 SettingsEntry(
+                    id = "appearance.sakuga_theme",
+                    title = "Anime Sakuga Theme",
+                    subtitle = "Two-tone anime cel shading, squash bounce, dust and Manga SFX",
+                    keywords = listOf(
+                        "anime", "sakuga", "vfx", "manga", "sfx", "cel", "theme"
+                    ),
+                    icon = Icons.Filled.AutoAwesome,
+                    iconContainer = { MaterialTheme.colorScheme.primaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onPrimaryContainer },
+                    parentTab = SettingsTab.APPEARANCE,
+                    section = "Appearance",
+                    type = EntryType.TOGGLE,
+                )
+            )
+            add(
+                SettingsEntry(
                     id = "appearance.refresh_rate",
                     title = "Refresh Rate",
                     subtitle = "Choose how many frames per second the app asks the screen for",
@@ -1535,6 +1551,22 @@ object SettingsSearchIndex {
                     iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
                     parentTab = SettingsTab.ABOUT,
                     section = "About & Community",
+                    type = EntryType.ACTION,
+                )
+            )
+            add(
+                SettingsEntry(
+                    id = "about.feedback",
+                    title = "Feedback & Suggestions",
+                    subtitle = "Report a bug or suggest a new feature to the developer",
+                    keywords = listOf(
+                        "feedback", "suggestion", "cadangan", "saran", "bug", "report", "idea", "developer"
+                    ),
+                    icon = Icons.Filled.AutoAwesome,
+                    iconContainer = { MaterialTheme.colorScheme.primaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onPrimaryContainer },
+                    parentTab = SettingsTab.ABOUT,
+                    section = "Links & Support",
                     type = EntryType.ACTION,
                 )
             )

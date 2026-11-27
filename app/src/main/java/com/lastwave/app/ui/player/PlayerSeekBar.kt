@@ -5,6 +5,9 @@
 
 package com.lastwave.app.ui.player
 
+import com.lastwave.app.ui.theme.LocalSakugaFx
+import com.lastwave.app.ui.theme.LocalSakugaPalette
+import com.lastwave.app.ui.theme.LocalSakugaTheme
 import com.lastwave.app.ui.theme.PlayerPalette
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.filled.CheckCircle
@@ -88,6 +91,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.layout.Arrangement
@@ -732,10 +736,31 @@ internal fun SeekBar(
     }
 
     val isComic = LocalComicTheme.current
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+    val sakugaPal = LocalSakugaPalette.current
     val isGlass = LocalLiquidGlass.current
     val isDark = LocalIsDarkTheme.current
     val comicPrimary = MaterialTheme.colorScheme.primary
     val isDraggingSeek = isInteracting || dragFraction != null
+    var seekBoxBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var prevSeekFrac by remember { mutableStateOf<Float?>(null) }
+    var prevSeekNanos by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    var seekDragVel by remember { mutableFloatStateOf(0f) }
+    var lastSeekDir by remember { mutableFloatStateOf(0f) }
+    val smoothSeekVel by animateFloatAsState(
+        targetValue = if (isSakuga && isDraggingSeek) seekDragVel else 0f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 700f),
+        label = "sakugaSeekThumbVel",
+    )
+    LaunchedEffect(isDraggingSeek) {
+        if (!isDraggingSeek) {
+            prevSeekFrac = null
+            seekDragVel = 0f
+            lastSeekDir = 0f
+        }
+    }
+    val sakugaTailPath = remember { androidx.compose.ui.graphics.Path() }
     val dropletMorph by animateFloatAsState(
         targetValue = if (isDraggingSeek) 1f else 0f,
         animationSpec = spring(dampingRatio = 0.58f, stiffness = 420f),
@@ -753,10 +778,106 @@ internal fun SeekBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (minimalStyle) 32.dp else 44.dp),
+                .height(if (minimalStyle) 32.dp else 44.dp)
+                .let { m ->
+                    if (isSakuga) {
+                        m.onGloballyPositioned { if (it.isAttached) seekBoxBounds = it.boundsInRoot() }
+                    } else m
+                },
             contentAlignment = Alignment.Center,
         ) {
-            if (wavyEnabled && !minimalStyle) WavyProgressTrack(
+            if (isSakuga) Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (minimalStyle) 32.dp else 44.dp),
+            ) {
+                val fraction = (dragFraction ?: progressFraction.floatValue).coerceIn(0f, 1f)
+                val width = size.width
+                val centerY = size.height / 2f
+                val barH = if (minimalStyle) 6.dp.toPx() else 9.dp.toPx()
+                val barRadius = CornerRadius(barH / 2f, barH / 2f)
+                val strokePx = 2.dp.toPx()
+                val shadowOff = 1.5.dp.toPx()
+                val thumbR = if (minimalStyle) {
+                    if (isDraggingSeek) 9.5.dp.toPx() else 7.dp.toPx()
+                } else {
+                    if (isDraggingSeek) 11.5.dp.toPx() else 9.dp.toPx()
+                }
+                val thumbCenterX = (fraction * width).coerceIn(thumbR, (width - thumbR).coerceAtLeast(thumbR))
+
+                drawRoundRect(
+                    color = sakugaPal.shadow,
+                    topLeft = Offset(shadowOff, centerY - barH / 2f + shadowOff),
+                    size = Size(width, barH),
+                    cornerRadius = barRadius,
+                )
+                drawRoundRect(
+                    color = inactiveColor,
+                    topLeft = Offset(0f, centerY - barH / 2f),
+                    size = Size(width, barH),
+                    cornerRadius = barRadius,
+                )
+                if (thumbCenterX > 0f) {
+                    drawRoundRect(
+                        color = comicPrimary,
+                        topLeft = Offset(0f, centerY - barH / 2f),
+                        size = Size(thumbCenterX.coerceAtMost(width), barH),
+                        cornerRadius = barRadius,
+                    )
+                }
+                drawRoundRect(
+                    color = sakugaPal.ink,
+                    topLeft = Offset(0f, centerY - barH / 2f),
+                    size = Size(width, barH),
+                    cornerRadius = barRadius,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(strokePx),
+                )
+
+                val thumbCenter = Offset(thumbCenterX, centerY)
+                val tailLen = (kotlin.math.abs(smoothSeekVel) * 18.dp.toPx()).coerceAtMost(24.dp.toPx())
+                if (tailLen < 1.2f) {
+                    drawCircle(
+                        color = sakugaPal.shadow.copy(alpha = 0.55f),
+                        radius = thumbR,
+                        center = thumbCenter + Offset(shadowOff, shadowOff),
+                    )
+                    drawCircle(color = Color.White, radius = thumbR, center = thumbCenter)
+                    drawCircle(
+                        color = sakugaPal.ink,
+                        radius = thumbR,
+                        center = thumbCenter,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(strokePx),
+                    )
+                } else {
+                    val dir = if (smoothSeekVel >= 0f) 1f else -1f
+                    val tipX = (thumbCenter.x - dir * (thumbR + tailLen)).coerceIn(0f, width)
+                    sakugaTailPath.reset()
+                    sakugaTailPath.moveTo(tipX, centerY)
+                    sakugaTailPath.quadraticTo(thumbCenter.x - dir * thumbR * 0.55f, centerY - thumbR, thumbCenter.x, centerY - thumbR)
+                    sakugaTailPath.arcTo(
+                        rect = androidx.compose.ui.geometry.Rect(
+                            thumbCenter.x - thumbR,
+                            centerY - thumbR,
+                            thumbCenter.x + thumbR,
+                            centerY + thumbR,
+                        ),
+                        startAngleDegrees = -90f,
+                        sweepAngleDegrees = dir * 180f,
+                        forceMoveTo = false,
+                    )
+                    sakugaTailPath.quadraticTo(thumbCenter.x - dir * thumbR * 0.55f, centerY + thumbR, tipX, centerY)
+                    sakugaTailPath.close()
+                    drawPath(path = sakugaTailPath, color = Color.White)
+                    drawPath(
+                        path = sakugaTailPath,
+                        color = sakugaPal.ink,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = strokePx,
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        ),
+                    )
+                }
+            } else if (wavyEnabled && !minimalStyle) WavyProgressTrack(
                 fraction = { dragFraction ?: progressFraction.floatValue },
                 isPlaying = isPlaying,
                 dragging = isInteracting || dragFraction != null,
@@ -935,9 +1056,52 @@ internal fun SeekBar(
                     scrubHaptics.onScrub(it)
                     dragFraction = it
                     lastSeekFraction = it
+                    if (isSakuga) {
+                        val now = SystemClock.elapsedRealtimeNanos()
+                        val old = prevSeekFrac
+                        if (old == null) {
+                            prevSeekFrac = it
+                            prevSeekNanos = now
+                            seekDragVel = 0f
+                            lastSeekDir = 0f
+                        } else {
+                            val dtSec = ((now - prevSeekNanos) / 1_000_000_000f).coerceAtLeast(0.004f)
+                            val delta = it - old
+                            if (kotlin.math.abs(delta) > 0.0004f) {
+                                val instVel = (delta / dtSec / 1.8f).coerceIn(-1f, 1f)
+                                seekDragVel = (seekDragVel * 0.45f + instVel * 0.55f).coerceIn(-1f, 1f)
+                                lastSeekDir = kotlin.math.sign(seekDragVel)
+                                if (kotlin.math.abs(seekDragVel) > 0.14f) {
+                                    seekBoxBounds?.let { b ->
+                                        val cx = b.left + (it.coerceIn(0f, 1f) * b.width)
+                                        sakugaFx?.emitSliderCloud(
+                                            Offset(cx, b.center.y),
+                                            kotlin.math.sign(seekDragVel),
+                                            kotlin.math.abs(seekDragVel),
+                                        )
+                                    }
+                                }
+                            }
+                            prevSeekFrac = it
+                            prevSeekNanos = now
+                        }
+                    }
                 },
                 onValueChangeFinished = {
                     scrubHaptics.onRelease()
+                    val releaseFrac = lastSeekFraction ?: dragFraction ?: prevSeekFrac
+                    if (isSakuga && (kotlin.math.abs(seekDragVel) > 0.12f || lastSeekDir != 0f)) {
+                        seekBoxBounds?.let { b ->
+                            val cx = b.left + ((releaseFrac ?: 0.5f).coerceIn(0f, 1f) * b.width)
+                            sakugaFx?.emitSliderRelease(
+                                Offset(cx, b.center.y),
+                                if (lastSeekDir != 0f) lastSeekDir else 1f,
+                            )
+                        }
+                    }
+                    prevSeekFrac = null
+                    seekDragVel = 0f
+                    lastSeekDir = 0f
                     // Commit only this gesture's value; no value = no seek.
                     val target = (lastSeekFraction ?: dragFraction)?.let {
                         (it * boundedDurationMs).toLong().coerceIn(0L, boundedDurationMs)

@@ -274,6 +274,87 @@ object Md3SchemeBuilder {
         scrim = Color.Black,
     ).withPrimaryOf(accent)
 
+    /**
+     * Anime Sakuga, dark ("Midnight Cel"): deep anime indigo (or AMOLED black), crisp lavender-white
+     * ink outlines, periwinkle primary, and hot pink accents. When [accent] is supplied, only the
+     * primary roles change so user-selected accents tint the entire Sakuga UI cleanly.
+     */
+    fun buildSakugaDarkScheme(accent: ColorScheme? = null, amoled: Boolean = false): ColorScheme = darkColorScheme(
+        primary = Color(0xFF9895FF),
+        onPrimary = Color(0xFF14112B),
+        primaryContainer = Color(0xFF3D3688),
+        onPrimaryContainer = Color(0xFFF2F0FF),
+        secondary = Color(0xFFFF5FA8),
+        onSecondary = Color(0xFF14112B),
+        secondaryContainer = Color(0xFF5A224B),
+        onSecondaryContainer = Color(0xFFFFD9EA),
+        tertiary = Color(0xFFB8B3FF),
+        onTertiary = Color(0xFF14112B),
+        tertiaryContainer = Color(0xFF2F2969),
+        onTertiaryContainer = Color(0xFFF2F0FF),
+        error = Color(0xFFFF6B8B),
+        onError = Color(0xFF14112B),
+        errorContainer = Color(0xFF6B1B36),
+        onErrorContainer = Color(0xFFFFD9E3),
+        background = if (amoled) Color.Black else Color(0xFF14112B),
+        onBackground = Color(0xFFECEAFF),
+        surface = if (amoled) Color.Black else Color(0xFF14112B),
+        onSurface = Color(0xFFECEAFF),
+        surfaceContainerLowest = if (amoled) Color.Black else Color(0xFF0E0C1F),
+        surfaceContainerLow = if (amoled) Color(0xFF0C0A18) else Color(0xFF1D193B),
+        surfaceContainer = if (amoled) Color(0xFF131026) else Color(0xFF211C44),
+        surfaceContainerHigh = if (amoled) Color(0xFF1B1734) else Color(0xFF292354),
+        surfaceContainerHighest = if (amoled) Color(0xFF241F45) else Color(0xFF332C66),
+        surfaceVariant = Color(0xFF2A2454),
+        onSurfaceVariant = Color(0xFFB0AADE),
+        outline = Color(0xFFECEAFF),
+        outlineVariant = Color(0xFF5A4FD8),
+        inverseSurface = Color(0xFFF6F5FF),
+        inverseOnSurface = Color(0xFF1D1A4A),
+        inversePrimary = Color(0xFF5A4FD8),
+        scrim = Color.Black,
+    ).withPrimaryOf(accent)
+
+    /**
+     * Anime Sakuga, light ("Paper & Ink"): crisp white paper, deep indigo ink outlines,
+     * periwinkle primary, and hot pink accents from finktheartist/sakuga-vfx.
+     */
+    fun buildSakugaLightScheme(accent: ColorScheme? = null): ColorScheme = androidx.compose.material3.lightColorScheme(
+        primary = Color(0xFF6965E8),
+        onPrimary = Color.White,
+        primaryContainer = Color(0xFF8F8DF7),
+        onPrimaryContainer = Color(0xFF1D1A4A),
+        secondary = Color(0xFFE8438E),
+        onSecondary = Color.White,
+        secondaryContainer = Color(0xFFFFD8EA),
+        onSecondaryContainer = Color(0xFF4A0D2A),
+        tertiary = Color(0xFF5A4FD8),
+        onTertiary = Color.White,
+        tertiaryContainer = Color(0xFFB8B3FF),
+        onTertiaryContainer = Color(0xFF1D1A4A),
+        error = Color(0xFFD62865),
+        onError = Color.White,
+        errorContainer = Color(0xFFFFD9E3),
+        onErrorContainer = Color(0xFF4A0D22),
+        background = Color(0xFFF6F5FF),
+        onBackground = Color(0xFF1D1A4A),
+        surface = Color(0xFFF6F5FF),
+        onSurface = Color(0xFF1D1A4A),
+        surfaceContainerLowest = Color.White,
+        surfaceContainerLow = Color.White,
+        surfaceContainer = Color.White,
+        surfaceContainerHigh = Color.White,
+        surfaceContainerHighest = Color(0xFFECEAFF),
+        surfaceVariant = Color(0xFFEDEBFF),
+        onSurfaceVariant = Color(0xFF6B6596),
+        outline = Color(0xFF1D1A4A),
+        outlineVariant = Color(0xFFB8B3FF),
+        inverseSurface = Color(0xFF1D1A4A),
+        inverseOnSurface = Color.White,
+        inversePrimary = Color(0xFF9895FF),
+        scrim = Color.Black,
+    ).withPrimaryOf(accent)
+
     /** Paper, ink and the other spot colours stay Comic Pop; only the accent role changes. */
     private fun ColorScheme.withPrimaryOf(accent: ColorScheme?): ColorScheme = if (accent == null) this else copy(
         primary = accent.primary,

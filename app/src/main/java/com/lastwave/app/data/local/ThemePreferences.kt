@@ -19,7 +19,8 @@ enum class AccentMode(val storageValue: String) {
     MANUAL("manual"),
     DYNAMIC("dynamic"),
     MONOCHROME("monochrome"),
-    COMIC("comic");
+    COMIC("comic"),
+    SAKUGA("sakuga");
 
     companion object {
         fun fromStorage(value: String?): AccentMode =
@@ -61,6 +62,10 @@ data class ThemePrefs(
     /** Comic Pop skin (ink, halftone, flat panels). Independent of [accentMode] so a user can
      *  keep the skin and pick their own accent; [AccentMode.COMIC] is the skin's own palette. */
     val comicTheme: Boolean = false,
+    /** Anime Sakuga cel-shaded skin with spring squash & Canvas VFX; [AccentMode.SAKUGA] is its own palette. */
+    val sakugaTheme: Boolean = false,
+    /** Whether Japanese katakana SFX (ドン!, カチッ, ズザッ) appear on Sakuga VFX reactions. */
+    val sakugaMangaSfx: Boolean = true,
     val appIcon: AppIcon = AppIcon.DEFAULT,
 )
 
@@ -88,6 +93,11 @@ class ThemePreferences @Inject constructor(
         val NORMAL_ACCENT_MODE = stringPreferencesKey("lw_normal_accentMode")
         val NORMAL_ACCENT_COLOR = stringPreferencesKey("lw_normal_accent")
         val NORMAL_ACCENT_LIGHT = stringPreferencesKey("lw_normal_accentLight")
+        val SAKUGA_THEME = booleanPreferencesKey("lw_sakuga_theme")
+        val SAKUGA_MANGA_SFX = booleanPreferencesKey("lw_sakuga_manga_sfx")
+        val SAKUGA_ACCENT_MODE = stringPreferencesKey("lw_sakuga_accentMode")
+        val SAKUGA_ACCENT_COLOR = stringPreferencesKey("lw_sakuga_accent")
+        val SAKUGA_ACCENT_LIGHT = stringPreferencesKey("lw_sakuga_accentLight")
         val APP_ICON = stringPreferencesKey("lw_app_icon")
         val LIGHT_DYNAMIC_DEFAULTED = booleanPreferencesKey("lw_light_dynamic_defaulted")
     }
@@ -96,6 +106,7 @@ class ThemePreferences @Inject constructor(
         .recoverPreferences("ThemePreferences")
         .map { p ->
             val accentMode = AccentMode.fromStorage(p.readSafely(Keys.ACCENT_MODE))
+            val sakuga = p.readSafely(Keys.SAKUGA_THEME) ?: false
             ThemePrefs(
                 themeMode = ThemeMode.fromStorage(p.readSafely(Keys.THEME_MODE)),
                 accentColor = p.readSafely(Keys.ACCENT_COLOR) ?: "#E03030",
@@ -110,7 +121,9 @@ class ThemePreferences @Inject constructor(
                 refreshRate = p.readSafely(Keys.REFRESH_RATE) ?: 0,
                 lastWaveTheme = p.readSafely(Keys.LASTWAVE_THEME) ?: false,
                 // Before the skin had its own key, Comic Pop was only an accent mode.
-                comicTheme = p.readSafely(Keys.COMIC_THEME) ?: (accentMode == AccentMode.COMIC),
+                comicTheme = if (sakuga) false else (p.readSafely(Keys.COMIC_THEME) ?: (accentMode == AccentMode.COMIC)),
+                sakugaTheme = sakuga,
+                sakugaMangaSfx = p.readSafely(Keys.SAKUGA_MANGA_SFX) ?: true,
                 appIcon = AppIcon.fromId(p.readSafely(Keys.APP_ICON)),
             )
         }
@@ -125,14 +138,22 @@ class ThemePreferences @Inject constructor(
             it[Keys.ACCENT_LIGHT] = light
             it[Keys.ACCENT_MODE] = AccentMode.MANUAL.storageValue
             it[Keys.LASTWAVE_THEME] = false
-            if (it[Keys.COMIC_THEME] == true) {
-                it[Keys.COMIC_ACCENT_MODE] = AccentMode.MANUAL.storageValue
-                it[Keys.COMIC_ACCENT_COLOR] = color
-                it[Keys.COMIC_ACCENT_LIGHT] = light
-            } else {
-                it[Keys.NORMAL_ACCENT_MODE] = AccentMode.MANUAL.storageValue
-                it[Keys.NORMAL_ACCENT_COLOR] = color
-                it[Keys.NORMAL_ACCENT_LIGHT] = light
+            when {
+                it[Keys.SAKUGA_THEME] == true -> {
+                    it[Keys.SAKUGA_ACCENT_MODE] = AccentMode.MANUAL.storageValue
+                    it[Keys.SAKUGA_ACCENT_COLOR] = color
+                    it[Keys.SAKUGA_ACCENT_LIGHT] = light
+                }
+                it[Keys.COMIC_THEME] == true -> {
+                    it[Keys.COMIC_ACCENT_MODE] = AccentMode.MANUAL.storageValue
+                    it[Keys.COMIC_ACCENT_COLOR] = color
+                    it[Keys.COMIC_ACCENT_LIGHT] = light
+                }
+                else -> {
+                    it[Keys.NORMAL_ACCENT_MODE] = AccentMode.MANUAL.storageValue
+                    it[Keys.NORMAL_ACCENT_COLOR] = color
+                    it[Keys.NORMAL_ACCENT_LIGHT] = light
+                }
             }
         }
     }
@@ -143,10 +164,10 @@ class ThemePreferences @Inject constructor(
             if (mode != AccentMode.MANUAL) {
                 it[Keys.LASTWAVE_THEME] = false
             }
-            if (it[Keys.COMIC_THEME] == true) {
-                it[Keys.COMIC_ACCENT_MODE] = mode.storageValue
-            } else {
-                it[Keys.NORMAL_ACCENT_MODE] = mode.storageValue
+            when {
+                it[Keys.SAKUGA_THEME] == true -> it[Keys.SAKUGA_ACCENT_MODE] = mode.storageValue
+                it[Keys.COMIC_THEME] == true -> it[Keys.COMIC_ACCENT_MODE] = mode.storageValue
+                else -> it[Keys.NORMAL_ACCENT_MODE] = mode.storageValue
             }
         }
     }
@@ -158,10 +179,16 @@ class ThemePreferences @Inject constructor(
     suspend fun setComicTheme(enabled: Boolean) {
         dataStore.edit {
             val wasComic = it[Keys.COMIC_THEME] == true
+            val wasSakuga = it[Keys.SAKUGA_THEME] == true
             val currentMode = AccentMode.fromStorage(it[Keys.ACCENT_MODE])
             it[Keys.COMIC_THEME] = enabled
             if (enabled) {
-                if (!wasComic && currentMode != AccentMode.COMIC) {
+                if (wasSakuga) {
+                    it[Keys.SAKUGA_ACCENT_MODE] = currentMode.storageValue
+                    it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.SAKUGA_ACCENT_COLOR] = c }
+                    it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.SAKUGA_ACCENT_LIGHT] = l }
+                    it[Keys.SAKUGA_THEME] = false
+                } else if (!wasComic && currentMode != AccentMode.COMIC && currentMode != AccentMode.SAKUGA) {
                     it[Keys.NORMAL_ACCENT_MODE] = currentMode.storageValue
                     it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.NORMAL_ACCENT_COLOR] = c }
                     it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.NORMAL_ACCENT_LIGHT] = l }
@@ -180,7 +207,7 @@ class ThemePreferences @Inject constructor(
                     it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.COMIC_ACCENT_LIGHT] = l }
                 }
                 val savedNormalMode = it[Keys.NORMAL_ACCENT_MODE]?.let(AccentMode::fromStorage)
-                if (savedNormalMode != null && savedNormalMode != AccentMode.COMIC) {
+                if (savedNormalMode != null && savedNormalMode != AccentMode.COMIC && savedNormalMode != AccentMode.SAKUGA) {
                     it[Keys.ACCENT_MODE] = savedNormalMode.storageValue
                     if (savedNormalMode == AccentMode.MANUAL) {
                         it[Keys.NORMAL_ACCENT_COLOR]?.let { c -> it[Keys.ACCENT_COLOR] = c }
@@ -191,6 +218,58 @@ class ThemePreferences @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Toggles the Anime Sakuga skin while keeping its chosen accent separate from Comic Pop
+     * and the standard glass/Material themes.
+     */
+    suspend fun setSakugaTheme(enabled: Boolean) {
+        dataStore.edit {
+            val wasSakuga = it[Keys.SAKUGA_THEME] == true
+            val wasComic = it[Keys.COMIC_THEME] == true
+            val currentMode = AccentMode.fromStorage(it[Keys.ACCENT_MODE])
+            it[Keys.SAKUGA_THEME] = enabled
+            if (enabled) {
+                if (wasComic) {
+                    it[Keys.COMIC_ACCENT_MODE] = currentMode.storageValue
+                    it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.COMIC_ACCENT_COLOR] = c }
+                    it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.COMIC_ACCENT_LIGHT] = l }
+                    it[Keys.COMIC_THEME] = false
+                } else if (!wasSakuga && currentMode != AccentMode.SAKUGA && currentMode != AccentMode.COMIC) {
+                    it[Keys.NORMAL_ACCENT_MODE] = currentMode.storageValue
+                    it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.NORMAL_ACCENT_COLOR] = c }
+                    it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.NORMAL_ACCENT_LIGHT] = l }
+                }
+                val savedSakugaMode = it[Keys.SAKUGA_ACCENT_MODE]?.let(AccentMode::fromStorage) ?: AccentMode.SAKUGA
+                it[Keys.ACCENT_MODE] = savedSakugaMode.storageValue
+                if (savedSakugaMode == AccentMode.MANUAL) {
+                    it[Keys.SAKUGA_ACCENT_COLOR]?.let { c -> it[Keys.ACCENT_COLOR] = c }
+                    it[Keys.SAKUGA_ACCENT_LIGHT]?.let { l -> it[Keys.ACCENT_LIGHT] = l }
+                }
+                it[Keys.LASTWAVE_THEME] = false
+            } else {
+                if (wasSakuga) {
+                    it[Keys.SAKUGA_ACCENT_MODE] = currentMode.storageValue
+                    it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.SAKUGA_ACCENT_COLOR] = c }
+                    it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.SAKUGA_ACCENT_LIGHT] = l }
+                }
+                val savedNormalMode = it[Keys.NORMAL_ACCENT_MODE]?.let(AccentMode::fromStorage)
+                if (savedNormalMode != null && savedNormalMode != AccentMode.SAKUGA && savedNormalMode != AccentMode.COMIC) {
+                    it[Keys.ACCENT_MODE] = savedNormalMode.storageValue
+                    if (savedNormalMode == AccentMode.MANUAL) {
+                        it[Keys.NORMAL_ACCENT_COLOR]?.let { c -> it[Keys.ACCENT_COLOR] = c }
+                        it[Keys.NORMAL_ACCENT_LIGHT]?.let { l -> it[Keys.ACCENT_LIGHT] = l }
+                    }
+                } else if (currentMode == AccentMode.SAKUGA) {
+                    it[Keys.ACCENT_MODE] = AccentMode.DYNAMIC.storageValue
+                }
+            }
+        }
+    }
+
+    suspend fun setSakugaMangaSfx(enabled: Boolean) {
+        dataStore.edit { it[Keys.SAKUGA_MANGA_SFX] = enabled }
     }
 
     suspend fun setAmoled(enabled: Boolean) {
@@ -228,9 +307,15 @@ class ThemePreferences @Inject constructor(
                 it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.COMIC_ACCENT_COLOR] = c }
                 it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.COMIC_ACCENT_LIGHT] = l }
             }
+            if (enabled && it[Keys.SAKUGA_THEME] == true) {
+                it[Keys.SAKUGA_ACCENT_MODE] = AccentMode.fromStorage(it[Keys.ACCENT_MODE]).storageValue
+                it[Keys.ACCENT_COLOR]?.let { c -> it[Keys.SAKUGA_ACCENT_COLOR] = c }
+                it[Keys.ACCENT_LIGHT]?.let { l -> it[Keys.SAKUGA_ACCENT_LIGHT] = l }
+            }
             it[Keys.LASTWAVE_THEME] = enabled
             if (enabled) {
                 it[Keys.COMIC_THEME] = false
+                it[Keys.SAKUGA_THEME] = false
                 it[Keys.ACCENT_COLOR] = "#C9FB00"
                 it[Keys.ACCENT_LIGHT] = "#C9FB00"
                 it[Keys.ACCENT_MODE] = AccentMode.MANUAL.storageValue

@@ -11,6 +11,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,8 +45,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
@@ -57,6 +65,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import com.lastwave.app.ui.theme.sakugaTypingInput
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -99,10 +108,14 @@ import com.lastwave.app.data.update.BroadcastMessage
 import com.lastwave.app.data.update.BroadcastType
 import com.lastwave.app.data.update.DailyActivePoint
 import com.lastwave.app.data.update.DevLockState
+import com.lastwave.app.data.update.DeveloperFeedbackSnapshot
 import com.lastwave.app.data.update.DeveloperStatsSnapshot
+import com.lastwave.app.data.update.FeedbackCategory
 import com.lastwave.app.data.update.GitHubReleaseStats
 import com.lastwave.app.data.update.StatBucket
+import com.lastwave.app.data.update.UserFeedbackItem
 import com.lastwave.app.data.update.formatBroadcastDate
+import com.lastwave.app.ui.player.LocalMiniPlayerScrollClearance
 import com.lastwave.app.ui.comic.AlertDialog
 import com.lastwave.app.ui.comic.Button
 import com.lastwave.app.ui.comic.FilterChip
@@ -149,6 +162,9 @@ internal data class DeveloperConsoleUiState(
     val stats: DeveloperStatsSnapshot? = null,
     val isLoadingStats: Boolean = false,
     val pingFeedback: String? = null,
+    val feedback: DeveloperFeedbackSnapshot? = null,
+    val isLoadingFeedback: Boolean = false,
+    val feedbackBusyId: Long? = null,
 )
 
 @HiltViewModel
@@ -197,6 +213,9 @@ class DeveloperConsoleViewModel @Inject constructor(
                 stats = null,
                 isLoadingStats = false,
                 pingFeedback = null,
+                feedback = null,
+                isLoadingFeedback = false,
+                feedbackBusyId = null,
                 authError = null,
                 lockState = manager.getDevLockState(),
             )
@@ -246,6 +265,9 @@ class DeveloperConsoleViewModel @Inject constructor(
                 stats = null,
                 isLoadingStats = false,
                 pingFeedback = null,
+                feedback = null,
+                isLoadingFeedback = false,
+                feedbackBusyId = null,
                 authError = null,
                 broadcastStatus = null,
                 broadcastStatusIsError = false,
@@ -264,6 +286,7 @@ class DeveloperConsoleViewModel @Inject constructor(
             }
         }
         refreshStats()
+        refreshFeedback()
     }
 
     fun refreshStats() {
@@ -273,6 +296,79 @@ class DeveloperConsoleViewModel @Inject constructor(
             val snapshot = statsManager.fetchDeveloperStats()
             if (_uiState.value.isUnlocked) {
                 _uiState.update { it.copy(stats = snapshot, isLoadingStats = false) }
+            }
+        }
+    }
+
+    fun refreshFeedback() {
+        if (!_uiState.value.isUnlocked) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingFeedback = true) }
+            val snapshot = statsManager.fetchDeveloperFeedback()
+            if (_uiState.value.isUnlocked) {
+                _uiState.update { it.copy(feedback = snapshot, isLoadingFeedback = false) }
+            }
+        }
+    }
+
+    fun toggleFeedbackResolved(item: UserFeedbackItem) {
+        if (!_uiState.value.isUnlocked) return
+        val nextResolved = !item.isResolved
+        viewModelScope.launch {
+            _uiState.update { it.copy(feedbackBusyId = item.id) }
+            val res = statsManager.setFeedbackResolved(item.id, nextResolved)
+            if (_uiState.value.isUnlocked) {
+                res.onSuccess {
+                    _uiState.update { state ->
+                        val snap = state.feedback
+                        if (snap == null) state.copy(feedbackBusyId = null)
+                        else {
+                            val updatedItems = snap.items.map { row ->
+                                if (row.id == item.id) {
+                                    row.copy(status = if (nextResolved) "resolved" else "new")
+                                } else row
+                            }
+                            state.copy(
+                                feedbackBusyId = null,
+                                feedback = snap.copy(
+                                    items = updatedItems,
+                                    unreadCount = updatedItems.count { !it.isResolved },
+                                ),
+                            )
+                        }
+                    }
+                }.onFailure {
+                    _uiState.update { it.copy(feedbackBusyId = null) }
+                }
+            }
+        }
+    }
+
+    fun deleteFeedback(id: Long) {
+        if (!_uiState.value.isUnlocked) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(feedbackBusyId = id) }
+            val res = statsManager.deleteFeedback(id)
+            if (_uiState.value.isUnlocked) {
+                res.onSuccess {
+                    _uiState.update { state ->
+                        val snap = state.feedback
+                        if (snap == null) state.copy(feedbackBusyId = null)
+                        else {
+                            val updatedItems = snap.items.filterNot { it.id == id }
+                            state.copy(
+                                feedbackBusyId = null,
+                                feedback = snap.copy(
+                                    items = updatedItems,
+                                    unreadCount = updatedItems.count { !it.isResolved },
+                                    totalCount = (snap.totalCount - 1).coerceAtLeast(updatedItems.size),
+                                ),
+                            )
+                        }
+                    }
+                }.onFailure {
+                    _uiState.update { it.copy(feedbackBusyId = null) }
+                }
             }
         }
     }
@@ -542,6 +638,7 @@ fun DeveloperConsoleScreen(
     }
 
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomScrollClearance = navBottom + LocalMiniPlayerScrollClearance.current
 
     Box(
         modifier = Modifier
@@ -569,7 +666,7 @@ fun DeveloperConsoleScreen(
                         unlockAtWallMs = lock.unlockAtWallMs,
                         onExpired = viewModel::refreshLockState,
                         topInset = headerInset,
-                        bottomInset = navBottom,
+                        bottomInset = bottomScrollClearance,
                         isComic = isComic,
                     )
                     is DevLockState.Open -> {
@@ -582,7 +679,7 @@ fun DeveloperConsoleScreen(
                                     showPatLogin = true
                                 },
                                 topInset = headerInset,
-                                bottomInset = navBottom,
+                                bottomInset = bottomScrollClearance,
                                 isComic = isComic,
                             )
                         } else {
@@ -611,7 +708,7 @@ fun DeveloperConsoleScreen(
                                     null
                                 },
                                 topInset = headerInset,
-                                bottomInset = navBottom,
+                                bottomInset = bottomScrollClearance,
                                 isComic = isComic,
                             )
                         }
@@ -623,12 +720,15 @@ fun DeveloperConsoleScreen(
             UnlockedConsoleContent(
                 ui = ui,
                 isComic = isComic,
-                navBottom = navBottom,
+                bottomClearance = bottomScrollClearance,
                 onBack = onBack,
                 onRefresh = viewModel::refreshAll,
                 onLockNow = viewModel::lockSession,
                 onTestPing = viewModel::sendTestPing,
                 onHoldMetric = { activeMetricHelp = it },
+                onRefreshFeedback = viewModel::refreshFeedback,
+                onToggleFeedbackResolved = viewModel::toggleFeedbackResolved,
+                onDeleteFeedback = viewModel::deleteFeedback,
                 onCloseBroadcast = viewModel::closeBroadcast,
                 onSendBroadcast = viewModel::sendBroadcast,
                 onPreviewBroadcast = { previewMessage = it },
@@ -866,6 +966,7 @@ private fun PatLoginContent(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                val patTextStyle = androidx.compose.material3.LocalTextStyle.current
                 OutlinedTextField(
                     value = tokenInput,
                     onValueChange = { tokenInput = it },
@@ -905,7 +1006,14 @@ private fun PatLoginContent(
                             }
                         }
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .sakugaTypingInput(
+                            text = tokenInput,
+                            textStyle = patTextStyle,
+                            isPassword = !revealToken,
+                            leadingPadding = 16.dp,
+                        ),
                 )
 
                 val noticeText = when {
@@ -1000,12 +1108,15 @@ private fun PatLoginContent(
 private fun UnlockedConsoleContent(
     ui: DeveloperConsoleUiState,
     isComic: Boolean,
-    navBottom: androidx.compose.ui.unit.Dp,
+    bottomClearance: androidx.compose.ui.unit.Dp,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onLockNow: () -> Unit,
     onTestPing: () -> Unit,
     onHoldMetric: (DevMetricInfo) -> Unit,
+    onRefreshFeedback: () -> Unit,
+    onToggleFeedbackResolved: (UserFeedbackItem) -> Unit,
+    onDeleteFeedback: (Long) -> Unit,
     onCloseBroadcast: (Int) -> Unit,
     onSendBroadcast: (
         title: String,
@@ -1021,6 +1132,7 @@ private fun UnlockedConsoleContent(
     onRequestSignOut: () -> Unit,
 ) {
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    var inboxFilterIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedType by rememberSaveable { mutableStateOf(BroadcastType.INFO) }
     var title by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("") }
@@ -1029,9 +1141,15 @@ private fun UnlockedConsoleContent(
     var actionUrl by rememberSaveable { mutableStateOf("") }
     var notify by rememberSaveable { mutableStateOf(true) }
 
-    val tabItems = remember {
+    val statsListState = rememberLazyListState()
+    val inboxListState = rememberLazyListState()
+    val broadcastListState = rememberLazyListState()
+
+    val unreadCount = ui.feedback?.unreadCount ?: 0
+    val tabItems = remember(unreadCount) {
         listOf(
-            ConnectedButtonItem(label = "Stats"),
+            ConnectedButtonItem(label = "Ringkasan"),
+            ConnectedButtonItem(label = if (unreadCount > 0) "Inbox ($unreadCount)" else "Inbox"),
             ConnectedButtonItem(label = "Broadcast"),
         )
     }
@@ -1042,193 +1160,538 @@ private fun UnlockedConsoleContent(
             .adaptiveContentWidth(maxWidth = 720.dp)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         header = { headerModifier, headerBackdrop ->
-            ExpressiveHeader(
-                modifier = headerModifier,
-                backdrop = headerBackdrop,
-                title = "Developer",
-                onBack = onBack,
-                actions = {
-                    HeaderActionIcon(
-                        icon = Icons.Filled.Refresh,
-                        contentDescription = "Muat semula",
-                        onClick = onRefresh,
+            Column(
+                modifier = headerModifier.then(
+                    if (headerBackdrop == null) {
+                        Modifier.background(MaterialTheme.colorScheme.background)
+                    } else Modifier,
+                ),
+            ) {
+                ExpressiveHeader(
+                    backdrop = headerBackdrop,
+                    title = "Developer",
+                    onBack = onBack,
+                    actions = {
+                        HeaderActionIcon(
+                            icon = Icons.Filled.Refresh,
+                            contentDescription = "Muat semula",
+                            onClick = onRefresh,
+                        )
+                        HeaderActionIcon(
+                            icon = Icons.Filled.Lock,
+                            contentDescription = "Kunci konsol",
+                            onClick = onLockNow,
+                        )
+                    },
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
+                ) {
+                    ConnectedButtonGroup(
+                        items = tabItems,
+                        selectedIndex = selectedTabIndex,
+                        onSelect = { selectedTabIndex = it },
                     )
-                    HeaderActionIcon(
-                        icon = Icons.Filled.Lock,
-                        contentDescription = "Kunci konsol",
-                        onClick = onLockNow,
-                    )
-                },
-            )
+                }
+            }
         },
     ) { headerInset ->
+        val listState = when (selectedTabIndex) {
+            0 -> statsListState
+            1 -> inboxListState
+            else -> broadcastListState
+        }
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding(),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = headerInset + 12.dp,
-                bottom = 32.dp + navBottom,
+                top = headerInset + 10.dp,
+                bottom = 32.dp + bottomClearance,
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item(key = "dev_tab_switcher") {
-                ConnectedButtonGroup(
-                    items = tabItems,
-                    selectedIndex = selectedTabIndex,
-                    onSelect = { selectedTabIndex = it },
-                )
-            }
-
-            if (selectedTabIndex == 0) {
-                item(key = "stats_hero") {
-                    StatsHeroSection(
-                        ui = ui,
-                        isComic = isComic,
-                        onHoldMetric = onHoldMetric,
-                        onTestPing = onTestPing,
-                        onRetry = onRefresh,
-                    )
-                }
-
-                val live = ui.stats?.liveStats
-                if (live != null && live.dailyTrend14d.isNotEmpty()) {
-                    item(key = "stats_trend") {
-                        StatsTrendSection(
-                            points = live.dailyTrend14d,
+            when (selectedTabIndex) {
+                0 -> {
+                    item(key = "stats_hero") {
+                        StatsHeroSection(
+                            ui = ui,
                             isComic = isComic,
+                            onHoldMetric = onHoldMetric,
+                            onTestPing = onTestPing,
+                            onRetry = onRefresh,
+                        )
+                    }
+
+                    val live = ui.stats?.liveStats
+                    if (live != null && live.dailyTrend14d.isNotEmpty()) {
+                        item(key = "stats_trend") {
+                            StatsTrendSection(
+                                points = live.dailyTrend14d,
+                                isComic = isComic,
+                            )
+                        }
+                    }
+
+                    if (live != null && live.byVersion.isNotEmpty()) {
+                        item(key = "stats_versions") {
+                            AppVersionsSection(
+                                buckets = live.byVersion.take(6),
+                                isComic = isComic,
+                            )
+                        }
+                    }
+
+                    if (live != null && (live.byCountry.isNotEmpty() || live.byAndroid.isNotEmpty())) {
+                        item(key = "stats_regions_android") {
+                            RegionsAndAndroidSection(
+                                countries = live.byCountry,
+                                androids = live.byAndroid,
+                                isComic = isComic,
+                            )
+                        }
+                    }
+
+                    item(key = "stats_github") {
+                        GitHubReleasesSection(
+                            gh = ui.stats?.githubStats,
+                            githubError = ui.stats?.githubError,
+                            isLoading = ui.isLoadingStats,
+                            isComic = isComic,
+                        )
+                    }
+
+                    val fetchedAt = ui.stats?.fetchedAtMs ?: 0L
+                    if (fetchedAt > 0L || !ui.pingFeedback.isNullOrBlank()) {
+                        item(key = "stats_footer") {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                ui.pingFeedback?.let { feedback ->
+                                    Text(
+                                        text = feedback,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                }
+                                if (fetchedAt > 0L) {
+                                    Text(
+                                        text = "Dikemas kini ${formatClockTime(fetchedAt)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item(key = "stats_session_strip") {
+                        SessionSecurityStrip(
+                            ownerLogin = ui.ownerLogin ?: "aayepp",
+                            isComic = isComic,
+                            onSignOut = onRequestSignOut,
                         )
                     }
                 }
 
-                if (live != null && live.byVersion.isNotEmpty()) {
-                    item(key = "stats_versions") {
-                        AppVersionsSection(
-                            buckets = live.byVersion.take(6),
-                            isComic = isComic,
-                        )
+                1 -> {
+                    val snap = ui.feedback
+                    val allItems = snap?.items.orEmpty()
+                    val filtered = when (inboxFilterIndex) {
+                        1 -> allItems.filter { !it.isResolved }
+                        2 -> allItems.filter { it.category == FeedbackCategory.BUG }
+                        3 -> allItems.filter { it.category == FeedbackCategory.SUGGESTION }
+                        4 -> allItems.filter { it.category == FeedbackCategory.FEEDBACK }
+                        else -> allItems
                     }
-                }
 
-                if (live != null && (live.byCountry.isNotEmpty() || live.byAndroid.isNotEmpty())) {
-                    item(key = "stats_regions_android") {
-                        RegionsAndAndroidSection(
-                            countries = live.byCountry,
-                            androids = live.byAndroid,
-                            isComic = isComic,
-                        )
-                    }
-                }
-
-                item(key = "stats_github") {
-                    GitHubReleasesSection(
-                        gh = ui.stats?.githubStats,
-                        githubError = ui.stats?.githubError,
-                        isLoading = ui.isLoadingStats,
-                        isComic = isComic,
-                    )
-                }
-
-                val fetchedAt = ui.stats?.fetchedAtMs ?: 0L
-                if (fetchedAt > 0L || !ui.pingFeedback.isNullOrBlank()) {
-                    item(key = "stats_footer") {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            ui.pingFeedback?.let { feedback ->
-                                Text(
-                                    text = feedback,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Medium,
+                    item(key = "inbox_filters") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            val chips = listOf(
+                                "Semua (${allItems.size})",
+                                "Baru ($unreadCount)",
+                                "Bug",
+                                "Cadangan",
+                                "Feedback",
+                            )
+                            chips.forEachIndexed { idx, label ->
+                                val selected = inboxFilterIndex == idx
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { inboxFilterIndex = idx },
+                                    label = {
+                                        Text(
+                                            text = label,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        )
+                                    },
+                                    shape = CircleShape,
                                 )
                             }
-                            if (fetchedAt > 0L) {
-                                Text(
-                                    text = "Dikemas kini ${formatClockTime(fetchedAt)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        }
+                    }
+
+                    when {
+                        ui.isLoadingFeedback && snap == null -> {
+                            item(key = "inbox_loading") {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
+                                    border = devCardBorder(isComic),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 32.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.5.dp)
+                                    }
+                                }
+                            }
+                        }
+                        snap?.error != null && allItems.isEmpty() -> {
+                            item(key = "inbox_error") {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
+                                    border = devCardBorder(isComic),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = snap.error,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                        TextButton(onClick = onRefreshFeedback) {
+                                            Text("Cuba lagi")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        filtered.isEmpty() -> {
+                            item(key = "inbox_empty") {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
+                                    border = devCardBorder(isComic),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.ChatBubbleOutline,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(28.dp),
+                                        )
+                                        Text(
+                                            text = "Tiada mesej dalam kategori ini",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            items(filtered, key = { "fb_${it.id}" }) { item ->
+                                InboxFeedbackCard(
+                                    item = item,
+                                    isComic = isComic,
+                                    isBusy = ui.feedbackBusyId == item.id,
+                                    onToggleResolved = { onToggleFeedbackResolved(item) },
+                                    onDelete = { onDeleteFeedback(item.id) },
                                 )
                             }
                         }
                     }
                 }
-            } else {
-                item(key = "broadcast_active") {
-                    ActiveBroadcastsSection(
-                        openBroadcasts = ui.openBroadcasts,
-                        isBusy = ui.isBusy,
-                        isComic = isComic,
-                        onCloseBroadcast = onCloseBroadcast,
-                    )
-                }
 
-                item(key = "broadcast_composer") {
-                    NewBroadcastSection(
-                        selectedType = selectedType,
-                        onSelectType = { selectedType = it },
-                        title = title,
-                        onTitleChange = { title = it },
-                        message = message,
-                        onMessageChange = { message = it },
-                        imageUrl = imageUrl,
-                        onImageUrlChange = { imageUrl = it },
-                        actionLabel = actionLabel,
-                        onActionLabelChange = { actionLabel = it },
-                        actionUrl = actionUrl,
-                        onActionUrlChange = { actionUrl = it },
-                        notify = notify,
-                        onNotifyChange = { notify = it },
-                        statusMessage = ui.broadcastStatus,
-                        statusIsError = ui.broadcastStatusIsError,
-                        isBusy = ui.isBusy,
-                        isComic = isComic,
-                        onPreview = {
-                            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                            onPreviewBroadcast(
-                                BroadcastMessage(
-                                    id = "preview",
-                                    issueNumber = 0,
-                                    title = title.trim(),
-                                    message = message.trim(),
-                                    type = selectedType,
-                                    publishedAt = today,
-                                    imageUrl = imageUrl.trim().ifBlank { null },
-                                    actionLabel = actionLabel.trim().ifBlank { null },
-                                    actionUrl = actionUrl.trim().ifBlank { null },
-                                    notify = notify,
-                                ),
-                            )
-                        },
-                        onSend = {
-                            onSendBroadcast(
-                                title,
-                                message,
-                                selectedType,
-                                imageUrl,
-                                actionLabel,
-                                actionUrl,
-                                notify,
-                            ) {
-                                title = ""
-                                message = ""
-                                imageUrl = ""
-                                actionLabel = ""
-                                actionUrl = ""
-                            }
-                        },
-                    )
-                }
+                else -> {
+                    item(key = "broadcast_active") {
+                        ActiveBroadcastsSection(
+                            openBroadcasts = ui.openBroadcasts,
+                            isBusy = ui.isBusy,
+                            isComic = isComic,
+                            onCloseBroadcast = onCloseBroadcast,
+                        )
+                    }
 
-                item(key = "broadcast_session_strip") {
-                    SessionSecurityStrip(
-                        ownerLogin = ui.ownerLogin ?: "aayepp",
-                        isComic = isComic,
-                        onSignOut = onRequestSignOut,
-                    )
+                    item(key = "broadcast_composer") {
+                        NewBroadcastSection(
+                            selectedType = selectedType,
+                            onSelectType = { selectedType = it },
+                            title = title,
+                            onTitleChange = { title = it },
+                            message = message,
+                            onMessageChange = { message = it },
+                            imageUrl = imageUrl,
+                            onImageUrlChange = { imageUrl = it },
+                            actionLabel = actionLabel,
+                            onActionLabelChange = { actionLabel = it },
+                            actionUrl = actionUrl,
+                            onActionUrlChange = { actionUrl = it },
+                            notify = notify,
+                            onNotifyChange = { notify = it },
+                            statusMessage = ui.broadcastStatus,
+                            statusIsError = ui.broadcastStatusIsError,
+                            isBusy = ui.isBusy,
+                            isComic = isComic,
+                            onPreview = {
+                                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                onPreviewBroadcast(
+                                    BroadcastMessage(
+                                        id = "preview",
+                                        issueNumber = 0,
+                                        title = title.trim(),
+                                        message = message.trim(),
+                                        type = selectedType,
+                                        publishedAt = today,
+                                        imageUrl = imageUrl.trim().ifBlank { null },
+                                        actionLabel = actionLabel.trim().ifBlank { null },
+                                        actionUrl = actionUrl.trim().ifBlank { null },
+                                        notify = notify,
+                                    ),
+                                )
+                            },
+                            onSend = {
+                                onSendBroadcast(
+                                    title,
+                                    message,
+                                    selectedType,
+                                    imageUrl,
+                                    actionLabel,
+                                    actionUrl,
+                                    notify,
+                                ) {
+                                    title = ""
+                                    message = ""
+                                    imageUrl = ""
+                                    actionLabel = ""
+                                    actionUrl = ""
+                                }
+                            },
+                        )
+                    }
+
+                    item(key = "broadcast_session_strip") {
+                        SessionSecurityStrip(
+                            ownerLogin = ui.ownerLogin ?: "aayepp",
+                            isComic = isComic,
+                            onSignOut = onRequestSignOut,
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun InboxFeedbackCard(
+    item: UserFeedbackItem,
+    isComic: Boolean,
+    isBusy: Boolean,
+    onToggleResolved: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val catBg = when (item.category) {
+        FeedbackCategory.BUG -> MaterialTheme.colorScheme.errorContainer
+        FeedbackCategory.SUGGESTION -> MaterialTheme.colorScheme.primaryContainer
+        FeedbackCategory.FEEDBACK -> MaterialTheme.colorScheme.secondaryContainer
+    }
+    val catFg = when (item.category) {
+        FeedbackCategory.BUG -> MaterialTheme.colorScheme.onErrorContainer
+        FeedbackCategory.SUGGESTION -> MaterialTheme.colorScheme.onPrimaryContainer
+        FeedbackCategory.FEEDBACK -> MaterialTheme.colorScheme.onSecondaryContainer
+    }
+    val catLabel = when (item.category) {
+        FeedbackCategory.BUG -> "Bug"
+        FeedbackCategory.SUGGESTION -> "Cadangan"
+        FeedbackCategory.FEEDBACK -> "Feedback"
+    }
+    val catIcon = when (item.category) {
+        FeedbackCategory.BUG -> Icons.Filled.BugReport
+        FeedbackCategory.SUGGESTION -> Icons.Filled.Lightbulb
+        FeedbackCategory.FEEDBACK -> Icons.Filled.ChatBubbleOutline
+    }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = glassCardColor(
+            if (item.isResolved) {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            },
+        ),
+        border = devCardBorder(isComic),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (!item.isResolved) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                    Surface(
+                        shape = CircleShape,
+                        color = catBg,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(catIcon, contentDescription = null, tint = catFg, modifier = Modifier.size(13.dp))
+                            Text(
+                                text = catLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = catFg,
+                            )
+                        }
+                    }
+                    if (item.isResolved) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF30D158).copy(alpha = 0.18f),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF30D158),
+                                    modifier = Modifier.size(12.dp),
+                                )
+                                Text(
+                                    text = "Selesai",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF30D158),
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = formatRelativeSec(item.createdAtSec),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+
+            Text(
+                text = item.body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isResolved) 0.72f else 0.9f),
+            )
+
+            val metaParts = buildList {
+                if (item.contact.isNotBlank()) add(item.contact)
+                if (item.appVersion.isNotBlank()) add("v${item.appVersion}")
+                if (item.androidApi > 0) add("API ${item.androidApi}")
+                if (item.deviceModel.isNotBlank()) add(item.deviceModel)
+            }
+            if (metaParts.isNotEmpty()) {
+                Text(
+                    text = metaParts.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(
+                    onClick = onToggleResolved,
+                    enabled = !isBusy,
+                ) {
+                    Text(
+                        text = if (item.isResolved) "Buka Semula" else "Tandakan Selesai",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                TextButton(
+                    onClick = onDelete,
+                    enabled = !isBusy,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Padam", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+private fun formatRelativeSec(epochSec: Long): String {
+    if (epochSec <= 0L) return ""
+    val diffSec = (System.currentTimeMillis() / 1000L - epochSec).coerceAtLeast(0L)
+    return when {
+        diffSec < 60L -> "Baru saja"
+        diffSec < 3600L -> "${diffSec / 60L}m lalu"
+        diffSec < 86400L -> "${diffSec / 3600L}j lalu"
+        else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(epochSec * 1000L))
     }
 }
 
@@ -1347,38 +1810,48 @@ private fun StatsHeroSection(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f))
 
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        HeroMetricCell(
-                            value = formatStatsNumber(live.dauToday),
-                            label = "DAU",
-                            tabularStyle = tabularStyle,
-                            onInspect = { onHoldMetric(DevMetricInfo.DAU) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        HeroMetricCell(
-                            value = formatStatsNumber(live.wau7d),
-                            label = "WAU",
-                            tabularStyle = tabularStyle,
-                            onInspect = { onHoldMetric(DevMetricInfo.WAU) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        HeroMetricCell(
-                            value = formatStatsNumber(live.mau30d),
-                            label = "MAU",
-                            tabularStyle = tabularStyle,
-                            onInspect = { onHoldMetric(DevMetricInfo.MAU) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        HeroMetricCell(
-                            value = formatStatsNumber(live.totalInstalls),
-                            label = "Installs",
-                            tabularStyle = tabularStyle,
-                            onInspect = { onHoldMetric(DevMetricInfo.INSTALLS) },
-                            modifier = Modifier.weight(1f),
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            HeroMetricCell(
+                                value = formatStatsNumber(live.dauToday),
+                                label = "Aktif Hari Ini (DAU)",
+                                tabularStyle = tabularStyle,
+                                onInspect = { onHoldMetric(DevMetricInfo.DAU) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            HeroMetricCell(
+                                value = formatStatsNumber(live.wau7d),
+                                label = "Aktif 7 Hari (WAU)",
+                                tabularStyle = tabularStyle,
+                                onInspect = { onHoldMetric(DevMetricInfo.WAU) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            HeroMetricCell(
+                                value = formatStatsNumber(live.mau30d),
+                                label = "Aktif 30 Hari (MAU)",
+                                tabularStyle = tabularStyle,
+                                onInspect = { onHoldMetric(DevMetricInfo.MAU) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            HeroMetricCell(
+                                value = formatStatsNumber(live.totalInstalls),
+                                label = "Jumlah Pasang",
+                                tabularStyle = tabularStyle,
+                                onInspect = { onHoldMetric(DevMetricInfo.INSTALLS) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
 
                     Row(
@@ -1942,13 +2415,20 @@ private fun NewBroadcastSection(
                     }
                 }
 
+                val broadcastInputStyle = androidx.compose.material3.LocalTextStyle.current
                 OutlinedTextField(
                     value = title,
                     onValueChange = onTitleChange,
                     label = { Text("Tajuk") },
                     singleLine = true,
                     shape = fieldShape,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .sakugaTypingInput(
+                            text = title,
+                            textStyle = broadcastInputStyle,
+                            leadingPadding = 16.dp,
+                        ),
                 )
 
                 OutlinedTextField(
@@ -1959,7 +2439,13 @@ private fun NewBroadcastSection(
                     minLines = 3,
                     maxLines = 6,
                     shape = fieldShape,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .sakugaTypingInput(
+                            text = message,
+                            textStyle = broadcastInputStyle,
+                            leadingPadding = 16.dp,
+                        ),
                 )
 
                 OutlinedTextField(

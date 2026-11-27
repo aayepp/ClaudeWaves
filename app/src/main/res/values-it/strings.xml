@@ -1441,5 +1441,29 @@
     <string name="spotify_liked_songs_sub">I tuoi mi piace di Spotify</string>
     <string name="settings_quality_follows_output">Qualità in base all’uscita</string>
     <string name="settings_quality_follows_output_sub">Hi-Res e Lossless su IEM cablati e DAC USB, 320 kbps su altoparlante e Bluetooth</string>
+    <string name="ly_karaoke_mode">Modalità Karaoke</string>
+    <string name="ly_karaoke_on">Attiva modalità karaoke</string>
+    <string name="ly_karaoke_off">Disattiva modalità karaoke</string>
+    <string name="ly_karaoke_vocal_level">Voce %1$d%%</string>
+    <string name="settings_feedback_title">Feedback e Suggerimenti</string>
+    <string name="settings_feedback_sub">Segnala un bug o proponi una funzione</string>
+    <string name="feedback_sheet_title">Feedback e Suggerimenti</string>
+    <string name="feedback_sheet_sub">Inviato direttamente alla Developer Console</string>
+    <string name="feedback_cat_bug">Bug</string>
+    <string name="feedback_cat_suggestion">Suggerimento</string>
+    <string name="feedback_cat_general">Feedback</string>
+    <string name="feedback_title_label">Titolo breve</string>
+    <string name="feedback_title_hint">Es. Sleep timer a fine brano</string>
+    <string name="feedback_body_label">Dettagli</string>
+    <string name="feedback_body_hint">Descrivi il problema o la tua idea...</string>
+    <string name="feedback_contact_label">Nome / Contatto (opzionale)</string>
+    <string name="feedback_contact_hint">Es. @username o email</string>
+    <string name="feedback_include_device">Includi info dispositivo</string>
+    <string name="feedback_send">Invia allo sviluppatore</string>
+    <string name="feedback_sending">Invio…</string>
+    <string name="feedback_sent_ok">Inviato! Grazie per il contributo.</string>
+    <string name="feedback_error_short">Inserisci almeno 3 caratteri per il titolo e 5 per i dettagli.</string>
+    <string name="feedback_error_rate_limit">Troppi invii ravvicinati. Riprova tra qualche minuto.</string>
+    <string name="feedback_error_failed">Invio non riuscito. Controlla la connessione.</string>
 </resources>
 

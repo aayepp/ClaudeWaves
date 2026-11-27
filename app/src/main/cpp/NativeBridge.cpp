@@ -124,6 +124,18 @@ Java_com_lastwave_app_playback_NativeAudioEngine_nativeSetStudioMasterClarity(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_lastwave_app_playback_NativeAudioEngine_nativeSetKaraoke(
+    JNIEnv*,
+    jobject,
+    jlong handle,
+    jboolean enabled,
+    jfloat vocalLevel) {
+    if (auto* engine = fromHandle(handle); engine != nullptr) {
+        engine->setKaraoke(enabled == JNI_TRUE, vocalLevel);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_lastwave_app_playback_NativeAudioEngine_nativeSetClarityWet(
     JNIEnv*,
     jobject,

@@ -48,6 +48,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -164,14 +166,32 @@ private fun LiquidGlassSegmentedControl(
                     isScrubbing = true
                     scrubPosition = lastIdx.toFloat()
                     rubberOvershoot = 0f
+                    val touchSlop = viewConfiguration.touchSlop
+                    var dragAxis = 0 // 0 = undecided, 1 = horizontal scrub, -1 = vertical scroll
                     var moved = false
 
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) break
-                        if (abs(change.positionChange().x) > 0.5f) moved = true
-                        if (moved) {
+                        val delta = change.positionChange()
+                        if (dragAxis == 0) {
+                            val totalDelta = change.position - down.position
+                            if (abs(totalDelta.y) > touchSlop && abs(totalDelta.y) > abs(totalDelta.x)) {
+                                dragAxis = -1
+                            } else if (abs(totalDelta.x) > touchSlop && abs(totalDelta.x) > abs(totalDelta.y) * 1.15f) {
+                                dragAxis = 1
+                                moved = true
+                            }
+                        } else if (dragAxis == 1 && abs(delta.x) > 0.5f) {
+                            moved = true
+                        }
+                        if (dragAxis == -1) {
+                            isScrubbing = false
+                            rubberOvershoot = 0f
+                            break
+                        }
+                        if (moved && dragAxis == 1) {
                             change.consume()
                             val raw = rawIndex(change.position.x)
                             scrubPosition = raw.coerceIn(0f, (count - 1).toFloat())
@@ -310,6 +330,8 @@ private fun ComicConnectedButtonGroup(
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
+    val isSakuga = com.lastwave.app.ui.theme.LocalSakugaTheme.current
+    val sakugaFx = com.lastwave.app.ui.theme.LocalSakugaFx.current
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy((-1).dp),
@@ -326,6 +348,7 @@ private fun ComicConnectedButtonGroup(
 
             val interactionSource = remember { MutableInteractionSource() }
             val isPressed by interactionSource.collectIsPressedAsState()
+            var tabBounds by remember(index) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
             val scale by animateFloatAsState(
                 targetValue = if (isPressed) 0.96f else 1f,
                 animationSpec = ExpressiveMotion.spatialFast(),
@@ -356,6 +379,9 @@ private fun ComicConnectedButtonGroup(
                 modifier = Modifier
                     .weight(1f)
                     .zIndex(if (isSelected) 1f else 0f)
+                    .onGloballyPositioned { coords ->
+                        if (coords.isAttached) tabBounds = coords.boundsInRoot()
+                    }
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
@@ -365,6 +391,10 @@ private fun ComicConnectedButtonGroup(
                         indication = ripple(),
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (isSakuga && !isSelected) {
+                                val dir = if (index >= selectedIndex) 1f else -1f
+                                tabBounds?.let { b -> sakugaFx?.emitTabLand(b.center, b.width, b.height, dir) }
+                            }
                             onSelect(index)
                         },
                     ),

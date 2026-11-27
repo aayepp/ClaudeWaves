@@ -106,7 +106,11 @@ fun Modifier.comicPanel(
 ): Modifier {
     if (!LocalComicTheme.current) return this
     val line = MaterialTheme.colorScheme.outline
-    val shadow = if (LocalIsDarkTheme.current) ComicPink else ComicInk
+    val shadow = when {
+        LocalSakugaTheme.current -> LocalSakugaPalette.current.shadow
+        LocalIsDarkTheme.current -> ComicPink
+        else -> ComicInk
+    }
     // Outline, shadow path and stroke are rebuilt only when the size changes, not on every frame of a scroll.
     return drawWithCache {
         val outline = if (size.minDimension >= MinInkedSize.toPx()) shape.createOutline(size, layoutDirection, this) else null
@@ -256,9 +260,13 @@ private class ComicOutlineNode(var shape: Shape) :
     }
 }
 
-/** The indication for a clickable that had turned feedback off: the comic pop, or still nothing. */
+/** The indication for a clickable that had turned feedback off: Sakuga, comic pop, or still nothing. */
 @Composable
-fun comicIndicationOrNull(): Indication? = if (LocalComicTheme.current) ComicIndication else null
+fun comicIndicationOrNull(): Indication? = when {
+    LocalSakugaTheme.current -> SakugaIndication
+    LocalComicTheme.current -> ComicIndication
+    else -> null
+}
 
 private val ComicNightPage = Color(0xFF3B2A8C)
 private val ComicPaperPage = Color(0xFFFFF6DC)
@@ -285,12 +293,15 @@ object PlayerPalette {
 fun NowPlayingPaletteScope(content: @Composable () -> Unit) {
     val light = !LocalIsDarkTheme.current
     val comic = LocalComicTheme.current
+    val sakuga = LocalSakugaTheme.current
     val ink = when {
+        sakuga -> MaterialTheme.colorScheme.onBackground
         !light -> Color.White
         comic -> ComicInk
         else -> MaterialTheme.colorScheme.onSurface
     }
     val shade = when {
+        sakuga -> MaterialTheme.colorScheme.background
         !light -> Color.Black
         comic -> ComicPaperPage
         else -> MaterialTheme.colorScheme.background
@@ -314,6 +325,18 @@ fun NowPlayingPaletteScope(content: @Composable () -> Unit) {
 @Composable
 fun Modifier.comicNightWash(strength: () -> Float = { 1f }): Modifier {
     if (!LocalComicTheme.current) return this
+    if (LocalSakugaTheme.current) {
+        val page = MaterialTheme.colorScheme.background
+        return drawWithCache {
+            onDrawWithContent {
+                drawContent()
+                val amount = strength().coerceIn(0f, 1f)
+                if (amount > 0.001f) {
+                    drawRect(page.copy(alpha = 0.94f * amount))
+                }
+            }
+        }
+    }
     val dark = LocalIsDarkTheme.current
     val page = if (dark) ComicNightPage else ComicPaperPage
     val dot = if (dark) Color.White.copy(alpha = 0.07f) else ComicInk.copy(alpha = 0.08f)
@@ -330,10 +353,13 @@ fun Modifier.comicNightWash(strength: () -> Float = { 1f }): Modifier {
     }
 }
 
-/** Comic press feedback on a component that owns its own [interactionSource] (Material buttons, cards). */
+/** Cel/Comic press feedback on a component that owns its own [interactionSource] (Material buttons, cards). */
 @Composable
-fun Modifier.comicPress(interactionSource: InteractionSource): Modifier =
-    if (LocalComicTheme.current) indication(interactionSource, ComicIndication) else this
+fun Modifier.comicPress(interactionSource: InteractionSource): Modifier = when {
+    LocalSakugaTheme.current -> indication(interactionSource, SakugaIndication)
+    LocalComicTheme.current -> indication(interactionSource, ComicIndication)
+    else -> this
+}
 
 /**
  * Press feedback for the Comic Pop theme: the element squashes under the

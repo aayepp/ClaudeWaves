@@ -12,9 +12,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.lastwave.app.ui.theme.LocalSakugaFx
+import com.lastwave.app.ui.theme.LocalSakugaTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -128,6 +135,9 @@ internal fun PlayerToastPillHost(
         label = "toastPillBottom",
     )
 
+    val isSakuga = LocalSakugaTheme.current
+    val sakugaFx = LocalSakugaFx.current
+
     Box(
         modifier = modifier
             .windowInsetsPadding(
@@ -139,12 +149,22 @@ internal fun PlayerToastPillHost(
     ) {
         AnimatedVisibility(
             visible = toast != null,
-            enter = fadeIn(tween(180)) +
-                slideInVertically(spring(dampingRatio = 0.82f, stiffness = 420f)) { it / 2 } +
-                scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f)),
-            exit = fadeOut(tween(160)) +
-                slideOutVertically(tween(180)) { it / 2 } +
-                scaleOut(targetScale = 0.94f, animationSpec = tween(160)),
+            enter = if (isSakuga) {
+                fadeIn(tween(110)) +
+                    slideInHorizontally(spring(dampingRatio = 0.56f, stiffness = 780f)) { -it / 2 } +
+                    scaleIn(initialScale = 0.88f, animationSpec = spring(dampingRatio = 0.56f, stiffness = 780f))
+            } else {
+                fadeIn(tween(180)) +
+                    slideInVertically(spring(dampingRatio = 0.82f, stiffness = 420f)) { it / 2 } +
+                    scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f))
+            },
+            exit = if (isSakuga) {
+                fadeOut(tween(140)) + scaleOut(targetScale = 0.08f, animationSpec = tween(150))
+            } else {
+                fadeOut(tween(160)) +
+                    slideOutVertically(tween(180)) { it / 2 } +
+                    scaleOut(targetScale = 0.94f, animationSpec = tween(160))
+            },
             label = "toastPillVisibility",
         ) {
             val current = renderedToast ?: return@AnimatedVisibility
@@ -158,13 +178,30 @@ internal fun PlayerToastPillHost(
                 label = "toastPillSwitch",
             ) { event ->
                 var dragOffsetY by remember(event.id) { mutableFloatStateOf(0f) }
+                var pillBounds by remember(event.id) { mutableStateOf<Rect?>(null) }
                 val popWobble = remember(event.id) { Animatable(0f) }
-                LaunchedEffect(event.id) {
+                LaunchedEffect(event.id, isSakuga) {
                     popWobble.snapTo(0f)
+                    if (isSakuga) {
+                        kotlinx.coroutines.yield()
+                        pillBounds?.let { b ->
+                            sakugaFx?.emitToastLand(b.center, b.width, b.height)
+                        }
+                    }
                     popWobble.animateTo(1f, tween(durationMillis = 560, easing = LinearEasing))
+                }
+                DisposableEffect(event.id, isSakuga) {
+                    onDispose {
+                        if (isSakuga && toast == null) {
+                            pillBounds?.let { b -> sakugaFx?.emitToastDismiss(b.center) }
+                        }
+                    }
                 }
                 Box(
                     modifier = Modifier
+                        .onGloballyPositioned { coords ->
+                            if (coords.isAttached) pillBounds = coords.boundsInRoot()
+                        }
                         .graphicsLayer {
                             val bt = popWobble.value
                             val jelly = if (bt in 0.001f..0.999f) sin(bt * 4.0f * PI.toFloat()) * exp(-2.8f * bt) else 0f

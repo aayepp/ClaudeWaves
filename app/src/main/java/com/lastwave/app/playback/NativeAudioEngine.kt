@@ -117,6 +117,13 @@ class NativeAudioEngine @Inject constructor(
         withHandle(Unit) { nativeSetStudioMasterClarity(it, enabled) }
     }
 
+    /** Real-time Mid-Side vocal reduction (Karaoke Mode). */
+    fun setKaraoke(enabled: Boolean, vocalLevel: Float) {
+        if (systemFlattened) return
+        val safeLevel = if (vocalLevel.isFinite()) vocalLevel.coerceIn(0f, 1f) else 0.15f
+        withHandle(Unit) { nativeSetKaraoke(it, enabled, safeLevel) }
+    }
+
     /** Thread-safe; completely bypasses all native DSP for bit-exact output. */
     fun setBitPerfect(enabled: Boolean) {
         withHandle(Unit) { nativeSetBitPerfect(it, enabled) }
@@ -374,6 +381,7 @@ class NativeAudioEngine @Inject constructor(
     private external fun nativeSetPlaying(handle: Long, playing: Boolean)
     private external fun nativeSetOutputVolume(handle: Long, volume: Float)
     private external fun nativeSetStudioMasterClarity(handle: Long, enabled: Boolean)
+    private external fun nativeSetKaraoke(handle: Long, enabled: Boolean, vocalLevel: Float)
     private external fun nativeSetBitPerfect(handle: Long, enabled: Boolean)
     private external fun nativeIsBitPerfect(handle: Long): Boolean
     private external fun nativeSetEqualizer(handle: Long, enabled: Boolean, gainsDb: FloatArray)
