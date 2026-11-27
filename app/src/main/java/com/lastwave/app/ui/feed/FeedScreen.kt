@@ -1321,6 +1321,14 @@ fun FeedScreen(
                             )
                         }
 
+                        item(key = "home_broadcast_ticker", contentType = "home_broadcast_ticker") {
+                            com.lastwave.app.ui.update.HomeBroadcastTickerHost(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                            )
+                        }
+
                         if (isLandscapeWide) {
                             item(key = "hero_split", contentType = "hero_split") {
                                 Spacer(modifier = Modifier.height(6.dp))

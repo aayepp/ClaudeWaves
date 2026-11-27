@@ -2,9 +2,16 @@ package com.lastwave.app.ui.update
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
@@ -417,7 +425,7 @@ private fun BroadcastActionFooter(
         }
         if (!actionUrl.isNullOrBlank()) {
             TextButton(onClick = onDismiss) {
-                Text("Tutup")
+                Text("Close")
             }
             Button(
                 onClick = { onOpenAction(actionUrl) },
@@ -433,7 +441,145 @@ private fun BroadcastActionFooter(
                 onClick = onDismiss,
                 colors = buttonColors,
             ) {
-                Text("Faham", fontWeight = FontWeight.Bold)
+                Text("Close", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/**
+ * Floating top-of-Home marquee broadcast banner (Design 3A): glides smoothly when ambient
+ * animations are active, opens the full [BroadcastDialog] on tap, and dismisses cleanly on `X`.
+ */
+@Composable
+fun HomeBroadcastTickerHost(
+    modifier: Modifier = Modifier,
+    viewModel: BroadcastDialogViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.manager.state.collectAsStateWithLifecycle()
+    val active = uiState.active
+    AnimatedVisibility(
+        visible = active != null && uiState.showTicker,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+        modifier = modifier,
+    ) {
+        if (active != null) {
+            HomeBroadcastTickerPill(
+                message = active,
+                onClick = { viewModel.manager.openDialogFromTicker() },
+                onDismiss = { viewModel.manager.dismissTicker(active.id) },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun HomeBroadcastTickerPill(
+    message: BroadcastMessage,
+    onClick: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isComic = LocalComicTheme.current
+    val isGlass = LocalLiquidGlass.current && !isComic
+    val isDark = LocalIsDarkTheme.current
+    val accent = message.type.accent()
+    val ambientActive = com.lastwave.app.ui.common.LocalAmbientAnimationsActive.current
+    val containerColor = when {
+        isComic -> MaterialTheme.colorScheme.surfaceContainerHigh
+        isGlass -> MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isDark) 0.84f else 0.90f)
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val border = when {
+        isComic -> null
+        isGlass -> glassCardBorder() ?: BorderStroke(1.dp, accent.copy(alpha = 0.45f))
+        else -> BorderStroke(1.dp, accent.copy(alpha = 0.42f))
+    }
+    val tickerText = remember(message.title, message.message) {
+        val plainBody = message.message
+            .lineSequence()
+            .map { it.trim().trimStart('#', '*', '-', '>', ' ').trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString("  •  ")
+        if (plainBody.isNotEmpty()) "${message.title}  —  $plainBody" else message.title
+    }
+
+    Surface(
+        shape = CircleShape,
+        color = containerColor,
+        border = border,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .clip(CircleShape)
+            .comicPanel(CircleShape)
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 7.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (isComic) ComicAccent else accent.copy(alpha = 0.18f),
+                border = if (isComic) BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline) else null,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        imageVector = message.type.icon(),
+                        contentDescription = message.type.label,
+                        tint = if (isComic) ComicInk else accent,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(
+                        text = message.type.label.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isComic) ComicInk else accent,
+                        maxLines = 1,
+                    )
+                }
+            }
+
+            Text(
+                text = tickerText,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (ambientActive) {
+                            Modifier.basicMarquee(iterations = Int.MAX_VALUE, velocity = 42.dp)
+                        } else {
+                            Modifier
+                        },
+                    ),
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Close",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp),
+                )
             }
         }
     }

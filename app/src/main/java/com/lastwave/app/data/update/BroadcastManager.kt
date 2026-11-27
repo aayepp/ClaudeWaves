@@ -46,6 +46,17 @@ enum class BroadcastType(val key: String, val label: String, val emoji: String) 
     }
 }
 
+enum class BroadcastDisplayMode(val key: String, val label: String) {
+    POPUP("popup", "Popup Sahaja"),
+    TICKER("ticker", "Top Home Bergerak"),
+    BOTH("both", "Kedua-dua");
+
+    companion object {
+        fun fromKey(raw: String?): BroadcastDisplayMode =
+            entries.firstOrNull { it.key.equals(raw?.trim(), ignoreCase = true) } ?: POPUP
+    }
+}
+
 data class BroadcastMessage(
     val id: String,
     val issueNumber: Int,
@@ -57,11 +68,13 @@ data class BroadcastMessage(
     val actionLabel: String?,
     val actionUrl: String?,
     val notify: Boolean,
+    val displayMode: BroadcastDisplayMode = BroadcastDisplayMode.POPUP,
 )
 
 data class BroadcastUiState(
     val active: BroadcastMessage? = null,
     val showDialog: Boolean = false,
+    val showTicker: Boolean = false,
 )
 
 sealed interface DevLockState {
@@ -109,9 +122,11 @@ class BroadcastManager @Inject constructor(
                 return@launch
             }
             val dismissedId = prefs.getString(KEY_DISMISSED_ID, null)
+            val visible = latest.id != dismissedId
             _state.value = BroadcastUiState(
                 active = latest,
-                showDialog = latest.id != dismissedId,
+                showDialog = visible && latest.displayMode != BroadcastDisplayMode.TICKER,
+                showTicker = visible && latest.displayMode != BroadcastDisplayMode.POPUP,
             )
         }
     }
@@ -127,7 +142,10 @@ class BroadcastManager @Inject constructor(
         val dismissedId = prefs.getString(KEY_DISMISSED_ID, null)
         if (latest.id == dismissedId) return null
 
-        _state.value = _state.value.copy(active = latest)
+        _state.value = _state.value.copy(
+            active = latest,
+            showTicker = latest.displayMode != BroadcastDisplayMode.POPUP,
+        )
         if (!latest.notify) return null
         val notifiedId = prefs.getString(KEY_NOTIFIED_ID, null)
         if (latest.id == notifiedId) return null
@@ -140,12 +158,31 @@ class BroadcastManager @Inject constructor(
         val current = _state.value.active ?: return
         val dismissedId = prefs.getString(KEY_DISMISSED_ID, null)
         if (current.id == dismissedId) return
-        _state.value = BroadcastUiState(active = current, showDialog = true)
+        _state.value = _state.value.copy(
+            active = current,
+            showDialog = current.displayMode != BroadcastDisplayMode.TICKER,
+            showTicker = current.displayMode != BroadcastDisplayMode.POPUP,
+        )
+    }
+
+    fun openDialogFromTicker() {
+        val current = _state.value.active ?: return
+        _state.value = _state.value.copy(active = current, showDialog = true)
     }
 
     fun dismiss(id: String) {
+        val current = _state.value.active
+        if (current != null && current.displayMode != BroadcastDisplayMode.POPUP) {
+            _state.value = _state.value.copy(showDialog = false)
+            return
+        }
         prefs.edit().putString(KEY_DISMISSED_ID, id).apply()
-        _state.value = _state.value.copy(showDialog = false)
+        _state.value = _state.value.copy(showDialog = false, showTicker = false)
+    }
+
+    fun dismissTicker(id: String) {
+        prefs.edit().putString(KEY_DISMISSED_ID, id).apply()
+        _state.value = _state.value.copy(showTicker = false, showDialog = false)
     }
 
     fun hasOwnerToken(): Boolean = !readOwnerToken().isNullOrBlank()
@@ -364,6 +401,7 @@ class BroadcastManager @Inject constructor(
         actionLabel: String?,
         actionUrl: String?,
         notify: Boolean,
+        displayMode: BroadcastDisplayMode = BroadcastDisplayMode.POPUP,
         closePrevious: Boolean = true,
     ): Result<BroadcastMessage> = withContext(Dispatchers.IO) {
         val token = readOwnerToken()
@@ -389,7 +427,7 @@ class BroadcastManager @Inject constructor(
             }
             val payload = JSONObject().apply {
                 put("title", cleanTitle)
-                put("body", buildIssueBody(cleanMessage, type, cleanImageUrl, actionLabel, cleanUrl, notify))
+                put("body", buildIssueBody(cleanMessage, type, cleanImageUrl, actionLabel, cleanUrl, notify, displayMode))
                 put("labels", JSONArray().put(BROADCAST_LABEL))
             }
             val request = githubRequestBuilder("https://api.github.com/repos/$REPO/issues")
@@ -515,6 +553,7 @@ class BroadcastManager @Inject constructor(
             actionLabel = parsed.actionLabel,
             actionUrl = parsed.actionUrl,
             notify = parsed.notify,
+            displayMode = parsed.displayMode,
         )
     }
 
@@ -524,6 +563,7 @@ class BroadcastManager @Inject constructor(
         val imageUrl: String?,
         val actionLabel: String?,
         val actionUrl: String?,
+        val displayMode: BroadcastDisplayMode,
         val message: String,
     )
 
@@ -534,6 +574,7 @@ class BroadcastManager @Inject constructor(
         var imageUrl: String? = null
         var actionLabel: String? = null
         var actionUrl: String? = null
+        var displayMode = BroadcastDisplayMode.POPUP
 
         if (match != null) {
             val tokens = match.groupValues[1].trim().split(WHITESPACE_REGEX)
@@ -548,6 +589,7 @@ class BroadcastManager @Inject constructor(
                     "imageUrl" -> imageUrl = sanitizeHttpUrl(urlDecode(rawValue))
                     "actionLabel" -> actionLabel = urlDecode(rawValue)?.trim()?.ifBlank { null }
                     "actionUrl" -> actionUrl = sanitizeHttpUrl(urlDecode(rawValue))
+                    "display" -> displayMode = BroadcastDisplayMode.fromKey(rawValue)
                 }
             }
         }
@@ -562,6 +604,7 @@ class BroadcastManager @Inject constructor(
             imageUrl = imageUrl,
             actionLabel = actionLabel,
             actionUrl = actionUrl,
+            displayMode = displayMode,
             message = cleanBody,
         )
     }
@@ -573,16 +616,24 @@ class BroadcastManager @Inject constructor(
         actionLabel: String?,
         actionUrl: String?,
         notify: Boolean,
+        displayMode: BroadcastDisplayMode,
     ): String {
-        val meta = ArrayList<String>(5).apply {
+        val meta = ArrayList<String>(6).apply {
             add("type=${type.key}")
             add("notify=$notify")
+            add("display=${displayMode.key}")
             if (!imageUrl.isNullOrBlank()) add("imageUrl=${urlEncode(imageUrl)}")
             val label = actionLabel?.trim()?.takeIf { it.isNotEmpty() }
             if (label != null) add("actionLabel=${urlEncode(label)}")
             if (!actionUrl.isNullOrBlank()) add("actionUrl=${urlEncode(actionUrl)}")
         }
         return "<!-- cw-broadcast ${meta.joinToString(" ")} -->\n$message"
+    }
+
+    fun getDevLanguageCode(): String = prefs.getString(KEY_DEV_LANGUAGE, "ms") ?: "ms"
+
+    fun setDevLanguageCode(code: String) {
+        prefs.edit().putString(KEY_DEV_LANGUAGE, if (code == "en") "en" else "ms").apply()
     }
 
     private fun extractGithubError(code: Int, bodyStr: String): String {
@@ -610,6 +661,7 @@ class BroadcastManager @Inject constructor(
         private const val KEY_DEV_LOCK_STAGE = "dev_lock_stage"
         private const val KEY_DEV_FAILED_ATTEMPTS = "dev_failed_attempts"
         private const val KEY_DEV_LOCK_UNTIL_MS = "dev_lock_until_ms"
+        private const val KEY_DEV_LANGUAGE = "dev_console_language"
         private const val MAX_INITIAL_ATTEMPTS = 3
         private const val COOLDOWN_DURATION_MS = 24L * 60L * 60L * 1000L
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"

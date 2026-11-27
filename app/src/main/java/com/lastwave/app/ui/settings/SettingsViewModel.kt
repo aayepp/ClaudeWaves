@@ -136,7 +136,15 @@ class SettingsViewModel @Inject constructor(
         body: String,
         contact: String,
         includeDeviceInfo: Boolean,
-    ): Result<Long> = appStatsManager.submitFeedback(category, title, body, contact, includeDeviceInfo)
+        screenshots: List<android.net.Uri> = emptyList(),
+    ): Result<Long> {
+        val capped = screenshots.take(5)
+        val maxDim = if (capped.size > 2) 800 else 960
+        val encodedScreenshots = capped.mapNotNull { uri ->
+            appStatsManager.encodeScreenshotToDataUri(uri, maxDimension = maxDim)
+        }
+        return appStatsManager.submitFeedback(category, title, body, contact, includeDeviceInfo, encodedScreenshots)
+    }
 
     fun saveCustomProfileName(name: String) {
         viewModelScope.launch {

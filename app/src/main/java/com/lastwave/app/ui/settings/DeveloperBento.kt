@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -135,10 +134,12 @@ internal fun LiveStatsBento(
     error: String?,
     isLoading: Boolean,
     isComic: Boolean,
+    lang: DevLanguage,
     onHoldMetric: (DevMetricInfo) -> Unit,
     onTestPing: () -> Unit,
     onRetry: () -> Unit,
 ) {
+    val bm = lang == DevLanguage.BM
     when {
         live == null && isLoading -> BentoTile(isComic, Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
@@ -147,25 +148,60 @@ internal fun LiveStatsBento(
         }
         live == null -> BentoTile(isComic, Modifier.fillMaxWidth()) {
             Text(
-                text = error ?: "Gagal memuat turun data statistik",
+                text = error ?: if (bm) "Gagal memuat turun data statistik" else "Failed to load statistics",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
             )
-            TextButton(onClick = onRetry, enabled = !isLoading) { Text("Cuba lagi") }
+            TextButton(onClick = onRetry, enabled = !isLoading) {
+                Text(if (bm) "Cuba lagi" else "Retry")
+            }
         }
         else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            HeroTile(live, isComic, onHoldMetric, onTestPing, isLoading)
+            HeroTile(live, isComic, lang, onHoldMetric, onTestPing, isLoading)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("DAU hari ini", formatStatsNumber(live.dauToday), "24 jam: ${formatStatsNumber(live.active24h)}",
-                    isComic, DevMetricInfo.DAU, onHoldMetric, Modifier.weight(1f))
-                MetricTile("Install", formatStatsNumber(live.totalInstalls),
-                    "+${formatStatsNumber(live.newToday)} hari ini · +${formatStatsNumber(live.new7d)} 7h",
-                    isComic, DevMetricInfo.INSTALLS, onHoldMetric, Modifier.weight(1f),
-                    noteColor = if (live.newToday > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                MetricTile(
+                    label = if (bm) "DAU hari ini" else "DAU today",
+                    value = formatStatsNumber(live.dauToday),
+                    note = if (bm) "24 jam: ${formatStatsNumber(live.active24h)}" else "24h: ${formatStatsNumber(live.active24h)}",
+                    isComic = isComic,
+                    info = DevMetricInfo.DAU,
+                    onHoldMetric = onHoldMetric,
+                    modifier = Modifier.weight(1f),
+                )
+                MetricTile(
+                    label = if (bm) "Install" else "Installs",
+                    value = formatStatsNumber(live.totalInstalls),
+                    note = if (bm) {
+                        "+${formatStatsNumber(live.newToday)} hari ini · +${formatStatsNumber(live.new7d)} 7h"
+                    } else {
+                        "+${formatStatsNumber(live.newToday)} today · +${formatStatsNumber(live.new7d)} 7d"
+                    },
+                    isComic = isComic,
+                    info = DevMetricInfo.INSTALLS,
+                    onHoldMetric = onHoldMetric,
+                    modifier = Modifier.weight(1f),
+                    noteColor = if (live.newToday > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("WAU", formatStatsNumber(live.wau7d), "aktif 7 hari", isComic, DevMetricInfo.WAU, onHoldMetric, Modifier.weight(1f))
-                MetricTile("MAU", formatStatsNumber(live.mau30d), "aktif 30 hari", isComic, DevMetricInfo.MAU, onHoldMetric, Modifier.weight(1f))
+                MetricTile(
+                    label = "WAU",
+                    value = formatStatsNumber(live.wau7d),
+                    note = if (bm) "aktif 7 hari" else "7d active",
+                    isComic = isComic,
+                    info = DevMetricInfo.WAU,
+                    onHoldMetric = onHoldMetric,
+                    modifier = Modifier.weight(1f),
+                )
+                MetricTile(
+                    label = "MAU",
+                    value = formatStatsNumber(live.mau30d),
+                    note = if (bm) "aktif 30 hari" else "30d active",
+                    isComic = isComic,
+                    info = DevMetricInfo.MAU,
+                    onHoldMetric = onHoldMetric,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
@@ -176,10 +212,12 @@ internal fun LiveStatsBento(
 private fun HeroTile(
     live: LiveUserStats,
     isComic: Boolean,
+    lang: DevLanguage,
     onHoldMetric: (DevMetricInfo) -> Unit,
     onTestPing: () -> Unit,
     isLoading: Boolean,
 ) {
+    val bm = lang == DevLanguage.BM
     val haptic = LocalHapticFeedback.current
     BentoTile(
         isComic = isComic,
@@ -195,7 +233,7 @@ private fun HeroTile(
             ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TileLabel("Aktif sekarang")
+            TileLabel(if (bm) "Aktif sekarang" else "Active now")
             Box(
                 Modifier.size(7.dp).clip(CircleShape).background(
                     if (live.online15m > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
@@ -216,7 +254,11 @@ private fun HeroTile(
             TrendLine(live.dailyTrend14d, isComic, Modifier.fillMaxWidth().height(72.dp))
             val peak = live.dailyTrend14d.maxOf { it.dau }
             Text(
-                text = "Active users 14 hari · puncak ${formatStatsNumber(peak)}",
+                text = if (bm) {
+                    "Active users 14 hari · puncak ${formatStatsNumber(peak)}"
+                } else {
+                    "14-day active users · peak ${formatStatsNumber(peak)}"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -260,22 +302,28 @@ private fun TrendLine(points: List<DailyActivePoint>, isComic: Boolean, modifier
 
 /** Country of the app's active users (from heartbeats; GitHub gives no download geography). */
 @Composable
-internal fun CountriesTile(buckets: List<StatBucket>, isComic: Boolean) {
+internal fun CountriesTile(buckets: List<StatBucket>, isComic: Boolean, lang: DevLanguage) {
+    val bm = lang == DevLanguage.BM
     var expanded by rememberSaveable { mutableStateOf(false) }
     val total = buckets.sumOf { it.count }.coerceAtLeast(1)
     val top = buckets.maxOf { it.count }.coerceAtLeast(1)
     val accent = if (isComic) ComicAccent else MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val displayLocale = if (bm) Locale("ms") else Locale.ENGLISH
     BentoTile(isComic, Modifier.fillMaxWidth()) {
         Row {
-            TileLabel("Negara user", Modifier.weight(1f))
-            Text("${buckets.size} negara", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TileLabel(if (bm) "Negara user" else "Countries", Modifier.weight(1f))
+            Text(
+                text = if (bm) "${buckets.size} negara" else "${buckets.size} countries",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.height(4.dp))
         (if (expanded) buckets else buckets.take(6)).forEach { bucket ->
             val code = bucket.label.trim().uppercase(Locale.ROOT)
             val isIso = code.length == 2 && code.all { it in 'A'..'Z' }
-            val name = if (isIso) Locale("", code).getDisplayCountry(Locale("ms")).ifBlank { code } else bucket.label
+            val name = if (isIso) Locale("", code).getDisplayCountry(displayLocale).ifBlank { code } else bucket.label
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -294,7 +342,14 @@ internal fun CountriesTile(buckets: List<StatBucket>, isComic: Boolean) {
         }
         if (buckets.size > 6) {
             TextButton(onClick = { expanded = !expanded }, modifier = Modifier.align(Alignment.End)) {
-                Text(if (expanded) "Tunjuk 6 teratas" else "Lihat semua ›", fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = if (expanded) {
+                        if (bm) "Tunjuk 6 teratas" else "Top 6"
+                    } else {
+                        if (bm) "Lihat semua ›" else "See all ›"
+                    },
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
     }
@@ -304,12 +359,12 @@ private fun flagOf(iso: String): String =
     iso.map { Character.toChars(0x1F1E6 + (it - 'A')) }.joinToString("") { String(it) }
 
 @Composable
-internal fun VersionsTile(buckets: List<StatBucket>, isComic: Boolean) {
+internal fun VersionsTile(buckets: List<StatBucket>, isComic: Boolean, lang: DevLanguage) {
     val palette = chartPalette(isComic)
     val shown = buckets.take(4)
     val total = buckets.sumOf { it.count }.coerceAtLeast(1)
     BentoTile(isComic, Modifier.fillMaxWidth()) {
-        TileLabel("Versi app")
+        TileLabel(if (lang == DevLanguage.BM) "Versi app" else "App versions")
         Canvas(Modifier.fillMaxWidth().height(12.dp).padding(vertical = 0.dp)) {
             val gap = 2.dp.toPx()
             var x = 0f
@@ -362,14 +417,26 @@ internal fun AndroidTile(buckets: List<StatBucket>, isComic: Boolean, modifier: 
 }
 
 @Composable
-internal fun ReleaseTile(gh: GitHubReleaseStats?, error: String?, isLoading: Boolean, isComic: Boolean, modifier: Modifier) {
+internal fun ReleaseTile(
+    gh: GitHubReleaseStats?,
+    error: String?,
+    isLoading: Boolean,
+    isComic: Boolean,
+    lang: DevLanguage,
+    modifier: Modifier,
+) {
+    val bm = lang == DevLanguage.BM
     val accent = if (isComic) ComicAccent else MaterialTheme.colorScheme.primary
     val muted = accent.copy(alpha = 0.35f)
     BentoTile(isComic, modifier) {
-        TileLabel("Download APK")
+        TileLabel(if (bm) "Download APK" else "APK Downloads")
         when {
             gh == null && isLoading -> CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-            gh == null -> Text(error ?: "Tiada data GitHub", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            gh == null -> Text(
+                text = error ?: if (bm) "Tiada data GitHub" else "No GitHub data",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
             else -> {
                 Text(formatStatsNumber(gh.totalDownloads), style = MaterialTheme.typography.headlineSmall.merge(Tabular), fontWeight = FontWeight.ExtraBold)
                 Text(

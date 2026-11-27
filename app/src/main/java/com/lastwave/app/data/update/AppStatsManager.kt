@@ -1,8 +1,13 @@
 package com.lastwave.app.data.update
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
+import android.util.Base64
 import androidx.core.content.pm.PackageInfoCompat
+import java.io.ByteArrayOutputStream
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -92,6 +97,7 @@ data class UserFeedbackItem(
     val deviceModel: String,
     val status: String,
     val createdAtSec: Long,
+    val screenshots: List<String> = emptyList(),
 ) {
     val isResolved: Boolean get() = status == "resolved"
 }
@@ -124,8 +130,70 @@ class AppStatsManager @Inject constructor(
     /** Developer dashboard calls: a blocked worker domain must fall back to DoH, not 127.0.0.1. */
     private val developerClient: OkHttpClient by lazy {
         pingClient.newBuilder()
+            .callTimeout(30, TimeUnit.SECONDS)
             .dns(com.lastwave.app.data.network.Ipv4FirstDnsResolver(context = context, rejectSinkholes = true))
             .build()
+    }
+
+    private val feedbackUploadClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .callTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .dns(com.lastwave.app.data.network.Ipv4FirstDnsResolver(context = context, rejectSinkholes = true))
+            .build()
+    }
+
+    /** Compresses a picked screenshot URI to a compact JPEG data URI off the UI thread. */
+    suspend fun encodeScreenshotToDataUri(uri: Uri, maxDimension: Int = 900): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, bounds)
+            }
+            val srcW = bounds.outWidth
+            val srcH = bounds.outHeight
+            if (srcW <= 0 || srcH <= 0) return@runCatching null
+
+            var sampleSize = 1
+            val maxDim = maxOf(srcW, srcH)
+            while (maxDim / sampleSize > maxDimension) {
+                sampleSize *= 2
+            }
+            val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            val decoded = context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOpts)
+            } ?: return@runCatching null
+
+            val longest = maxOf(decoded.width, decoded.height)
+            val scaled = if (longest > maxDimension) {
+                val ratio = maxDimension.toFloat() / longest.toFloat()
+                val targetW = (decoded.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (decoded.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(decoded, targetW, targetH, true).also {
+                    if (it !== decoded) decoded.recycle()
+                }
+            } else {
+                decoded
+            }
+
+            try {
+                val out = ByteArrayOutputStream()
+                scaled.compress(Bitmap.CompressFormat.JPEG, 70, out)
+                if (out.size() > 115_000) {
+                    out.reset()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 50, out)
+                }
+                if (out.size() > 135_000) {
+                    out.reset()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 36, out)
+                }
+                val bytes = out.toByteArray()
+                if (bytes.isEmpty()) return@runCatching null
+                "data:image/jpeg;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}"
+            } finally {
+                scaled.recycle()
+            }
+        }.getOrNull()
     }
 
     private fun getOrCreateInstallId(): String {
@@ -183,9 +251,10 @@ class AppStatsManager @Inject constructor(
         body: String,
         contact: String,
         includeDeviceInfo: Boolean,
+        screenshots: List<String> = emptyList(),
     ): Result<Long> = withContext(Dispatchers.IO) {
         val cleanTitle = title.trim().take(120)
-        val cleanBody = body.trim().take(1500)
+        val cleanBody = body.trim().take(2500)
         if (cleanTitle.length < 3 || cleanBody.length < 5) {
             return@withContext Result.failure(IllegalArgumentException("FEEDBACK_SHORT"))
         }
@@ -197,6 +266,10 @@ class AppStatsManager @Inject constructor(
         val deviceModel = if (includeDeviceInfo) {
             "${Build.MANUFACTURER.orEmpty()} ${Build.MODEL.orEmpty()}".trim().take(80)
         } else ""
+        val cleanScreenshots = screenshots
+            .map { it.trim() }
+            .filter { it.startsWith("data:image/") || it.startsWith("https://") || it.startsWith("http://") }
+            .take(5)
 
         val payload = JSONObject().apply {
             put("installId", getOrCreateInstallId())
@@ -207,6 +280,9 @@ class AppStatsManager @Inject constructor(
             put("appVersion", versionName.take(32))
             put("androidApi", apiLevel)
             put("deviceModel", deviceModel)
+            if (cleanScreenshots.isNotEmpty()) {
+                put("screenshots", JSONArray(cleanScreenshots))
+            }
         }.toString()
 
         val request = Request.Builder()
@@ -217,7 +293,7 @@ class AppStatsManager @Inject constructor(
             .build()
 
         try {
-            pingClient.newCall(request).execute().use { response ->
+            feedbackUploadClient.newCall(request).execute().use { response ->
                 val respBody = response.body?.string().orEmpty()
                 if (response.code == 429) {
                     return@withContext Result.failure(IllegalStateException("FEEDBACK_RATE_LIMIT"))
@@ -269,6 +345,20 @@ class AppStatsManager @Inject constructor(
                 val items = buildList {
                     for (i in 0 until arr.length()) {
                         val obj = arr.optJSONObject(i) ?: continue
+                        val shotsArr = obj.optJSONArray("screenshots")
+                        val screenshots = if (shotsArr != null) {
+                            val count = minOf(shotsArr.length(), 5)
+                            buildList(count) {
+                                for (idx in 0 until count) {
+                                    val s = shotsArr.optString(idx, "").trim()
+                                    if (s.startsWith("data:image/") || s.startsWith("https://") || s.startsWith("http://")) {
+                                        add(s)
+                                    }
+                                }
+                            }
+                        } else {
+                            emptyList()
+                        }
                         add(
                             UserFeedbackItem(
                                 id = obj.optLong("id", 0L),
@@ -281,6 +371,7 @@ class AppStatsManager @Inject constructor(
                                 deviceModel = obj.optString("deviceModel", ""),
                                 status = obj.optString("status", "new"),
                                 createdAtSec = obj.optLong("createdAt", 0L),
+                                screenshots = screenshots,
                             ),
                         )
                     }

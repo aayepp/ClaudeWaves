@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.57] - 2026-11-28
+
+### Added
+- **Structured Bug Report form with screenshot upload:** selecting `Bug` in Feedback now includes affected area tags, a dedicated Steps to Reproduce field, frequency chips, and optional screenshot attachment from the gallery (up to 5 compressed images).
+- **Top Home announcement banner:** announcements can now appear as a smooth scrolling glass capsule at the top of the Home feed with tap-to-open details and quick dismiss.
+
+### Changed
+- **Announcement popup close button:** updated the announcement dialog dismiss button label to `Close`.
+
 ## [1.0.56] - 2026-11-28
 
 ### Added

@@ -7,7 +7,10 @@ import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,10 +44,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Fingerprint
@@ -52,6 +58,7 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ButtonDefaults
@@ -70,6 +77,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -77,6 +85,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -87,6 +97,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -95,6 +108,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.lastwave.app.data.update.AppStatsManager
+import com.lastwave.app.data.update.BroadcastDisplayMode
 import com.lastwave.app.data.update.BroadcastManager
 import com.lastwave.app.data.update.BroadcastMessage
 import com.lastwave.app.data.update.BroadcastType
@@ -125,6 +139,7 @@ import com.lastwave.app.ui.theme.glassCardBorder
 import com.lastwave.app.ui.theme.glassCardColor
 import com.lastwave.app.ui.theme.pageBackground
 import com.lastwave.app.ui.update.BroadcastDialog
+import com.lastwave.app.ui.update.HomeBroadcastTickerPill
 import com.lastwave.app.ui.update.accent
 import com.lastwave.app.ui.update.icon
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -156,6 +171,11 @@ internal data class DeveloperConsoleUiState(
     val feedback: DeveloperFeedbackSnapshot? = null,
     val isLoadingFeedback: Boolean = false,
     val feedbackBusyId: Long? = null,
+    val devLanguage: DevLanguage = DevLanguage.BM,
+    val translateTarget: DevLanguage = DevLanguage.BM,
+    val autoTranslateEnabled: Boolean = false,
+    val translations: Map<Pair<Long, DevLanguage>, FeedbackTranslation> = emptyMap(),
+    val translatingKeys: Set<Pair<Long, DevLanguage>> = emptySet(),
 )
 
 @HiltViewModel
@@ -163,14 +183,32 @@ class DeveloperConsoleViewModel @Inject constructor(
     private val manager: BroadcastManager,
     private val statsManager: AppStatsManager,
 ) : ViewModel() {
+    private val initialLang = DevLanguage.fromCode(manager.getDevLanguageCode())
     private val _uiState = MutableStateFlow(
         DeveloperConsoleUiState(
             hasToken = manager.hasOwnerToken(),
             ownerLogin = manager.savedOwnerLogin(),
             lockState = manager.getDevLockState(),
+            devLanguage = initialLang,
+            translateTarget = initialLang,
         ),
     )
     internal val uiState: StateFlow<DeveloperConsoleUiState> = _uiState.asStateFlow()
+
+    internal fun setDevLanguage(lang: DevLanguage) {
+        manager.setDevLanguageCode(lang.code)
+        _uiState.update { it.copy(devLanguage = lang, translateTarget = lang) }
+        if (_uiState.value.autoTranslateEnabled) {
+            translatePendingFeedback(_uiState.value.feedback?.items.orEmpty(), lang)
+        }
+    }
+
+    internal fun setTranslateTarget(lang: DevLanguage) {
+        _uiState.update { it.copy(translateTarget = lang) }
+        if (_uiState.value.autoTranslateEnabled) {
+            translatePendingFeedback(_uiState.value.feedback?.items.orEmpty(), lang)
+        }
+    }
 
     fun refreshLockState() {
         _uiState.update {
@@ -231,6 +269,7 @@ class DeveloperConsoleViewModel @Inject constructor(
                 refreshAll()
                 onSuccess()
             }.onFailure { err ->
+                val bm = _uiState.value.devLanguage == DevLanguage.BM
                 _uiState.update {
                     it.copy(
                         hasToken = manager.hasOwnerToken(),
@@ -238,7 +277,7 @@ class DeveloperConsoleViewModel @Inject constructor(
                         isUnlocked = false,
                         lockState = manager.getDevLockState(),
                         isBusy = false,
-                        authError = err.message ?: "Gagal sahkan token",
+                        authError = err.message ?: if (bm) "Gagal sahkan token" else "Failed to verify token",
                     )
                 }
             }
@@ -266,6 +305,9 @@ class DeveloperConsoleViewModel @Inject constructor(
                 authError = null,
                 broadcastStatus = null,
                 broadcastStatusIsError = false,
+                autoTranslateEnabled = false,
+                translations = emptyMap(),
+                translatingKeys = emptySet(),
                 lockState = manager.getDevLockState(),
             )
         }
@@ -302,8 +344,58 @@ class DeveloperConsoleViewModel @Inject constructor(
             val snapshot = statsManager.fetchDeveloperFeedback()
             if (_uiState.value.isUnlocked) {
                 _uiState.update { it.copy(feedback = snapshot, isLoadingFeedback = false) }
+                val state = _uiState.value
+                if (state.autoTranslateEnabled) {
+                    translatePendingFeedback(snapshot.items, state.translateTarget)
+                }
             }
         }
+    }
+
+    fun toggleAutoTranslate() {
+        if (!_uiState.value.isUnlocked) return
+        val next = !_uiState.value.autoTranslateEnabled
+        _uiState.update { it.copy(autoTranslateEnabled = next) }
+        if (next) {
+            val state = _uiState.value
+            translatePendingFeedback(state.feedback?.items.orEmpty(), state.translateTarget)
+        }
+    }
+
+    internal fun translateFeedback(
+        item: UserFeedbackItem,
+        targetLang: DevLanguage = _uiState.value.translateTarget,
+    ) {
+        if (!_uiState.value.isUnlocked) return
+        val state = _uiState.value
+        val key = item.id to targetLang
+        if (state.translations.containsKey(key) || key in state.translatingKeys) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(translatingKeys = it.translatingKeys + key) }
+            val result = FeedbackTranslator.translate(item.title, item.body, targetLang)
+            _uiState.update { cur ->
+                cur.copy(
+                    translatingKeys = cur.translatingKeys - key,
+                    translations = if (result != null && cur.isUnlocked) {
+                        cur.translations + (key to result)
+                    } else {
+                        cur.translations
+                    },
+                )
+            }
+        }
+    }
+
+    private fun translatePendingFeedback(items: List<UserFeedbackItem>, targetLang: DevLanguage) {
+        val state = _uiState.value
+        val candidates = items
+            .filter {
+                val key = it.id to targetLang
+                !state.translations.containsKey(key) && key !in state.translatingKeys
+            }
+            .take(12)
+        if (candidates.isEmpty()) return
+        candidates.forEach { translateFeedback(it, targetLang) }
     }
 
     fun toggleFeedbackResolved(item: UserFeedbackItem) {
@@ -374,12 +466,18 @@ class DeveloperConsoleViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingStats = true, pingFeedback = null) }
             val ok = statsManager.sendHeartbeatIfDue(force = true)
             val snapshot = statsManager.fetchDeveloperStats()
+            val bm = _uiState.value.devLanguage == DevLanguage.BM
             if (_uiState.value.isUnlocked) {
                 _uiState.update {
                     it.copy(
                         stats = snapshot,
                         isLoadingStats = false,
-                        pingFeedback = if (ok) "Ping peranti berjaya direkod" else "Gagal hantar ping ke Worker",
+                        pingFeedback = when {
+                            ok && bm -> "Ping peranti berjaya direkod"
+                            ok -> "Device ping recorded"
+                            bm -> "Gagal hantar ping ke Worker"
+                            else -> "Failed to send ping to Worker"
+                        },
                     )
                 }
             }
@@ -394,6 +492,7 @@ class DeveloperConsoleViewModel @Inject constructor(
         actionLabel: String,
         actionUrl: String,
         notify: Boolean,
+        displayMode: BroadcastDisplayMode,
         onSuccess: () -> Unit,
     ) {
         if (!_uiState.value.isUnlocked) return
@@ -407,15 +506,17 @@ class DeveloperConsoleViewModel @Inject constructor(
                 actionLabel = actionLabel.ifBlank { null },
                 actionUrl = actionUrl.ifBlank { null },
                 notify = notify,
+                displayMode = displayMode,
                 closePrevious = true,
             )
+            val bm = _uiState.value.devLanguage == DevLanguage.BM
             result.onSuccess { created ->
                 val open = manager.fetchOpenBroadcasts().getOrDefault(listOf(created))
                 _uiState.update {
                     it.copy(
                         openBroadcasts = open,
                         isBusy = false,
-                        broadcastStatus = "Broadcast dihantar (#${created.issueNumber})",
+                        broadcastStatus = if (bm) "Broadcast dihantar (#${created.issueNumber})" else "Broadcast sent (#${created.issueNumber})",
                         broadcastStatusIsError = false,
                     )
                 }
@@ -424,7 +525,7 @@ class DeveloperConsoleViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isBusy = false,
-                        broadcastStatus = err.message ?: "Gagal hantar broadcast",
+                        broadcastStatus = err.message ?: if (bm) "Gagal hantar broadcast" else "Failed to send broadcast",
                         broadcastStatusIsError = true,
                     )
                 }
@@ -437,13 +538,14 @@ class DeveloperConsoleViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, broadcastStatus = null, broadcastStatusIsError = false) }
             val result = manager.closeBroadcast(issueNumber)
+            val bm = _uiState.value.devLanguage == DevLanguage.BM
             result.onSuccess {
                 val open = manager.fetchOpenBroadcasts().getOrDefault(emptyList())
                 _uiState.update {
                     it.copy(
                         openBroadcasts = open,
                         isBusy = false,
-                        broadcastStatus = "Broadcast #$issueNumber ditamatkan",
+                        broadcastStatus = if (bm) "Broadcast #$issueNumber ditamatkan" else "Broadcast #$issueNumber ended",
                         broadcastStatusIsError = false,
                     )
                 }
@@ -451,7 +553,7 @@ class DeveloperConsoleViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isBusy = false,
-                        broadcastStatus = err.message ?: "Gagal tamatkan broadcast",
+                        broadcastStatus = err.message ?: if (bm) "Gagal tamatkan broadcast" else "Failed to end broadcast",
                         broadcastStatusIsError = true,
                     )
                 }
@@ -461,33 +563,50 @@ class DeveloperConsoleViewModel @Inject constructor(
 }
 
 internal enum class DevMetricInfo(
-    val title: String,
-    val description: String,
+    private val titleBm: String,
+    private val titleEn: String,
+    private val descBm: String,
+    private val descEn: String,
 ) {
     ONLINE_15M(
-        title = "Online (15m)",
-        description = "Bilangan peranti unik yang menghantar ping dalam 15 minit terakhir. Menunjukkan anggaran pengguna sedang aktif membuka app sekarang.",
+        titleBm = "Online (15m)",
+        titleEn = "Online (15m)",
+        descBm = "Bilangan peranti unik yang menghantar ping dalam 15 minit terakhir. Menunjukkan anggaran pengguna sedang aktif membuka app sekarang.",
+        descEn = "Unique devices that sent a heartbeat within the last 15 minutes. Estimates how many users currently have the app open.",
     ),
     NEW_TODAY(
-        title = "Pengguna Baru Hari Ini",
-        description = "Bilangan peranti unik yang pertama kali membuka app hari ini (berdasarkan ID rawak tanpa identiti peribadi).",
+        titleBm = "Pengguna Baru Hari Ini",
+        titleEn = "New Users Today",
+        descBm = "Bilangan peranti unik yang pertama kali membuka app hari ini (berdasarkan ID rawak tanpa identiti peribadi).",
+        descEn = "Unique devices opening the app for the first time today (random install ID, zero personal identity).",
     ),
     DAU(
-        title = "DAU — Daily Active Users",
-        description = "Jumlah peranti unik yang aktif menggunakan app pada hari ini. Berguna untuk melihat trafik harian app.",
+        titleBm = "DAU — Daily Active Users",
+        titleEn = "DAU — Daily Active Users",
+        descBm = "Jumlah peranti unik yang aktif menggunakan app pada hari ini. Berguna untuk melihat trafik harian app.",
+        descEn = "Total unique devices active in the app today. Useful for tracking daily traffic.",
     ),
     WAU(
-        title = "WAU — Weekly Active Users",
-        description = "Jumlah peranti unik yang membuka app sekurang-kurangnya sekali dalam 7 hari terakhir.",
+        titleBm = "WAU — Weekly Active Users",
+        titleEn = "WAU — Weekly Active Users",
+        descBm = "Jumlah peranti unik yang membuka app sekurang-kurangnya sekali dalam 7 hari terakhir.",
+        descEn = "Unique devices active at least once during the past 7 days.",
     ),
     MAU(
-        title = "MAU — Monthly Active Users",
-        description = "Jumlah peranti unik yang aktif dalam tempoh 30 hari terakhir (penanda aras jumlah pengguna aktif bulanan).",
+        titleBm = "MAU — Monthly Active Users",
+        titleEn = "MAU — Monthly Active Users",
+        descBm = "Jumlah peranti unik yang aktif dalam tempoh 30 hari terakhir (penanda aras jumlah pengguna aktif bulanan).",
+        descEn = "Unique devices active during the past 30 days (monthly active user benchmark).",
     ),
     INSTALLS(
-        title = "Installs — Jumlah Peranti",
-        description = "Jumlah keseluruhan peranti unik yang pernah membuka versi app dengan statistik aktif sejak dilancarkan.",
-    ),
+        titleBm = "Installs — Jumlah Peranti",
+        titleEn = "Installs — Total Devices",
+        descBm = "Jumlah keseluruhan peranti unik yang pernah membuka versi app dengan statistik aktif sejak dilancarkan.",
+        descEn = "Total unique devices that have opened app versions with telemetry enabled.",
+    );
+
+    fun title(lang: DevLanguage): String = if (lang == DevLanguage.BM) titleBm else titleEn
+    fun description(lang: DevLanguage): String = if (lang == DevLanguage.BM) descBm else descEn
 }
 
 @Composable
@@ -499,6 +618,8 @@ fun DeveloperConsoleScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isComic = LocalComicTheme.current
+    val lang = ui.devLanguage
+    val bm = lang == DevLanguage.BM
 
     var showPatLogin by rememberSaveable { mutableStateOf(false) }
     var deviceAuthFallbackMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -506,6 +627,7 @@ fun DeveloperConsoleScreen(
     var showSignOutConfirm by rememberSaveable { mutableStateOf(false) }
     var activeMetricHelp by remember { mutableStateOf<DevMetricInfo?>(null) }
     var previewMessage by remember { mutableStateOf<BroadcastMessage?>(null) }
+    var zoomedScreenshot by remember { mutableStateOf<String?>(null) }
 
     val deviceUnlockLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -524,7 +646,7 @@ fun DeveloperConsoleScreen(
         val intent = if (km?.isDeviceSecure == true) {
             km.createConfirmDeviceCredentialIntent(
                 "Unlock Developer Console",
-                "Sahkan cap jari, wajah, atau PIN peranti",
+                if (bm) "Sahkan cap jari, wajah, atau PIN peranti" else "Confirm fingerprint, face, or device PIN",
             )
         } else {
             null
@@ -534,7 +656,11 @@ fun DeveloperConsoleScreen(
             awaitingDeviceCredential = true
             deviceUnlockLauncher.launch(intent)
         } else {
-            deviceAuthFallbackMessage = "Peranti tiada kunci skrin (PIN/Cap Jari). Sahkan semula guna PAT."
+            deviceAuthFallbackMessage = if (bm) {
+                "Peranti tiada kunci skrin (PIN/Cap Jari). Sahkan semula guna PAT."
+            } else {
+                "Device has no screen lock (PIN/Biometric). Re-verify using your PAT."
+            }
             showPatLogin = true
         }
     }
@@ -558,10 +684,14 @@ fun DeveloperConsoleScreen(
     if (showSignOutConfirm) {
         AlertDialog(
             onDismissRequest = { showSignOutConfirm = false },
-            title = { Text("Log Keluar Developer?", fontWeight = FontWeight.Bold) },
+            title = { Text(if (bm) "Log Keluar Developer?" else "Sign Out Developer?", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "Token @${ui.ownerLogin ?: "aayepp"} akan dipadam dan kad Developer Console akan disembunyikan daripada Settings.",
+                    if (bm) {
+                        "Token @${ui.ownerLogin ?: "aayepp"} akan dipadam dan kad Developer Console akan disembunyikan daripada Settings."
+                    } else {
+                        "Token for @${ui.ownerLogin ?: "aayepp"} will be cleared and the Developer Console card will be hidden from Settings."
+                    },
                 )
             },
             confirmButton = {
@@ -574,12 +704,12 @@ fun DeveloperConsoleScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) {
-                    Text("Log Keluar", fontWeight = FontWeight.Bold)
+                    Text(if (bm) "Log Keluar" else "Sign Out", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSignOutConfirm = false }) {
-                    Text("Batal")
+                    Text(if (bm) "Batal" else "Cancel")
                 }
             },
         )
@@ -588,20 +718,36 @@ fun DeveloperConsoleScreen(
     activeMetricHelp?.let { info ->
         val live = ui.stats?.liveStats
         val valueLine = when (info) {
-            DevMetricInfo.ONLINE_15M -> live?.let { "Semasa: ${formatStatsNumber(it.online15m)} pengguna" }
-            DevMetricInfo.NEW_TODAY -> live?.let { "Hari ini: +${formatStatsNumber(it.newToday)} peranti" }
+            DevMetricInfo.ONLINE_15M -> live?.let {
+                if (bm) "Semasa: ${formatStatsNumber(it.online15m)} pengguna" else "Now: ${formatStatsNumber(it.online15m)} users"
+            }
+            DevMetricInfo.NEW_TODAY -> live?.let {
+                if (bm) "Hari ini: +${formatStatsNumber(it.newToday)} peranti" else "Today: +${formatStatsNumber(it.newToday)} devices"
+            }
             DevMetricInfo.DAU -> live?.let {
-                "Hari ini: ${formatStatsNumber(it.dauToday)} • 24j: ${formatStatsNumber(it.active24h)}"
+                if (bm) {
+                    "Hari ini: ${formatStatsNumber(it.dauToday)} • 24j: ${formatStatsNumber(it.active24h)}"
+                } else {
+                    "Today: ${formatStatsNumber(it.dauToday)} • 24h: ${formatStatsNumber(it.active24h)}"
+                }
             }
             DevMetricInfo.WAU -> live?.let {
-                "7 hari: ${formatStatsNumber(it.wau7d)} • Baru 7h: +${formatStatsNumber(it.new7d)}"
+                if (bm) {
+                    "7 hari: ${formatStatsNumber(it.wau7d)} • Baru 7h: +${formatStatsNumber(it.new7d)}"
+                } else {
+                    "7 days: ${formatStatsNumber(it.wau7d)} • New 7d: +${formatStatsNumber(it.new7d)}"
+                }
             }
-            DevMetricInfo.MAU -> live?.let { "30 hari: ${formatStatsNumber(it.mau30d)} peranti unik" }
-            DevMetricInfo.INSTALLS -> live?.let { "Sepanjang masa: ${formatStatsNumber(it.totalInstalls)} peranti" }
+            DevMetricInfo.MAU -> live?.let {
+                if (bm) "30 hari: ${formatStatsNumber(it.mau30d)} peranti unik" else "30 days: ${formatStatsNumber(it.mau30d)} unique devices"
+            }
+            DevMetricInfo.INSTALLS -> live?.let {
+                if (bm) "Sepanjang masa: ${formatStatsNumber(it.totalInstalls)} peranti" else "All time: ${formatStatsNumber(it.totalInstalls)} devices"
+            }
         }
         AlertDialog(
             onDismissRequest = { activeMetricHelp = null },
-            title = { Text(info.title, fontWeight = FontWeight.Bold) },
+            title = { Text(info.title(lang), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (valueLine != null) {
@@ -613,7 +759,7 @@ fun DeveloperConsoleScreen(
                         )
                     }
                     Text(
-                        text = info.description,
+                        text = info.description(lang),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -621,7 +767,7 @@ fun DeveloperConsoleScreen(
             },
             confirmButton = {
                 TextButton(onClick = { activeMetricHelp = null }) {
-                    Text("Faham", fontWeight = FontWeight.Bold)
+                    Text(if (bm) "Faham" else "Got it", fontWeight = FontWeight.Bold)
                 }
             },
         )
@@ -631,6 +777,13 @@ fun DeveloperConsoleScreen(
         BroadcastDialog(
             message = msg,
             onDismiss = { previewMessage = null },
+        )
+    }
+
+    zoomedScreenshot?.let { shotSource ->
+        ScreenshotZoomDialog(
+            source = shotSource,
+            onDismiss = { zoomedScreenshot = null },
         )
     }
 
@@ -655,6 +808,13 @@ fun DeveloperConsoleScreen(
                         title = "",
                         onBack = onBack,
                         containerColor = Color.Transparent,
+                        actions = {
+                            DevLanguagePillToggle(
+                                language = lang,
+                                isComic = isComic,
+                                onSelectLanguage = viewModel::setDevLanguage,
+                            )
+                        },
                     )
                 },
             ) { headerInset ->
@@ -665,6 +825,7 @@ fun DeveloperConsoleScreen(
                         topInset = headerInset,
                         bottomInset = bottomScrollClearance,
                         isComic = isComic,
+                        lang = lang,
                     )
                     is DevLockState.Open -> {
                         if (ui.hasToken && !showPatLogin) {
@@ -678,6 +839,7 @@ fun DeveloperConsoleScreen(
                                 topInset = headerInset,
                                 bottomInset = bottomScrollClearance,
                                 isComic = isComic,
+                                lang = lang,
                             )
                         } else {
                             PatLoginContent(
@@ -707,6 +869,7 @@ fun DeveloperConsoleScreen(
                                 topInset = headerInset,
                                 bottomInset = bottomScrollClearance,
                                 isComic = isComic,
+                                lang = lang,
                             )
                         }
                     }
@@ -721,9 +884,14 @@ fun DeveloperConsoleScreen(
                 onBack = onBack,
                 onRefresh = viewModel::refreshAll,
                 onLockNow = viewModel::lockSession,
+                onSelectDevLanguage = viewModel::setDevLanguage,
+                onSelectTranslateTarget = viewModel::setTranslateTarget,
                 onTestPing = viewModel::sendTestPing,
                 onHoldMetric = { activeMetricHelp = it },
                 onRefreshFeedback = viewModel::refreshFeedback,
+                onToggleAutoTranslate = viewModel::toggleAutoTranslate,
+                onTranslateFeedback = { item -> viewModel.translateFeedback(item) },
+                onOpenScreenshot = { zoomedScreenshot = it },
                 onToggleFeedbackResolved = viewModel::toggleFeedbackResolved,
                 onDeleteFeedback = viewModel::deleteFeedback,
                 onCloseBroadcast = viewModel::closeBroadcast,
@@ -740,13 +908,60 @@ fun DeveloperConsoleScreen(
 }
 
 @Composable
+private fun DevLanguagePillToggle(
+    language: DevLanguage,
+    isComic: Boolean,
+    onSelectLanguage: (DevLanguage) -> Unit,
+) {
+    Surface(
+        shape = CircleShape,
+        color = if (isComic) ComicAccent else glassCardColor(MaterialTheme.colorScheme.surfaceContainerHigh),
+        border = devCardBorder(isComic),
+        modifier = Modifier.padding(end = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DevLanguage.entries.forEach { option ->
+                val selected = language == option
+                Surface(
+                    onClick = { if (!selected) onSelectLanguage(option) },
+                    shape = CircleShape,
+                    color = if (selected) {
+                        if (isComic) ComicInk else MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Transparent
+                    },
+                ) {
+                    Text(
+                        text = option.shortLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selected) {
+                            if (isComic) Color.White else MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            if (isComic) ComicInk else MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun Cooldown24hContent(
     unlockAtWallMs: Long,
     onExpired: () -> Unit,
     topInset: androidx.compose.ui.unit.Dp,
     bottomInset: androidx.compose.ui.unit.Dp,
     isComic: Boolean,
+    lang: DevLanguage,
 ) {
+    val bm = lang == DevLanguage.BM
     var nowMs by remember(unlockAtWallMs) { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(unlockAtWallMs) {
         while (true) {
@@ -764,10 +979,10 @@ private fun Cooldown24hContent(
     val totalMinutes = ((remainingMs + 59_999L) / 60_000L).toInt()
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
-    val remainingText = if (hours > 0) {
-        "$hours jam $minutes minit"
+    val remainingText = if (bm) {
+        if (hours > 0) "$hours jam $minutes minit" else "${minutes.coerceAtLeast(1)} minit"
     } else {
-        "${minutes.coerceAtLeast(1)} minit"
+        if (hours > 0) "$hours hr $minutes min" else "${minutes.coerceAtLeast(1)} min"
     }
 
     Column(
@@ -791,14 +1006,14 @@ private fun Cooldown24hContent(
         )
         Spacer(Modifier.height(18.dp))
         Text(
-            text = "Akses Dikunci",
+            text = if (bm) "Akses Dikunci" else "Access Locked",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Cuba semula dalam $remainingText",
+            text = if (bm) "Cuba semula dalam $remainingText" else "Try again in $remainingText",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.error,
@@ -812,7 +1027,11 @@ private fun Cooldown24hContent(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                text = "3 percubaan gagal direkodkan. Selepas tempoh tamat, hanya ada 1 percubaan terakhir sebelum akses dikunci selamanya.",
+                text = if (bm) {
+                    "3 percubaan gagal direkodkan. Selepas tempoh tamat, hanya ada 1 percubaan terakhir sebelum akses dikunci selamanya."
+                } else {
+                    "3 failed attempts recorded. After cooldown ends, 1 final attempt remains before permanent lockout."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -830,7 +1049,9 @@ private fun ReturningUnlockContent(
     topInset: androidx.compose.ui.unit.Dp,
     bottomInset: androidx.compose.ui.unit.Dp,
     isComic: Boolean,
+    lang: DevLanguage,
 ) {
+    val bm = lang == DevLanguage.BM
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -885,15 +1106,15 @@ private fun ReturningUnlockContent(
                     modifier = Modifier.size(20.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Guna Cap Jari / PIN", fontWeight = FontWeight.Bold)
+                Text(if (bm) "Guna Cap Jari / PIN" else "Use Biometric / PIN", fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(10.dp))
             TextButton(onClick = onSwitchTokenOrSignOut) {
-                Text("Tukar Token / Log Keluar")
+                Text(if (bm) "Tukar Token / Log Keluar" else "Switch Token / Sign Out")
             }
         }
         Text(
-            text = "Auto-kunci apabila keluar halaman",
+            text = if (bm) "Auto-kunci apabila keluar halaman" else "Auto-locks when leaving this screen",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
             textAlign = TextAlign.Center,
@@ -914,7 +1135,9 @@ private fun PatLoginContent(
     topInset: androidx.compose.ui.unit.Dp,
     bottomInset: androidx.compose.ui.unit.Dp,
     isComic: Boolean,
+    lang: DevLanguage,
 ) {
+    val bm = lang == DevLanguage.BM
     val context = LocalContext.current
     var tokenInput by rememberSaveable { mutableStateOf("") }
     var revealToken by rememberSaveable { mutableStateOf(false) }
@@ -948,7 +1171,7 @@ private fun PatLoginContent(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Sahkan token pemilik untuk buka konsol",
+            text = if (bm) "Sahkan token pemilik untuk buka konsol" else "Verify owner token to open console",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -996,13 +1219,13 @@ private fun PatLoginContent(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.ContentPaste,
-                                    contentDescription = "Tampal token",
+                                    contentDescription = if (bm) "Tampal token" else "Paste token",
                                 )
                             }
                             IconButton(onClick = { revealToken = !revealToken }) {
                                 Icon(
                                     imageVector = if (revealToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = "Papar atau sembunyikan token",
+                                    contentDescription = if (bm) "Papar atau sembunyikan token" else "Show or hide token",
                                 )
                             }
                         }
@@ -1019,9 +1242,9 @@ private fun PatLoginContent(
 
                 val noticeText = when {
                     lockState.isFinalChanceAfterCooldown ->
-                        "Percubaan terakhir — gagal akan kunci akses secara kekal"
+                        if (bm) "Percubaan terakhir — gagal akan kunci akses secara kekal" else "Final attempt — failure locks access permanently"
                     lockState.remainingAttempts in 1..2 ->
-                        "Baki ${lockState.remainingAttempts} percubaan sebelum dikunci 24 jam"
+                        if (bm) "Baki ${lockState.remainingAttempts} percubaan sebelum dikunci 24 jam" else "${lockState.remainingAttempts} attempt(s) left before 24h lock"
                     else -> null
                 }
                 if (noticeText != null) {
@@ -1061,7 +1284,7 @@ private fun PatLoginContent(
                             color = if (isComic) ComicInk else MaterialTheme.colorScheme.onPrimary,
                         )
                     } else {
-                        Text("Sahkan & Buka", fontWeight = FontWeight.Bold)
+                        Text(if (bm) "Sahkan & Buka" else "Verify & Open", fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -1073,7 +1296,7 @@ private fun PatLoginContent(
                     ) {
                         if (onCancelSwitch != null) {
                             TextButton(onClick = onCancelSwitch, enabled = !isBusy) {
-                                Text("Batal")
+                                Text(if (bm) "Batal" else "Cancel")
                             }
                         } else {
                             Spacer(Modifier.width(1.dp))
@@ -1086,7 +1309,7 @@ private fun PatLoginContent(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
                             ) {
-                                Text("Log Keluar")
+                                Text(if (bm) "Log Keluar" else "Sign Out")
                             }
                         }
                     }
@@ -1096,7 +1319,7 @@ private fun PatLoginContent(
 
         Spacer(Modifier.height(14.dp))
         Text(
-            text = "Disahkan di server untuk @aayepp · Tiada rahsia dalam APK",
+            text = if (bm) "Disahkan di server untuk @aayepp · Tiada rahsia dalam APK" else "Server-verified for @aayepp · Zero secrets in APK",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             textAlign = TextAlign.Center,
@@ -1113,9 +1336,14 @@ private fun UnlockedConsoleContent(
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onLockNow: () -> Unit,
+    onSelectDevLanguage: (DevLanguage) -> Unit,
+    onSelectTranslateTarget: (DevLanguage) -> Unit,
     onTestPing: () -> Unit,
     onHoldMetric: (DevMetricInfo) -> Unit,
     onRefreshFeedback: () -> Unit,
+    onToggleAutoTranslate: () -> Unit,
+    onTranslateFeedback: (UserFeedbackItem) -> Unit,
+    onOpenScreenshot: (String) -> Unit,
     onToggleFeedbackResolved: (UserFeedbackItem) -> Unit,
     onDeleteFeedback: (Long) -> Unit,
     onCloseBroadcast: (Int) -> Unit,
@@ -1127,17 +1355,21 @@ private fun UnlockedConsoleContent(
         actionLabel: String,
         actionUrl: String,
         notify: Boolean,
+        displayMode: BroadcastDisplayMode,
         onSuccess: () -> Unit,
     ) -> Unit,
     onPreviewBroadcast: (BroadcastMessage) -> Unit,
     onHideShortcut: () -> Unit,
     onRequestSignOut: () -> Unit,
 ) {
+    val lang = ui.devLanguage
+    val bm = lang == DevLanguage.BM
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     // Category (0 all, 1 bug, 2 suggestion, 3 feedback) and status (0 open, 1 resolved, 2 all) filter together.
     var inboxCategory by rememberSaveable { mutableIntStateOf(0) }
     var inboxStatus by rememberSaveable { mutableIntStateOf(0) }
     var selectedType by rememberSaveable { mutableStateOf(BroadcastType.INFO) }
+    var selectedDisplayMode by rememberSaveable { mutableStateOf(BroadcastDisplayMode.POPUP) }
     var title by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("") }
     var imageUrl by rememberSaveable { mutableStateOf("") }
@@ -1150,9 +1382,9 @@ private fun UnlockedConsoleContent(
     val broadcastListState = rememberLazyListState()
 
     val unreadCount = ui.feedback?.unreadCount ?: 0
-    val tabItems = remember(unreadCount) {
+    val tabItems = remember(unreadCount, lang) {
         listOf(
-            ConnectedButtonItem(label = "Ringkasan"),
+            ConnectedButtonItem(label = if (bm) "Ringkasan" else "Overview"),
             ConnectedButtonItem(label = if (unreadCount > 0) "Inbox ($unreadCount)" else "Inbox"),
             ConnectedButtonItem(label = "Broadcast"),
         )
@@ -1176,14 +1408,19 @@ private fun UnlockedConsoleContent(
                     title = "Developer",
                     onBack = onBack,
                     actions = {
+                        DevLanguagePillToggle(
+                            language = lang,
+                            isComic = isComic,
+                            onSelectLanguage = onSelectDevLanguage,
+                        )
                         HeaderActionIcon(
                             icon = Icons.Filled.Refresh,
-                            contentDescription = "Muat semula",
+                            contentDescription = if (bm) "Muat semula" else "Refresh",
                             onClick = onRefresh,
                         )
                         HeaderActionIcon(
                             icon = Icons.Filled.Lock,
-                            contentDescription = "Kunci konsol",
+                            contentDescription = if (bm) "Kunci konsol" else "Lock console",
                             onClick = onLockNow,
                         )
                     },
@@ -1229,16 +1466,17 @@ private fun UnlockedConsoleContent(
                             error = ui.stats?.liveError,
                             isLoading = ui.isLoadingStats,
                             isComic = isComic,
+                            lang = lang,
                             onHoldMetric = onHoldMetric,
                             onTestPing = onTestPing,
                             onRetry = onRefresh,
                         )
                     }
                     if (live != null && live.byCountry.isNotEmpty()) {
-                        item(key = "stats_countries") { CountriesTile(live.byCountry, isComic) }
+                        item(key = "stats_countries") { CountriesTile(live.byCountry, isComic, lang) }
                     }
                     if (live != null && live.byVersion.isNotEmpty()) {
-                        item(key = "stats_versions") { VersionsTile(live.byVersion, isComic) }
+                        item(key = "stats_versions") { VersionsTile(live.byVersion, isComic, lang) }
                     }
                     item(key = "stats_android_release") {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1250,6 +1488,7 @@ private fun UnlockedConsoleContent(
                                 error = ui.stats?.githubError,
                                 isLoading = ui.isLoadingStats,
                                 isComic = isComic,
+                                lang = lang,
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -1269,7 +1508,7 @@ private fun UnlockedConsoleContent(
                                 }
                                 if (fetchedAt > 0L) {
                                     Text(
-                                        text = "Dikemas kini ${formatClockTime(fetchedAt)}",
+                                        text = if (bm) "Dikemas kini ${formatClockTime(fetchedAt)}" else "Updated ${formatClockTime(fetchedAt)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -1282,6 +1521,8 @@ private fun UnlockedConsoleContent(
                         SessionSecurityStrip(
                             ownerLogin = ui.ownerLogin ?: "aayepp",
                             isComic = isComic,
+                            lang = lang,
+                            onSelectLanguage = onSelectDevLanguage,
                             onHideShortcut = onHideShortcut,
                             onSignOut = onRequestSignOut,
                         )
@@ -1299,6 +1540,81 @@ private fun UnlockedConsoleContent(
                         else -> inCategory
                     }
 
+                    item(key = "inbox_translate_bar") {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
+                            border = devCardBorder(isComic),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Translate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (bm) "Auto-Terjemah Laporan" else "Auto-Translate Reports",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Text(
+                                            text = if (bm) {
+                                                "Terjemah laporan pengguna ke bahasa pilihan secara automatik"
+                                            } else {
+                                                "Automatically translate user reports into your chosen language"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = ui.autoTranslateEnabled,
+                                        onCheckedChange = { onToggleAutoTranslate() },
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = if (bm) "Bahasa Sasaran:" else "Target Language:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    DevLanguage.entries.forEach { targetOption ->
+                                        val selected = ui.translateTarget == targetOption
+                                        FilterChip(
+                                            selected = selected,
+                                            onClick = { onSelectTranslateTarget(targetOption) },
+                                            label = {
+                                                Text(
+                                                    text = targetOption.displayName,
+                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                                )
+                                            },
+                                            shape = CircleShape,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     item(key = "inbox_summary") {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             categories.forEachIndexed { idx, category ->
@@ -1307,6 +1623,7 @@ private fun UnlockedConsoleContent(
                                     count = category?.let { c -> allItems.count { it.category == c } } ?: allItems.size,
                                     selected = inboxCategory == idx,
                                     isComic = isComic,
+                                    lang = lang,
                                     onClick = { inboxCategory = idx },
                                     modifier = Modifier.weight(1f),
                                 )
@@ -1317,9 +1634,9 @@ private fun UnlockedConsoleContent(
                     item(key = "inbox_status") {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf(
-                                "Belum selesai · ${inCategory.count { !it.isResolved }}",
-                                "Selesai · ${inCategory.count { it.isResolved }}",
-                                "Semua",
+                                if (bm) "Belum selesai · ${inCategory.count { !it.isResolved }}" else "Open · ${inCategory.count { !it.isResolved }}",
+                                if (bm) "Selesai · ${inCategory.count { it.isResolved }}" else "Resolved · ${inCategory.count { it.isResolved }}",
+                                if (bm) "Semua" else "All",
                             ).forEachIndexed { idx, label ->
                                 FilterChip(
                                     selected = inboxStatus == idx,
@@ -1371,7 +1688,7 @@ private fun UnlockedConsoleContent(
                                             color = MaterialTheme.colorScheme.error,
                                         )
                                         TextButton(onClick = onRefreshFeedback) {
-                                            Text("Cuba lagi")
+                                            Text(if (bm) "Cuba lagi" else "Retry")
                                         }
                                     }
                                 }
@@ -1399,7 +1716,7 @@ private fun UnlockedConsoleContent(
                                             modifier = Modifier.size(28.dp),
                                         )
                                         Text(
-                                            text = "Tiada mesej dalam kategori ini",
+                                            text = if (bm) "Tiada mesej dalam kategori ini" else "No messages in this category",
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -1409,10 +1726,17 @@ private fun UnlockedConsoleContent(
                         }
                         else -> {
                             items(filtered, key = { "fb_${it.id}" }) { item ->
+                                val trKey = item.id to ui.translateTarget
                                 InboxFeedbackCard(
                                     item = item,
                                     isComic = isComic,
+                                    lang = lang,
+                                    translateTarget = ui.translateTarget,
                                     isBusy = ui.feedbackBusyId == item.id,
+                                    translation = ui.translations[trKey],
+                                    isTranslating = trKey in ui.translatingKeys,
+                                    onTranslate = { onTranslateFeedback(item) },
+                                    onOpenScreenshot = onOpenScreenshot,
                                     onToggleResolved = { onToggleFeedbackResolved(item) },
                                     onDelete = { onDeleteFeedback(item.id) },
                                 )
@@ -1427,6 +1751,7 @@ private fun UnlockedConsoleContent(
                             openBroadcasts = ui.openBroadcasts,
                             isBusy = ui.isBusy,
                             isComic = isComic,
+                            lang = lang,
                             onCloseBroadcast = onCloseBroadcast,
                         )
                     }
@@ -1435,6 +1760,8 @@ private fun UnlockedConsoleContent(
                         NewBroadcastSection(
                             selectedType = selectedType,
                             onSelectType = { selectedType = it },
+                            selectedDisplayMode = selectedDisplayMode,
+                            onSelectDisplayMode = { selectedDisplayMode = it },
                             title = title,
                             onTitleChange = { title = it },
                             message = message,
@@ -1451,6 +1778,7 @@ private fun UnlockedConsoleContent(
                             statusIsError = ui.broadcastStatusIsError,
                             isBusy = ui.isBusy,
                             isComic = isComic,
+                            lang = lang,
                             onPreview = {
                                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                                 onPreviewBroadcast(
@@ -1465,6 +1793,7 @@ private fun UnlockedConsoleContent(
                                         actionLabel = actionLabel.trim().ifBlank { null },
                                         actionUrl = actionUrl.trim().ifBlank { null },
                                         notify = notify,
+                                        displayMode = selectedDisplayMode,
                                     ),
                                 )
                             },
@@ -1477,6 +1806,7 @@ private fun UnlockedConsoleContent(
                                     actionLabel,
                                     actionUrl,
                                     notify,
+                                    selectedDisplayMode,
                                 ) {
                                     title = ""
                                     message = ""
@@ -1492,6 +1822,8 @@ private fun UnlockedConsoleContent(
                         SessionSecurityStrip(
                             ownerLogin = ui.ownerLogin ?: "aayepp",
                             isComic = isComic,
+                            lang = lang,
+                            onSelectLanguage = onSelectDevLanguage,
                             onHideShortcut = onHideShortcut,
                             onSignOut = onRequestSignOut,
                         )
@@ -1502,14 +1834,54 @@ private fun UnlockedConsoleContent(
     }
 }
 
+private fun BroadcastType.localizedLabel(lang: DevLanguage): String = when (this) {
+    BroadcastType.INFO -> "Info"
+    BroadcastType.WARNING -> if (lang == DevLanguage.BM) "Amaran" else "Warning"
+    BroadcastType.MAINTENANCE -> if (lang == DevLanguage.BM) "Selenggara" else "Maintenance"
+    BroadcastType.UPDATE -> "Update"
+}
+
+private fun BroadcastDisplayMode.localizedLabel(lang: DevLanguage): String = when (this) {
+    BroadcastDisplayMode.POPUP -> if (lang == DevLanguage.BM) "Popup Sahaja" else "Popup Only"
+    BroadcastDisplayMode.TICKER -> if (lang == DevLanguage.BM) "Top Home Bergerak" else "Scrolling Top Banner"
+    BroadcastDisplayMode.BOTH -> if (lang == DevLanguage.BM) "Kedua-dua" else "Both"
+}
+
 @Composable
 private fun InboxFeedbackCard(
     item: UserFeedbackItem,
     isComic: Boolean,
+    lang: DevLanguage,
+    translateTarget: DevLanguage,
     isBusy: Boolean,
+    translation: FeedbackTranslation?,
+    isTranslating: Boolean,
+    onTranslate: () -> Unit,
+    onOpenScreenshot: (String) -> Unit,
     onToggleResolved: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val bm = lang == DevLanguage.BM
+    var showOriginal by rememberSaveable(item.id, translateTarget.code) { mutableStateOf(false) }
+    var showAssistant by rememberSaveable(item.id) {
+        mutableStateOf(item.category == FeedbackCategory.BUG && !item.isResolved)
+    }
+    var copiedPrompt by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(copiedPrompt) {
+        if (copiedPrompt) {
+            delay(2000L)
+            copiedPrompt = false
+        }
+    }
+
+    val hasTranslated = translation != null && !translation.alreadyTargetLang
+    val showingTranslated = hasTranslated && !showOriginal
+    val displayTitle = if (showingTranslated) translation.translatedTitle else item.title
+    val displayBody = if (showingTranslated) translation.translatedBody else item.body
+    val digest = remember(item.id, item.title, item.body, displayTitle, displayBody, lang) {
+        BugTriageAnalyzer.analyze(item, displayTitle, displayBody, lang)
+    }
+
     val catBg = when (item.category) {
         FeedbackCategory.BUG -> MaterialTheme.colorScheme.errorContainer
         FeedbackCategory.SUGGESTION -> MaterialTheme.colorScheme.primaryContainer
@@ -1522,7 +1894,7 @@ private fun InboxFeedbackCard(
     }
     val catLabel = when (item.category) {
         FeedbackCategory.BUG -> "Bug"
-        FeedbackCategory.SUGGESTION -> "Cadangan"
+        FeedbackCategory.SUGGESTION -> if (bm) "Cadangan" else "Feature"
         FeedbackCategory.FEEDBACK -> "Feedback"
     }
     val catIcon = when (item.category) {
@@ -1584,6 +1956,20 @@ private fun InboxFeedbackCard(
                             )
                         }
                     }
+                    if (showingTranslated) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
+                        ) {
+                            Text(
+                                text = "${translation.sourceLang} → ${translation.targetLang.shortLabel}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
                     if (item.isResolved) {
                         Surface(
                             shape = CircleShape,
@@ -1601,7 +1987,7 @@ private fun InboxFeedbackCard(
                                     modifier = Modifier.size(12.dp),
                                 )
                                 Text(
-                                    text = "Selesai",
+                                    text = if (bm) "Selesai" else "Resolved",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF30D158),
@@ -1611,23 +1997,165 @@ private fun InboxFeedbackCard(
                     }
                 }
                 Text(
-                    text = formatRelativeSec(item.createdAtSec),
+                    text = formatRelativeSec(item.createdAtSec, lang),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             Text(
-                text = item.title,
+                text = displayTitle,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
 
             Text(
-                text = item.body,
+                text = displayBody,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isResolved) 0.72f else 0.9f),
             )
+
+            if (item.screenshots.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        item.screenshots.take(5).forEach { shot ->
+                            FeedbackScreenshotThumbnail(
+                                source = shot,
+                                onClick = { onOpenScreenshot(shot) },
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (bm) {
+                            "${item.screenshots.size} Screenshot · Tekan gambar untuk zoom"
+                        } else {
+                            "${item.screenshots.size} Screenshot(s) · Tap image to zoom"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            val clipboard = LocalClipboardManager.current
+
+            if (showAssistant) {
+                val prioColor = when (digest.priority) {
+                    BugPriority.HIGH -> MaterialTheme.colorScheme.error
+                    BugPriority.MEDIUM -> MaterialTheme.colorScheme.tertiary
+                    BugPriority.LOW -> MaterialTheme.colorScheme.primary
+                }
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.24f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                                Text(
+                                    text = if (bm) "Pembantu Bug (Assistant)" else "Bug Assistant",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = prioColor.copy(alpha = 0.16f),
+                            ) {
+                                Text(
+                                    text = digest.priority.label(lang),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = prioColor,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                        Text(
+                            text = if (bm) "Apa berlaku: ${digest.plainExplanation}" else "What happened: ${digest.plainExplanation}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = if (bm) "Punca mungkin: ${digest.likelyCause}" else "Likely cause: ${digest.likelyCause}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (digest.steps.isNotEmpty()) {
+                            Text(
+                                text = (if (bm) "Langkah ulang: " else "Steps: ") +
+                                    digest.steps.take(3).joinToString(" -> "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = (if (bm) "Fail disyaki: " else "Suspect files: ") +
+                                digest.suspectFiles.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                clipboard.setText(
+                                    AnnotatedString(
+                                        BugTriageAnalyzer.buildAiAgentPrompt(item, translation, digest, lang),
+                                    ),
+                                )
+                                copiedPrompt = true
+                            },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                imageVector = if (copiedPrompt) Icons.Filled.CheckCircle else Icons.Filled.ContentCopy,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = when {
+                                    copiedPrompt && bm -> "Prompt AI Agent Disalin!"
+                                    copiedPrompt -> "AI Agent Prompt Copied!"
+                                    bm -> "Salin Prompt Untuk AI Agent"
+                                    else -> "Copy Prompt for AI Agent"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+            }
 
             val metaParts = buildList {
                 if (item.contact.isNotBlank()) add(item.contact)
@@ -1643,33 +2171,55 @@ private fun InboxFeedbackCard(
                 )
             }
 
-            Row(
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                TextButton(
+                    onClick = {
+                        when {
+                            isTranslating -> Unit
+                            hasTranslated -> showOriginal = !showOriginal
+                            else -> onTranslate()
+                        }
+                    },
+                    enabled = !isTranslating,
+                ) {
+                    Text(
+                        text = when {
+                            isTranslating -> if (bm) "Menterjemah..." else "Translating..."
+                            showingTranslated -> if (bm) "Lihat Asal" else "Show Original"
+                            hasTranslated -> if (bm) "Terjemah ${translateTarget.shortLabel}" else "Translate ${translateTarget.shortLabel}"
+                            translation?.alreadyTargetLang == true -> if (bm) "Sudah ${translateTarget.shortLabel}" else "Already ${translateTarget.shortLabel}"
+                            else -> if (bm) "Terjemah ${translateTarget.shortLabel}" else "Translate ${translateTarget.shortLabel}"
+                        },
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                TextButton(onClick = { showAssistant = !showAssistant }) {
+                    Text(
+                        text = if (showAssistant) {
+                            if (bm) "Tutup Assistant" else "Hide Assistant"
+                        } else {
+                            "Assistant"
+                        },
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 TextButton(
                     onClick = onToggleResolved,
                     enabled = !isBusy,
                 ) {
                     Text(
-                        text = if (item.isResolved) "Buka Semula" else "Tandakan Selesai",
+                        text = if (item.isResolved) {
+                            if (bm) "Buka Semula" else "Reopen"
+                        } else {
+                            if (bm) "Selesai" else "Resolve"
+                        },
                         fontWeight = FontWeight.SemiBold,
                     )
-                }
-                val clipboard = LocalClipboardManager.current
-                TextButton(
-                    onClick = {
-                        // One paste carries everything needed to reproduce the report elsewhere.
-                        clipboard.setText(
-                            AnnotatedString(
-                                "[$catLabel] ${item.title}\n${item.body}" +
-                                    (if (metaParts.isNotEmpty()) "\n" + metaParts.joinToString(" · ") else ""),
-                            ),
-                        )
-                    },
-                ) {
-                    Text("Salin", fontWeight = FontWeight.SemiBold)
                 }
                 TextButton(
                     onClick = onDelete,
@@ -1682,7 +2232,112 @@ private fun InboxFeedbackCard(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("Padam", fontWeight = FontWeight.SemiBold)
+                    Text(if (bm) "Padam" else "Delete", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeedbackScreenshotThumbnail(
+    source: String,
+    onClick: () -> Unit,
+) {
+    val modifier = Modifier
+        .size(width = 68.dp, height = 52.dp)
+        .clip(RoundedCornerShape(10.dp))
+        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        .clickable(onClick = onClick)
+
+    if (source.startsWith("data:image/", ignoreCase = true)) {
+        val bitmap by produceState<ImageBitmap?>(initialValue = null, source) {
+            value = decodeDataUriBitmap(source)
+        }
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            val bmp = bitmap
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp,
+                    contentDescription = "Screenshot",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            }
+        }
+    } else {
+        AsyncImage(
+            model = source,
+            contentDescription = "Screenshot",
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun ScreenshotZoomDialog(
+    source: String,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (source.startsWith("data:image/", ignoreCase = true)) {
+                    val bitmap by produceState<ImageBitmap?>(initialValue = null, source) {
+                        value = decodeDataUriBitmap(source)
+                    }
+                    val bmp = bitmap
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = "Screenshot",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                } else {
+                    AsyncImage(
+                        model = source,
+                        contentDescription = "Screenshot",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                    )
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close",
+                    )
                 }
             }
         }
@@ -1695,13 +2350,15 @@ private fun InboxCountTile(
     count: Int,
     selected: Boolean,
     isComic: Boolean,
+    lang: DevLanguage,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val bm = lang == DevLanguage.BM
     val (label, icon, tint) = when (category) {
-        null -> Triple("Semua", Icons.Filled.Inbox, MaterialTheme.colorScheme.onSurface)
+        null -> Triple(if (bm) "Semua" else "All", Icons.Filled.Inbox, MaterialTheme.colorScheme.onSurface)
         FeedbackCategory.BUG -> Triple("Bug", Icons.Filled.BugReport, MaterialTheme.colorScheme.error)
-        FeedbackCategory.SUGGESTION -> Triple("Cadangan", Icons.Filled.Lightbulb, MaterialTheme.colorScheme.tertiary)
+        FeedbackCategory.SUGGESTION -> Triple(if (bm) "Cadangan" else "Feature", Icons.Filled.Lightbulb, MaterialTheme.colorScheme.tertiary)
         FeedbackCategory.FEEDBACK -> Triple("Feedback", Icons.Filled.ChatBubbleOutline, MaterialTheme.colorScheme.primary)
     }
     Surface(
@@ -1731,13 +2388,14 @@ private fun InboxCountTile(
     }
 }
 
-private fun formatRelativeSec(epochSec: Long): String {
+private fun formatRelativeSec(epochSec: Long, lang: DevLanguage): String {
     if (epochSec <= 0L) return ""
+    val bm = lang == DevLanguage.BM
     val diffSec = (System.currentTimeMillis() / 1000L - epochSec).coerceAtLeast(0L)
     return when {
-        diffSec < 60L -> "Baru saja"
-        diffSec < 3600L -> "${diffSec / 60L}m lalu"
-        diffSec < 86400L -> "${diffSec / 3600L}j lalu"
+        diffSec < 60L -> if (bm) "Baru saja" else "Just now"
+        diffSec < 3600L -> if (bm) "${diffSec / 60L}m lalu" else "${diffSec / 60L}m ago"
+        diffSec < 86400L -> if (bm) "${diffSec / 3600L}j lalu" else "${diffSec / 3600L}h ago"
         else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(epochSec * 1000L))
     }
 }
@@ -1747,11 +2405,13 @@ private fun ActiveBroadcastsSection(
     openBroadcasts: List<BroadcastMessage>,
     isBusy: Boolean,
     isComic: Boolean,
+    lang: DevLanguage,
     onCloseBroadcast: (Int) -> Unit,
 ) {
+    val bm = lang == DevLanguage.BM
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Active Broadcasts",
+            text = if (bm) "Broadcast Aktif" else "Active Broadcasts",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -1763,7 +2423,7 @@ private fun ActiveBroadcastsSection(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "Tiada broadcast aktif",
+                    text = if (bm) "Tiada broadcast aktif" else "No active broadcasts",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
@@ -1787,7 +2447,7 @@ private fun ActiveBroadcastsSection(
                         ) {
                             Icon(
                                 imageVector = item.type.icon(),
-                                contentDescription = item.type.label,
+                                contentDescription = item.type.localizedLabel(lang),
                                 tint = if (isComic) ComicInk else item.type.accent(),
                                 modifier = Modifier.size(22.dp),
                             )
@@ -1802,8 +2462,9 @@ private fun ActiveBroadcastsSection(
                                 val datePart = item.publishedAt.takeIf { it.isNotBlank() }?.let {
                                     " · ${formatBroadcastDate(it)}"
                                 }.orEmpty()
+                                val statusPrefix = if (bm) "Aktif" else "Active"
                                 Text(
-                                    text = "Aktif · #${item.issueNumber}$datePart",
+                                    text = "$statusPrefix · #${item.issueNumber} · ${item.displayMode.localizedLabel(lang)}$datePart",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -1816,7 +2477,7 @@ private fun ActiveBroadcastsSection(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
                             ) {
-                                Text("Tamat", fontWeight = FontWeight.SemiBold)
+                                Text(if (bm) "Tamat" else "End", fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -1831,6 +2492,8 @@ private fun ActiveBroadcastsSection(
 private fun NewBroadcastSection(
     selectedType: BroadcastType,
     onSelectType: (BroadcastType) -> Unit,
+    selectedDisplayMode: BroadcastDisplayMode,
+    onSelectDisplayMode: (BroadcastDisplayMode) -> Unit,
     title: String,
     onTitleChange: (String) -> Unit,
     message: String,
@@ -1847,13 +2510,15 @@ private fun NewBroadcastSection(
     statusIsError: Boolean,
     isBusy: Boolean,
     isComic: Boolean,
+    lang: DevLanguage,
     onPreview: () -> Unit,
     onSend: () -> Unit,
 ) {
+    val bm = lang == DevLanguage.BM
     val fieldShape = RoundedCornerShape(14.dp)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "New Broadcast",
+            text = if (bm) "Broadcast Baru" else "New Broadcast",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -1899,7 +2564,7 @@ private fun NewBroadcastSection(
                             },
                             label = {
                                 Text(
-                                    text = type.label,
+                                    text = type.localizedLabel(lang),
                                     fontWeight = if (selectedType == type) FontWeight.Bold else FontWeight.Medium,
                                 )
                             },
@@ -1909,11 +2574,40 @@ private fun NewBroadcastSection(
                     }
                 }
 
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (bm) "Gaya Paparan Dalam App" else "In-App Display Style",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        BroadcastDisplayMode.entries.forEach { mode ->
+                            val selected = selectedDisplayMode == mode
+                            FilterChip(
+                                selected = selected,
+                                onClick = { onSelectDisplayMode(mode) },
+                                label = {
+                                    Text(
+                                        text = mode.localizedLabel(lang),
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    )
+                                },
+                                shape = CircleShape,
+                            )
+                        }
+                    }
+                }
+
                 val broadcastInputStyle = androidx.compose.material3.LocalTextStyle.current
                 OutlinedTextField(
                     value = title,
                     onValueChange = onTitleChange,
-                    label = { Text("Tajuk") },
+                    label = { Text(if (bm) "Tajuk" else "Title") },
                     singleLine = true,
                     shape = fieldShape,
                     modifier = Modifier
@@ -1928,8 +2622,10 @@ private fun NewBroadcastSection(
                 OutlinedTextField(
                     value = message,
                     onValueChange = onMessageChange,
-                    label = { Text("Mesej (Markdown)") },
-                    supportingText = { Text("Sokong Markdown: **tebal**, - senarai, # tajuk") },
+                    label = { Text(if (bm) "Mesej (Markdown)" else "Message (Markdown)") },
+                    supportingText = {
+                        Text(if (bm) "Sokong Markdown: **tebal**, - senarai, # tajuk" else "Supports Markdown: **bold**, - list, # heading")
+                    },
                     minLines = 3,
                     maxLines = 6,
                     shape = fieldShape,
@@ -1945,8 +2641,8 @@ private fun NewBroadcastSection(
                 OutlinedTextField(
                     value = imageUrl,
                     onValueChange = onImageUrlChange,
-                    label = { Text("URL Gambar Banner (pilihan)") },
-                    placeholder = { Text("Kosong = banner default ClaudeWaves") },
+                    label = { Text(if (bm) "URL Gambar Banner (pilihan)" else "Banner Image URL (optional)") },
+                    placeholder = { Text(if (bm) "Kosong = banner default ClaudeWaves" else "Blank = default ClaudeWaves banner") },
                     singleLine = true,
                     shape = fieldShape,
                     modifier = Modifier.fillMaxWidth(),
@@ -1954,7 +2650,7 @@ private fun NewBroadcastSection(
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Pautan (pilihan)",
+                        text = if (bm) "Pautan (pilihan)" else "Action Link (optional)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1987,7 +2683,7 @@ private fun NewBroadcastSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = "Notifikasi Android",
+                        text = if (bm) "Notifikasi Android" else "Android Notification",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                     )
@@ -2004,6 +2700,33 @@ private fun NewBroadcastSection(
                         fontWeight = FontWeight.Medium,
                         color = if (statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     )
+                }
+
+                if (selectedDisplayMode != BroadcastDisplayMode.POPUP && title.isNotBlank()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = if (bm) "Preview Top Home Bergerak" else "Scrolling Top Banner Preview",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        HomeBroadcastTickerPill(
+                            message = BroadcastMessage(
+                                id = "preview_ticker",
+                                issueNumber = 0,
+                                title = title.trim(),
+                                message = message.trim(),
+                                type = selectedType,
+                                publishedAt = "",
+                                actionLabel = actionLabel.trim().ifBlank { null },
+                                actionUrl = actionUrl.trim().ifBlank { null },
+                                notify = notify,
+                                displayMode = selectedDisplayMode,
+                            ),
+                            onClick = onPreview,
+                            onDismiss = {},
+                        )
+                    }
                 }
 
                 Row(
@@ -2038,7 +2761,7 @@ private fun NewBroadcastSection(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Hantar Broadcast", fontWeight = FontWeight.Bold)
+                            Text(if (bm) "Hantar Broadcast" else "Send Broadcast", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -2051,45 +2774,84 @@ private fun NewBroadcastSection(
 private fun SessionSecurityStrip(
     ownerLogin: String,
     isComic: Boolean,
+    lang: DevLanguage,
+    onSelectLanguage: (DevLanguage) -> Unit,
     onHideShortcut: () -> Unit,
     onSignOut: () -> Unit,
 ) {
+    val bm = lang == DevLanguage.BM
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
         border = devCardBorder(isComic),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(
-                imageVector = Icons.Filled.Shield,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = "@$ownerLogin · Auto-kunci bila keluar",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onHideShortcut) {
-                Text("Sembunyi", fontWeight = FontWeight.SemiBold)
-            }
-            TextButton(
-                onClick = onSignOut,
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Log Keluar", fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = if (bm) "Bahasa Dev Mode" else "Dev Mode Language",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DevLanguage.entries.forEach { option ->
+                        val selected = lang == option
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onSelectLanguage(option) },
+                            label = {
+                                Text(
+                                    text = option.displayName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                )
+                            },
+                            shape = CircleShape,
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Shield,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "@$ownerLogin · " + if (bm) "Auto-kunci bila keluar" else "Auto-lock on exit",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onHideShortcut) {
+                    Text(if (bm) "Sembunyi" else "Hide", fontWeight = FontWeight.SemiBold)
+                }
+                TextButton(
+                    onClick = onSignOut,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(if (bm) "Log Keluar" else "Sign Out", fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
