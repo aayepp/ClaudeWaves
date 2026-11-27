@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.52] - 2026-11-27
+
+### Changed
+- **Lyrics Mode Karaoke icon:** replaced the generic recording microphone icon with a custom stage karaoke icon across the Lyrics Mode toggle button and options menu, with a dedicated vocal icon on the vocal-removal slider.
+
+### Fixed
+- **AI Karaoke stem alignment & universal format decoding:** resolved ExoPlayer's `1e12` renderer timestamp offset so ONNX AI vocal separation locks onto playback frames immediately, replaced `MediaExtractor` with a read-only off-air ExoPlayer PCM sink supporting Hi-Res DASH (`.mpd`), HLS (`.m3u8`), DRM, YouTube, FLAC, and local files without cache write-lock contention, and added automatic catch-up seeking on slower devices.
+- **Bass & beat preservation in instant Karaoke STFT:** raised bass/kick protection to `200 Hz` (smooth ramp up to `320 Hz`), preserved hi-hat sparkle above `7.5 kHz`, and added spectral-flux transient protection so drums and rhythm stay intact while AI separation warms up.
+
 ## [1.0.51] - 2026-11-27
 
 ### Added
