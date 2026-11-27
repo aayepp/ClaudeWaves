@@ -2,9 +2,6 @@
 
 package com.lastwave.app.playback.karaoke
 
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.net.Uri
 import android.os.Handler
@@ -22,6 +19,10 @@ import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import com.google.android.gms.tasks.Task
+import com.google.android.gms.tflite.client.TfLiteInitializationOptions
+import com.google.android.gms.tflite.gpu.support.TfLiteGpu
+import com.google.android.gms.tflite.java.TfLite
 import com.lastwave.app.playback.FfmpegCompat
 import com.lastwave.app.playback.accurateAudioMediaCodecSelector
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,23 +37,25 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.tensorflow.lite.InterpreterApi
+import org.tensorflow.lite.gpu.GpuDelegateFactory
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.abs
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
- * Coordinates background on-device MDX-Net ONNX vocal separation while Instant C++ STFT
- * runs synchronously in [com.lastwave.app.playback.NativeProcessingAudioSink].
- * Decodes ahead up to 35 seconds past playhead via an off-air ExoPlayer +
- * [KaraokePcmCaptureSink], computes 5120-pt STFT/iSTFT in C++20, and seamlessly
- * hands playback over to separated stems across DASH, HLS, DRM, YouTube, and local files.
+ * Coordinates background GPU LiteRT/TFLite UVR-MDX-NET-Voc_FT vocal separation while
+ * Instant C++ STFT runs synchronously in [com.lastwave.app.playback.NativeProcessingAudioSink].
+ * Decodes ahead via off-air ExoPlayer + [KaraokePcmCaptureSink], computes 7680-pt STFT/iSTFT
+ * in C++20, and subtracts only the predicted vocal stem (`orig - intensity * vocal`).
  */
 @Singleton
 class AiKaraokeEngine @Inject constructor(
@@ -75,9 +78,9 @@ class AiKaraokeEngine @Inject constructor(
 
     private val aiDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val sessionLock = Any()
-    private var ortEnv: OrtEnvironment? = null
-    private var ortSession: OrtSession? = null
-    private var inputName: String = "input"
+    private var tfliteInitialized = false
+    private var gpuSupported = false
+    private var interpreter: InterpreterApi? = null
 
     private var activeEnabled = false
     private var activeSource: TrackAudioSource? = null
@@ -87,8 +90,12 @@ class AiKaraokeEngine @Inject constructor(
     @Volatile
     private var playheadUs: Long = 0L
 
+    @Volatile
+    private var consecutiveAiMisses: Int = 0
+
     fun onKaraokeStateChanged(enabled: Boolean, source: TrackAudioSource?, currentPositionMs: Long) {
         activeEnabled = enabled
+        consecutiveAiMisses = 0
         if (!enabled) {
             workerJob?.cancel()
             workerJob = null
@@ -111,6 +118,7 @@ class AiKaraokeEngine @Inject constructor(
 
     fun onTrackChanged(source: TrackAudioSource?, startPositionMs: Long) {
         if (!activeEnabled) return
+        consecutiveAiMisses = 0
         if (source == null) {
             workerJob?.cancel()
             activeSource = null
@@ -128,6 +136,7 @@ class AiKaraokeEngine @Inject constructor(
 
     fun onSeek(positionMs: Long) {
         if (!activeEnabled) return
+        consecutiveAiMisses = 0
         playheadUs = positionMs.coerceAtLeast(0L) * 1_000L
         val source = activeSource ?: return
         if (!stemBuffer.hasCoverageAround(positionMs)) {
@@ -139,6 +148,7 @@ class AiKaraokeEngine @Inject constructor(
     fun retryModelDownload(source: TrackAudioSource?, currentPositionMs: Long) {
         if (!activeEnabled) return
         val target = source ?: activeSource ?: return
+        consecutiveAiMisses = 0
         activeSource = target
         playheadUs = currentPositionMs.coerceAtLeast(0L) * 1_000L
         startPipeline(target, currentPositionMs)
@@ -164,8 +174,20 @@ class AiKaraokeEngine @Inject constructor(
             refDryStereoFloat = refDryStereoFloat,
             refDryFrames = refDryFrames,
         )
-        if (ok && _status.value != KaraokeStatus.AiActive) {
-            _status.value = KaraokeStatus.AiActive
+        if (ok) {
+            consecutiveAiMisses = 0
+            if (_status.value != KaraokeStatus.AiActive) {
+                _status.value = KaraokeStatus.AiActive
+            }
+        } else if (_status.value == KaraokeStatus.AiActive) {
+            consecutiveAiMisses++
+            if (consecutiveAiMisses >= AI_MISS_REVERT_THRESHOLD) {
+                _status.value = if (workerJob?.isActive == true) {
+                    KaraokeStatus.PreparingAi
+                } else {
+                    KaraokeStatus.InstantStft
+                }
+            }
         }
         return ok
     }
@@ -191,14 +213,14 @@ class AiKaraokeEngine @Inject constructor(
         idleCloseJob = applicationScope.launch(Dispatchers.IO) {
             delay(60_000L)
             if (!activeEnabled) {
-                closeOrtSession()
+                closeInterpreter()
             }
         }
     }
 
     private suspend fun runSeparationPipeline(source: TrackAudioSource, startPosMs: Long) {
         val modelFile = modelManager.existingModelFile() ?: run {
-            _status.value = KaraokeStatus.DownloadingModel(0, 0, 56)
+            _status.value = KaraokeStatus.DownloadingModel(0, 0, 64)
             val result = modelManager.ensureModelDownloaded { pct, dlMb, totMb ->
                 if (activeEnabled) {
                     _status.value = KaraokeStatus.DownloadingModel(pct, dlMb, totMb)
@@ -215,12 +237,11 @@ class AiKaraokeEngine @Inject constructor(
         if (!activeEnabled) return
 
         _status.value = KaraokeStatus.PreparingAi
-        val session = runCatching { ensureOrtSession(modelFile) }.getOrElse { err ->
-            Log.w(TAG, "ONNX session init failed; staying on C++ STFT", err)
-            if (activeEnabled) _status.value = KaraokeStatus.AiError("ONNX init failed")
+        val activeInterpreter = runCatching { ensureInterpreter(modelFile) }.getOrElse { err ->
+            Log.w(TAG, "Play Services TFLite unavailable; continuing Instant C++ STFT", err)
+            if (activeEnabled) _status.value = KaraokeStatus.InstantStft
             return
         }
-        val env = ortEnv ?: return
 
         val sink = KaraokePcmCaptureSink(
             playheadUsProvider = { playheadUs },
@@ -306,7 +327,7 @@ class AiKaraokeEngine @Inject constructor(
                 .allocateDirect(MdxStftNative.MDX_TENSOR_FLOATS * Float.SIZE_BYTES)
                 .order(ByteOrder.nativeOrder())
             val chunkInput = FloatArray(MdxStftNative.MDX_CHUNK_SIZE * 2)
-            val instOut = FloatArray(MdxStftNative.MDX_GEN_SIZE * 2)
+            val vocalOut = FloatArray(MdxStftNative.MDX_GEN_SIZE * 2)
             val centerOrig = FloatArray(MdxStftNative.MDX_GEN_SIZE * 2)
             val prevTrimTail = FloatArray(MdxStftNative.MDX_TRIM * 2)
 
@@ -351,7 +372,7 @@ class AiKaraokeEngine @Inject constructor(
                             }
                             val decodedScratch = block.stereoFloat
                             val step = sampleRate.toDouble() / MdxStftNative.MDX_SAMPLE_RATE.toDouble()
-                            if (abs(sampleRate - MdxStftNative.MDX_SAMPLE_RATE) == 0) {
+                            if (sampleRate == MdxStftNative.MDX_SAMPLE_RATE) {
                                 val spaceLeft = accumCap - accumFrames
                                 val copyFrames = minOf(inFrames, spaceLeft)
                                 System.arraycopy(decodedScratch, 0, accumStereo, accumFrames * 2, copyFrames * 2)
@@ -381,7 +402,7 @@ class AiKaraokeEngine @Inject constructor(
                     currentCoroutineContext().ensureActive()
                     if (!activeEnabled) return
 
-                    // Throttle inference to stay ~35s ahead of playhead (saves battery & CPU)
+                    // Throttle inference to stay ~35s ahead of playhead (saves battery & GPU/CPU)
                     val chunkStartUs = (chunkStartFrame44k * 1_000_000L) / MdxStftNative.MDX_SAMPLE_RATE
                     while (chunkStartUs > playheadUs + MAX_AHEAD_US) {
                         currentCoroutineContext().ensureActive()
@@ -395,7 +416,7 @@ class AiKaraokeEngine @Inject constructor(
                         accumFrames
                     }
 
-                    // Build chunkInput = [prevTrimTail (2560)] + [center (256000)] + [rightTrim (2560)]
+                    // Build chunkInput = [prevTrimTail (3840)] + [center (122368)] + [rightTrim (3840)]
                     if (hasEmittedFirstChunk) {
                         System.arraycopy(prevTrimTail, 0, chunkInput, 0, MdxStftNative.MDX_TRIM * 2)
                     } else {
@@ -416,16 +437,16 @@ class AiKaraokeEngine @Inject constructor(
                     if (stftOk) {
                         inputTensorBuf.rewind()
                         outputTensorBuf.clear()
-                        runMdxChunk(env, session, inputTensorBuf, outputTensorBuf)
+                        activeInterpreter.run(inputTensorBuf, outputTensorBuf)
                         outputTensorBuf.rewind()
                         val istftOk = MdxStftNative.nativeComputeIstft(
                             outputTensorBuf,
-                            instOut,
+                            vocalOut,
                             MdxStftNative.MDX_COMPENSATE,
                         )
                         if (istftOk) {
                             System.arraycopy(accumStereo, 0, centerOrig, 0, validGenFrames * 2)
-                            stemBuffer.putChunk(chunkStartFrame44k, centerOrig, instOut, validGenFrames)
+                            stemBuffer.putChunk(chunkStartFrame44k, centerOrig, vocalOut, validGenFrames)
                             hasEmittedFirstChunk = true
                         }
                     }
@@ -447,11 +468,11 @@ class AiKaraokeEngine @Inject constructor(
                     accumFrames = remaining
                     chunkStartFrame44k += validGenFrames
 
-                    // Catch up if a slow device fell > 2s behind real-time playhead
+                    // Catch up if device fell > 2s behind real-time playhead
                     val nextStartUs = (chunkStartFrame44k * 1_000_000L) / MdxStftNative.MDX_SAMPLE_RATE
                     val behindUs = playheadUs - nextStartUs
                     if (!outputDone && behindUs > CATCHUP_BEHIND_US) {
-                        val jumpMs = ((playheadUs + 2_000_000L).coerceAtLeast(0L)) / 1_000L
+                        val jumpMs = ((playheadUs + CATCHUP_JUMP_LEAD_US).coerceAtLeast(0L)) / 1_000L
                         val seekGen = AtomicInteger(currentGeneration)
                         val seekLatch = CountDownLatch(1)
                         val posted = decoderHandler?.post {
@@ -503,50 +524,83 @@ class AiKaraokeEngine @Inject constructor(
         }
     }
 
-    private fun runMdxChunk(
-        env: OrtEnvironment,
-        session: OrtSession,
-        inputTensorBuf: ByteBuffer,
-        outputTensorBuf: ByteBuffer,
-    ) {
-        val shape = longArrayOf(
-            1L,
-            4L,
-            MdxStftNative.MDX_DIM_F.toLong(),
-            MdxStftNative.MDX_DIM_T.toLong(),
-        )
-        OnnxTensor.createTensor(env, inputTensorBuf.asFloatBuffer(), shape).use { inputTensor ->
-            session.run(Collections.singletonMap(inputName, inputTensor)).use { result ->
-                val outValue = result[0] as? OnnxTensor ?: return
-                val outFloats = outValue.floatBuffer ?: return
-                outputTensorBuf.clear()
-                outputTensorBuf.asFloatBuffer().put(outFloats)
+    private suspend fun ensureInterpreter(modelFile: File): InterpreterApi {
+        synchronized(sessionLock) {
+            interpreter?.let { return it }
+        }
+        if (!tfliteInitialized) {
+            val gpuAvail = runCatching { TfLiteGpu.isGpuDelegateAvailable(context).awaitTask() }.getOrDefault(false)
+            val initOk = if (gpuAvail) {
+                runCatching {
+                    val opts = TfLiteInitializationOptions.builder()
+                        .setEnableGpuDelegateSupport(true)
+                        .build()
+                    TfLite.initialize(context, opts).awaitTask()
+                    true
+                }.getOrDefault(false)
+            } else {
+                false
             }
+            if (!initOk) {
+                val cpuOpts = TfLiteInitializationOptions.builder()
+                    .setEnableGpuDelegateSupport(false)
+                    .build()
+                TfLite.initialize(context, cpuOpts).awaitTask()
+            }
+            tfliteInitialized = true
+            gpuSupported = gpuAvail && initOk
+        }
+
+        synchronized(sessionLock) {
+            interpreter?.let { return it }
+            val gpuCacheDir = File(context.cacheDir, "tflite_gpu_cache").apply { mkdirs() }
+            val created = if (gpuSupported) {
+                runCatching {
+                    val gpuDelegateOpts = GpuDelegateFactory.Options()
+                        .setPrecisionLossAllowed(true)
+                        .setInferencePreference(GpuDelegateFactory.Options.INFERENCE_PREFERENCE_SUSTAINED_SPEED)
+                        .setSerializationParams(gpuCacheDir.absolutePath, "uvr_mdx_voc_ft_t128_v1")
+                    val options = InterpreterApi.Options()
+                        .setRuntime(InterpreterApi.Options.TfLiteRuntime.FROM_SYSTEM_ONLY)
+                        .addDelegateFactory(GpuDelegateFactory(gpuDelegateOpts))
+                    InterpreterApi.create(modelFile, options)
+                }.getOrElse { gpuErr ->
+                    Log.w(TAG, "GPU delegate failed; falling back to Play Services XNNPACK CPU", gpuErr)
+                    createCpuInterpreter(modelFile)
+                }
+            } else {
+                createCpuInterpreter(modelFile)
+            }
+            interpreter = created
+            return created
         }
     }
 
-    private fun ensureOrtSession(modelFile: File): OrtSession {
+    private fun createCpuInterpreter(modelFile: File): InterpreterApi {
+        val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
+        val options = InterpreterApi.Options()
+            .setRuntime(InterpreterApi.Options.TfLiteRuntime.FROM_SYSTEM_ONLY)
+            .setUseXNNPACK(true)
+            .setNumThreads(minOf(4, maxOf(2, cores / 2)))
+        return InterpreterApi.create(modelFile, options)
+    }
+
+    private fun closeInterpreter() {
         synchronized(sessionLock) {
-            ortSession?.let { return it }
-            val env = ortEnv ?: OrtEnvironment.getEnvironment().also { ortEnv = it }
-            val session = OrtSession.SessionOptions().use { opts ->
-                val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
-                opts.setIntraOpNumThreads(minOf(4, maxOf(2, cores / 2)))
-                opts.setInterOpNumThreads(1)
-                opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-                runCatching { opts.addXnnpack(emptyMap()) }
-                env.createSession(modelFile.absolutePath, opts)
-            }
-            inputName = session.inputNames.firstOrNull() ?: "input"
-            ortSession = session
-            return session
+            runCatching { interpreter?.close() }
+            interpreter = null
         }
     }
 
-    private fun closeOrtSession() {
-        synchronized(sessionLock) {
-            runCatching { ortSession?.close() }
-            ortSession = null
+    private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { cont ->
+        addOnSuccessListener { result ->
+            if (cont.isActive) cont.resume(result)
+        }
+        addOnFailureListener { error ->
+            if (cont.isActive) cont.resumeWithException(error)
+        }
+        addOnCanceledListener {
+            if (cont.isActive) cont.cancel()
         }
     }
 
@@ -554,5 +608,7 @@ class AiKaraokeEngine @Inject constructor(
         private const val TAG = "AiKaraokeEngine"
         private const val MAX_AHEAD_US = 35_000_000L
         private const val CATCHUP_BEHIND_US = 2_000_000L
+        private const val CATCHUP_JUMP_LEAD_US = 3_000_000L
+        private const val AI_MISS_REVERT_THRESHOLD = 20
     }
 }

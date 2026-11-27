@@ -1218,7 +1218,8 @@ class NativeProcessingAudioSink(
         if (channels !in 1..2) return 0
         val bps = when (format.pcmEncoding) {
             C.ENCODING_PCM_16BIT -> 2
-            C.ENCODING_PCM_FLOAT -> 4
+            C.ENCODING_PCM_24BIT -> 3
+            C.ENCODING_PCM_32BIT, C.ENCODING_PCM_FLOAT -> 4
             else -> return 0
         }
         val availFrames = buffer.remaining() / (bps * channels)
@@ -1228,19 +1229,46 @@ class NativeProcessingAudioSink(
             dryRefScratch = FloatArray(count * 2)
         }
         val dup = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        if (format.pcmEncoding == C.ENCODING_PCM_FLOAT) {
-            for (i in 0 until count) {
-                val l = dup.getFloat()
-                val r = if (channels == 2) dup.getFloat() else l
-                dryRefScratch[i * 2] = l
-                dryRefScratch[i * 2 + 1] = r
+        when (format.pcmEncoding) {
+            C.ENCODING_PCM_FLOAT -> {
+                for (i in 0 until count) {
+                    val l = dup.getFloat()
+                    val r = if (channels == 2) dup.getFloat() else l
+                    dryRefScratch[i * 2] = l
+                    dryRefScratch[i * 2 + 1] = r
+                }
             }
-        } else {
-            for (i in 0 until count) {
-                val l = dup.getShort() / 32768f
-                val r = if (channels == 2) dup.getShort() / 32768f else l
-                dryRefScratch[i * 2] = l
-                dryRefScratch[i * 2 + 1] = r
+            C.ENCODING_PCM_24BIT -> {
+                val inv24 = 1f / 8_388_608f
+                for (i in 0 until count) {
+                    val l = (((dup.get().toInt() and 0xFF) or
+                        ((dup.get().toInt() and 0xFF) shl 8) or
+                        (dup.get().toInt() shl 16))) * inv24
+                    val r = if (channels == 2) {
+                        (((dup.get().toInt() and 0xFF) or
+                            ((dup.get().toInt() and 0xFF) shl 8) or
+                            (dup.get().toInt() shl 16))) * inv24
+                    } else l
+                    dryRefScratch[i * 2] = l
+                    dryRefScratch[i * 2 + 1] = r
+                }
+            }
+            C.ENCODING_PCM_32BIT -> {
+                val inv32 = 1f / 2_147_483_648f
+                for (i in 0 until count) {
+                    val l = dup.getInt() * inv32
+                    val r = if (channels == 2) dup.getInt() * inv32 else l
+                    dryRefScratch[i * 2] = l
+                    dryRefScratch[i * 2 + 1] = r
+                }
+            }
+            else -> {
+                for (i in 0 until count) {
+                    val l = dup.getShort() / 32768f
+                    val r = if (channels == 2) dup.getShort() / 32768f else l
+                    dryRefScratch[i * 2] = l
+                    dryRefScratch[i * 2 + 1] = r
+                }
             }
         }
         return count

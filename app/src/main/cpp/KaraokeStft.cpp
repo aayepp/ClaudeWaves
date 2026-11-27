@@ -125,19 +125,19 @@ void KaraokeStftProcessor::processFrame(float vocalLevel) noexcept {
         }
     }
     const float transientRatio = totalPosFlux / (totalMidMag + 1.0e-6F);
-    const float beatPreserve = 0.48F * smoothStep(0.28F, 0.56F, transientRatio);
+    const float beatPreserve = 0.25F * smoothStep(0.42F, 0.68F, transientRatio);
 
     const float sideBoost = 1.0F + 0.14F * removal;
     for (std::size_t k = 0U; k < kNumBins; ++k) {
         const float freqHz = static_cast<float>(
             static_cast<double>(k) * sampleRate_ / static_cast<double>(kFftSize));
 
-        // Keep 100% of bassline & kick fundaments (< 200 Hz) and hi-hat/cymbal sheen (> 7.5 kHz)
+        // Keep 100% of sub-bass & kick fundamentals (<= 135 Hz) and hi-hat/cymbal sheen (> 7.5 kHz)
         float bandWeight = 1.0F;
-        if (freqHz <= 200.0F) {
+        if (freqHz <= 135.0F) {
             bandWeight = 0.0F;
-        } else if (freqHz < 320.0F) {
-            bandWeight = smoothStep(200.0F, 320.0F, freqHz);
+        } else if (freqHz < 240.0F) {
+            bandWeight = smoothStep(135.0F, 240.0F, freqHz);
         } else if (freqHz > 7500.0F) {
             bandWeight = 1.0F - 0.72F * smoothStep(7500.0F, 12000.0F, freqHz);
         }

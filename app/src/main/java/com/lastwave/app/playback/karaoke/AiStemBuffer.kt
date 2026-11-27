@@ -52,7 +52,7 @@ internal class AiStemBuffer {
     fun putChunk(
         startFrame44k: Long,
         origInterleaved: FloatArray,
-        instInterleaved: FloatArray,
+        vocalInterleaved: FloatArray,
         validFrames: Int,
     ) {
         val safeFrames = validFrames.coerceIn(0, MdxStftNative.MDX_GEN_SIZE)
@@ -62,8 +62,8 @@ internal class AiStemBuffer {
         val vocal = ShortArray(samples)
         for (i in 0 until samples) {
             val origSample = origInterleaved[i]
-            val instSample = instInterleaved[i]
-            val vocSample = origSample - instSample
+            val vocSample = vocalInterleaved[i]
+            val instSample = origSample - vocSample
             inst[i] = floatToShort(instSample)
             vocal[i] = floatToShort(vocSample)
         }
@@ -255,7 +255,7 @@ internal class AiStemBuffer {
 
     companion object {
         private const val INV_SHORT = 1f / 32767f
-        private const val MAX_CHUNKS_IN_RAM = 16
+        private const val MAX_CHUNKS_IN_RAM = 24
         private const val ALIGN_SEARCH_RADIUS = 6144
 
         private fun floatToShort(value: Float): Short {

@@ -19,7 +19,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manages the on-device UVR-MDX-NET-Inst_HQ_4 ONNX vocal separation model (~56 MB),
+ * Manages the on-device UVR-MDX-NET-Voc_FT GPU TFLite vocal separation model (~64 MB),
  * verifying file length and SHA-256 checksum on download.
  */
 @Singleton
@@ -37,7 +37,15 @@ class AiKaraokeModelManager @Inject constructor(
             .build()
     }
 
+    fun cleanupLegacyModels() {
+        runCatching {
+            File(modelDir, "UVR-MDX-NET-Inst_HQ_4.onnx").delete()
+            File(modelDir, "UVR-MDX-NET-Inst_HQ_4.onnx.part").delete()
+        }
+    }
+
     fun existingModelFile(): File? {
+        cleanupLegacyModels()
         val target = File(modelDir, MODEL_FILE_NAME)
         return target.takeIf { it.isFile && it.length() == MODEL_EXPECTED_BYTES }
     }
@@ -113,10 +121,10 @@ class AiKaraokeModelManager @Inject constructor(
 
     companion object {
         private const val BYTES_PER_MB = 1_048_576L
-        const val MODEL_FILE_NAME = "UVR-MDX-NET-Inst_HQ_4.onnx"
+        const val MODEL_FILE_NAME = "uvr_mdx_voc_ft_gpu_t128.tflite"
         const val MODEL_URL =
-            "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_4.onnx"
-        const val MODEL_EXPECTED_BYTES = 59_074_342L
-        const val MODEL_SHA256 = "3c4b5b9b05090fdf238f38ba5046813982d50e2a652e9cb3324ea79720c3c9c8"
+            "https://huggingface.co/hungthinhitj/uvr_mdx_voc_ft_gpu/resolve/main/uvr_mdx_voc_ft_gpu_t128.tflite"
+        const val MODEL_EXPECTED_BYTES = 66_848_588L
+        const val MODEL_SHA256 = "7daa6609a8b32ee7873bc8f87291a720dd566d0bee2c4f3f7781b2ccf293b3f8"
     }
 }
