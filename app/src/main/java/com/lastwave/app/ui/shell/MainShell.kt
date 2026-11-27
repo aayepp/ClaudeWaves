@@ -224,7 +224,7 @@ class MainShellViewModel @Inject constructor(
         }
     }
 
-    fun setDockItems(items: List<DockItem>) {
+    internal fun setDockItems(items: List<DockItem>) {
         viewModelScope.launch { settingsPreferences.setDockItems(DockItem.serialize(items)) }
     }
 
