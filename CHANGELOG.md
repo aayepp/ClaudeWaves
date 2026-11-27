@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.54] - 2026-11-27
+
+### Changed
+- **USB Exclusive Output on Android 9+:** lowered the minimum OS requirement for USB Exclusive DAC output from Android 10 (API 29) to Android 9 (API 28) across playback routing, Settings, and all 15 languages, with safe `PendingIntent` flag handling on pre-Android 12 devices.
+
+### Removed
+- **Karaoke vocal-removal mode:** removed the experimental on-device AI/STFT vocal-removal feature, Lyrics Mode karaoke controls, and Play Services LiteRT/OpenCL dependencies while keeping word-synced lyrics intact.
+
 ## [1.0.53] - 2026-11-27
 
 ### Changed
