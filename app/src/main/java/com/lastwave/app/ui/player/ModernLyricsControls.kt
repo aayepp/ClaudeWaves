@@ -1,6 +1,7 @@
 package com.lastwave.app.ui.player
 
 import com.lastwave.app.ui.common.AnimatedToggleIcon
+import com.lastwave.app.ui.common.KaraokeIcon
 
 import com.lastwave.app.ui.theme.PlayerPalette
 import kotlinx.coroutines.Job
@@ -67,10 +68,10 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lyrics
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MusicOff
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -616,7 +617,7 @@ internal fun ModernLyricsControls(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Mic,
+                            imageVector = Icons.Filled.RecordVoiceOver,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                             tint = PlayerPalette.ink.copy(alpha = 0.72f),
@@ -689,7 +690,7 @@ internal fun ModernLyricsControls(
                     ),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Mic,
+                    imageVector = KaraokeIcon,
                     contentDescription = stringResource(
                         if (state.karaokeEnabled) R.string.ly_karaoke_off else R.string.ly_karaoke_on,
                     ),
@@ -1194,7 +1195,7 @@ internal fun LyricsOptionsMenuDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
-                            Icon(Icons.Filled.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Icon(KaraokeIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                             Text(stringResource(R.string.ly_karaoke_mode), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                             Switch(
                                 checked = karaokeEnabled,

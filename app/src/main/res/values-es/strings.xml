@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">Comentarios y sugerencias</string>
     <string name="settings_feedback_sub">Reporta un error o sugiere una nueva función</string>
     <string name="feedback_sheet_title">Comentarios y sugerencias</string>
-    <string name="feedback_sheet_sub">Enviado directo a la consola del desarrollador</string>
+    <string name="feedback_sheet_sub">Reporta un error o sugiere una mejora</string>
     <string name="feedback_cat_bug">Error</string>
     <string name="feedback_cat_suggestion">Sugerencia</string>
     <string name="feedback_cat_general">Comentario</string>

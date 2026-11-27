@@ -84,6 +84,8 @@ class SettingsClearAllDataTest {
     private val innerTube = mockk<com.lastwave.app.data.music.InnerTubeMusicApi>(relaxed = true)
     private val appUpdateManager = mockk<com.lastwave.app.data.update.AppUpdateManager>(relaxed = true)
     private val appChangelogManager = mockk<com.lastwave.app.data.update.AppChangelogManager>(relaxed = true)
+    private val broadcastManager = mockk<com.lastwave.app.data.update.BroadcastManager>(relaxed = true)
+    private val appStatsManager = mockk<com.lastwave.app.data.update.AppStatsManager>(relaxed = true)
     private val spotifyPreferences = mockk<com.lastwave.app.data.spotify.SpotifyPreferences>(relaxed = true)
     private val autoMixPreferences = mockk<com.lastwave.app.playback.automix.api.AutoMixPreferences>(relaxed = true)
 
@@ -117,6 +119,7 @@ class SettingsClearAllDataTest {
         every { generateRepository.observeRecommendationExclusions() } returns
             MutableStateFlow(emptyList<RecommendationExclusionEntity>())
         every { appUpdateManager.updateInfo } returns MutableStateFlow(UpdateInfo())
+        every { broadcastManager.devShortcutVisible } returns MutableStateFlow(false)
         every { musicPlayer.state } returns playerState
         every { musicPlayer.stopAndClear(clearSession = true) } answers { order += "player" }
         coEvery { downloadManager.clearAllDownloads() } coAnswers { order += "downloads" }
@@ -154,6 +157,8 @@ class SettingsClearAllDataTest {
             innerTube = innerTube,
             appUpdateManager = appUpdateManager,
             appChangelogManager = appChangelogManager,
+            broadcastManager = broadcastManager,
+            appStatsManager = appStatsManager,
             spotifyPreferences = spotifyPreferences,
             autoMixPreferences = autoMixPreferences,
             context = RuntimeEnvironment.getApplication(),

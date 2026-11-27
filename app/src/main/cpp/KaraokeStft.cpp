@@ -49,6 +49,7 @@ void KaraokeStftProcessor::reset() noexcept {
     inRight_.fill(0.0F);
     outLeft_.fill(0.0F);
     outRight_.fill(0.0F);
+    prevMidMag_.fill(0.0F);
     inWritePos_ = 0U;
     // Align read pointer one hop ahead so zero-latency OLA accumulation fills properly.
     outReadPos_ = 0U;
@@ -104,18 +105,41 @@ void KaraokeStftProcessor::processFrame(float vocalLevel) noexcept {
     fft(fftLeft_, false);
     fft(fftRight_, false);
 
-    const float sideBoost = 1.0F + 0.18F * removal;
+    // Measure positive spectral flux of centered energy across 150..8000 Hz so sharp
+    // snare/kick transients ("rentak") pass through while sustained centered vocals stay damped.
+    float totalMidMag = 0.0F;
+    float totalPosFlux = 0.0F;
+    for (std::size_t k = 0U; k < kNumBins; ++k) {
+        const Complex cL = fftLeft_[k];
+        const Complex cR = fftRight_[k];
+        const float mRe = 0.5F * (cL.re + cR.re);
+        const float mIm = 0.5F * (cL.im + cR.im);
+        const float midMag = std::sqrt(mRe * mRe + mIm * mIm);
+        const float flux = std::max(0.0F, midMag - prevMidMag_[k]);
+        prevMidMag_[k] = midMag;
+        const float freqHz = static_cast<float>(
+            static_cast<double>(k) * sampleRate_ / static_cast<double>(kFftSize));
+        if (freqHz >= 150.0F && freqHz <= 8000.0F) {
+            totalMidMag += midMag;
+            totalPosFlux += flux;
+        }
+    }
+    const float transientRatio = totalPosFlux / (totalMidMag + 1.0e-6F);
+    const float beatPreserve = 0.48F * smoothStep(0.28F, 0.56F, transientRatio);
+
+    const float sideBoost = 1.0F + 0.14F * removal;
     for (std::size_t k = 0U; k < kNumBins; ++k) {
         const float freqHz = static_cast<float>(
             static_cast<double>(k) * sampleRate_ / static_cast<double>(kFftSize));
 
+        // Keep 100% of bassline & kick fundaments (< 200 Hz) and hi-hat/cymbal sheen (> 7.5 kHz)
         float bandWeight = 1.0F;
-        if (freqHz <= 90.0F) {
+        if (freqHz <= 200.0F) {
             bandWeight = 0.0F;
-        } else if (freqHz < 135.0F) {
-            bandWeight = smoothStep(90.0F, 135.0F, freqHz);
-        } else if (freqHz > 14500.0F) {
-            bandWeight = 1.0F - 0.65F * smoothStep(14500.0F, 20000.0F, freqHz);
+        } else if (freqHz < 320.0F) {
+            bandWeight = smoothStep(200.0F, 320.0F, freqHz);
+        } else if (freqHz > 7500.0F) {
+            bandWeight = 1.0F - 0.72F * smoothStep(7500.0F, 12000.0F, freqHz);
         }
 
         const Complex cL = fftLeft_[k];
@@ -138,8 +162,9 @@ void KaraokeStftProcessor::processFrame(float vocalLevel) noexcept {
 
         const float centerMask = std::clamp(std::pow(cRatio, 0.75F) * inPhase, 0.0F, 1.0F);
         const float vocalBandFocus = smoothStep(0.28F, 0.70F, cRatio) * inPhase;
-        const float suppressionStrength = std::clamp(
+        const float baseSuppression = std::clamp(
             0.82F * centerMask + 0.18F * vocalBandFocus, 0.0F, 0.985F);
+        const float suppressionStrength = baseSuppression * (1.0F - beatPreserve);
         const float midKeep = 1.0F - removal * bandWeight * suppressionStrength;
         const float effectiveSideGain = 1.0F + (sideBoost - 1.0F) * bandWeight;
 

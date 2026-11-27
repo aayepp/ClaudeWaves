@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">フィードバック・要望</string>
     <string name="settings_feedback_sub">バグ報告や新機能のアイデアを開発者へ送信</string>
     <string name="feedback_sheet_title">フィードバック・要望</string>
-    <string name="feedback_sheet_sub">開発者コンソールへ直接送信されます</string>
+    <string name="feedback_sheet_sub">不具合の報告や機能のリクエストを送信</string>
     <string name="feedback_cat_bug">バグ</string>
     <string name="feedback_cat_suggestion">要望</string>
     <string name="feedback_cat_general">感想</string>

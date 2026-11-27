@@ -176,6 +176,10 @@ class NativeProcessingAudioSink(
     private var aiMixScratch = FloatArray(0)
     private var dryRefScratch = FloatArray(0)
     private var aiCrossfade = 0f
+    @Volatile private var anchoredSongPosMs: Long = -1L
+    @Volatile private var anchoredWallElapsedMs: Long = 0L
+    @Volatile private var anchoredPlaying: Boolean = false
+    private var rendererOffsetUs: Long = Long.MIN_VALUE
 
     var onConfiguredFormat: ((sampleRateHz: Int, pcmEncoding: Int, channelCount: Int) -> Unit)? = null
     var bitDepthHintProvider: (() -> Int?)? = null
@@ -1242,6 +1246,52 @@ class NativeProcessingAudioSink(
         return count
     }
 
+    /** Called from main thread / progress ticker so renderer 1e12 timeline maps to 0-based song time. */
+    fun updateSongClockAnchor(songPositionMs: Long, isPlaying: Boolean) {
+        anchoredSongPosMs = songPositionMs.coerceAtLeast(0L)
+        anchoredWallElapsedMs = android.os.SystemClock.elapsedRealtime()
+        anchoredPlaying = isPlaying
+    }
+
+    fun clearSongClockAnchor() {
+        anchoredSongPosMs = -1L
+        anchoredWallElapsedMs = 0L
+        rendererOffsetUs = Long.MIN_VALUE
+    }
+
+    private fun resolveSongTimeUs(
+        presentationTimeUs: Long,
+        aiEngine: com.lastwave.app.playback.karaoke.AiKaraokeEngine,
+    ): Long {
+        if (presentationTimeUs < 0L || presentationTimeUs == C.TIME_UNSET) return -1L
+        val anchorMs = anchoredSongPosMs
+        val anchorWall = anchoredWallElapsedMs
+        if (anchorMs >= 0L && anchorWall > 0L) {
+            val sinkNowUs = runCatching { getCurrentPositionUs(false) }
+                .getOrDefault(AudioSink.CURRENT_POSITION_NOT_SET)
+            if (sinkNowUs != AudioSink.CURRENT_POSITION_NOT_SET && sinkNowUs >= 0L) {
+                val elapsedMs = if (anchoredPlaying) {
+                    (android.os.SystemClock.elapsedRealtime() - anchorWall).coerceIn(0L, 1_500L)
+                } else {
+                    0L
+                }
+                val estSongUs = (anchorMs + elapsedMs) * 1_000L
+                val candidateOffsetUs = sinkNowUs - estSongUs
+                if (rendererOffsetUs == Long.MIN_VALUE ||
+                    kotlin.math.abs(candidateOffsetUs - rendererOffsetUs) > 500_000L
+                ) {
+                    rendererOffsetUs = candidateOffsetUs
+                    aiEngine.stemBuffer.resetAlignment()
+                }
+            }
+        }
+        if (rendererOffsetUs == Long.MIN_VALUE) {
+            // Un-anchored Media3 timeline starts at ~1e12 us: wait briefly for AudioTrack clock
+            return if (presentationTimeUs >= 500_000_000_000L) -1L else presentationTimeUs
+        }
+        return (presentationTimeUs - rendererOffsetUs).coerceAtLeast(0L)
+    }
+
     private fun blendAiKaraokeStem(
         output: ByteBuffer,
         presentationTimeUs: Long,
@@ -1252,11 +1302,13 @@ class NativeProcessingAudioSink(
     ) {
         val frames = output.remaining() / (Float.SIZE_BYTES * 2)
         if (frames <= 0 || sampleRate <= 0) return
+        val songTimeUs = resolveSongTimeUs(presentationTimeUs, aiEngine)
+        if (songTimeUs < 0L) return
         if (aiMixScratch.size < frames * 2) {
             aiMixScratch = FloatArray(frames * 2)
         }
         val hasAi = aiEngine.tryReadMixedStereoFloat(
-            presentationTimeUs = presentationTimeUs,
+            presentationTimeUs = songTimeUs,
             frameCount = frames,
             outputSampleRate = sampleRate,
             removalIntensity = karaokeRemovalIntensity,
@@ -1807,6 +1859,7 @@ class NativeProcessingAudioSink(
 
     override fun flush() {
         aiCrossfade = 0f
+        rendererOffsetUs = Long.MIN_VALUE
         directEq.reset()
         directEqBuffer = null
         eqCopySource = null
@@ -1851,6 +1904,7 @@ class NativeProcessingAudioSink(
 
     override fun reset() {
         aiCrossfade = 0f
+        rendererOffsetUs = Long.MIN_VALUE
         directEq.reset()
         directEqBuffer = null
         eqCopySource = null

@@ -4,7 +4,6 @@
 
 ### Added
 - **Hybrid AI ONNX + Instant C++ STFT Karaoke:** replaced legacy Mid-Side biquads with a 2048-point phase-aware C++ STFT vocal canceller for instant separation, paired with automatic background on-device UVR-MDX-NET AI stem separation (`onnxruntime-android` + 5120-pt mixed-radix native STFT/iSTFT) and a live status pill (`Segera` / `Menyediakan AI` / `AI Aktif` / `Muat Turun`).
-- **Persistent Developer Console card:** after signing in to Developer Console once, the shortcut card stays pinned on the Settings dashboard (still protected by device biometric/PIN), with a one-tap `Sembunyi` button inside the console.
 
 ### Changed
 - **1-tap Karaoke UX:** enabling Karaoke Mode now defaults directly to **100% vocal removal** (`Buang Vokal 100%`), with direction intuitively reversed so sliding right increases vocal removal (`0%` = original voice, `100%` = instrumental only).
@@ -17,13 +16,10 @@
 ### Added
 - **Anime Sakuga theme & 165Hz VFX engine:** added Paper & Ink (Light) and Midnight Cel (Dark/AMOLED) flat cel theme with full accent color selection, toggleable Japanese katakana Manga SFX lettering, frame-rate-independent squash/dust/shard/cloud reactions up to 165Hz, typing dust under input carets, and a glitch-free teardrop seekbar.
 - **Real-time Karaoke Mode (Lyrics):** added C++ Mid-Side vocal reduction preserving bass and stereo instruments, with a compact Mic toggle next to Fullscreen and an auto-hiding vocal level slider in Lyrics Mode.
-- **In-app Feedback & Suggestions:** added a Feedback & Suggestions entry in Settings (localized across all app languages) linked to the developer inbox.
-
-### Changed
-- **Redesigned Developer Console:** pinned 3-tab navigation (`Ringkasan`, `Inbox`, `Broadcast`), clearer Malay metric labels, and feedback status/delete management.
+- **In-app Feedback & Suggestions:** added a Feedback & Suggestions entry in Settings (localized across all app languages) so you can report bugs or request new features directly from the app.
 
 ### Fixed
-- **Developer Console & segmented tab scrolling:** added mini-player bottom scroll clearance, independent scroll state per tab, and directional touch-slop handling on segmented controls so vertical scrolling never stalls.
+- **Segmented tab scrolling:** added mini-player bottom scroll clearance and directional touch-slop handling on segmented controls so vertical scrolling never stalls.
 
 ## [1.0.49] - 2026-11-27
 

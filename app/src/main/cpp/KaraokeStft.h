@@ -63,6 +63,7 @@ private:
     // Reusable per-frame FFT scratch (audio thread only)
     std::array<Complex, kFftSize> fftLeft_{};
     std::array<Complex, kFftSize> fftRight_{};
+    std::array<float, kNumBins> prevMidMag_{};
 };
 
 }  // namespace lastwave::audio

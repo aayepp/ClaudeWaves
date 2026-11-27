@@ -38,6 +38,11 @@ internal class AiStemBuffer {
         alignmentLocked = false
     }
 
+    fun resetAlignment() {
+        ptsOffsetFrames44k = 0L
+        alignmentLocked = false
+    }
+
     fun hasCoverageAround(positionMs: Long): Boolean {
         val targetFrame = (positionMs.coerceAtLeast(0L) * MdxStftNative.MDX_SAMPLE_RATE) / 1_000L +
             ptsOffsetFrames44k
@@ -251,7 +256,7 @@ internal class AiStemBuffer {
     companion object {
         private const val INV_SHORT = 1f / 32767f
         private const val MAX_CHUNKS_IN_RAM = 16
-        private const val ALIGN_SEARCH_RADIUS = 3072
+        private const val ALIGN_SEARCH_RADIUS = 6144
 
         private fun floatToShort(value: Float): Short {
             val scaled = (value.coerceIn(-1f, 1f) * 32767f).roundToInt()

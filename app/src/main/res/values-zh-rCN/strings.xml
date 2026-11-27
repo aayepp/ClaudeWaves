@@ -1104,7 +1104,7 @@
     <string name="settings_feedback_title">反馈与建议</string>
     <string name="settings_feedback_sub">向开发者报告 Bug 或提出新功能建议</string>
     <string name="feedback_sheet_title">反馈与建议</string>
-    <string name="feedback_sheet_sub">直接发送至开发者控制台</string>
+    <string name="feedback_sheet_sub">报告问题或提交新功能建议</string>
     <string name="feedback_cat_bug">Bug</string>
     <string name="feedback_cat_suggestion">建议</string>
     <string name="feedback_cat_general">反馈</string>

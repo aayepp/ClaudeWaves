@@ -825,6 +825,19 @@ class MusicPlayer @Inject constructor(
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
+    /** Read-only cache view for background AI vocal separation so it never acquires SimpleCache write locks. */
+    private val readOnlyCacheDataSourceFactory: CacheDataSource.Factory by lazy {
+        val defaultDataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpUpstreamFactory)
+        val chunkedUpstreamFactory = androidx.media3.datasource.DataSource.Factory {
+            ChunkedRangeDataSource(defaultDataSourceFactory.createDataSource(), refresher = ::refreshRejectedYouTubeUrl)
+        }
+        CacheDataSource.Factory()
+            .setCache(mediaCache)
+            .setUpstreamDataSourceFactory(chunkedUpstreamFactory)
+            .setCacheWriteDataSinkFactory(null)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+
     /** Refused googlevideo URL -> the same-file replacement already minted for it. */
     private val refreshedYouTubeUrls = ConcurrentHashMap<String, ChunkedRangeDataSource.Replacement>()
 
@@ -1261,7 +1274,13 @@ class MusicPlayer @Inject constructor(
                     }
                 }
                 if (karaokeEnabled) {
+                    audioSinks.forEach {
+                        it.clearSongClockAnchor()
+                        it.updateSongClockAnchor(targetPos, targetPlayer.isPlaying)
+                    }
                     aiKaraokeEngine.onTrackChanged(buildCurrentKaraokeSource(), targetPos)
+                } else {
+                    audioSinks.forEach { it.clearSongClockAnchor() }
                 }
             }
         override fun onPlayerError(error: PlaybackException) {
@@ -2449,6 +2468,9 @@ class MusicPlayer @Inject constructor(
                     val tickerNow = SystemClock.elapsedRealtime()
                     updateRenderStallWatchdog(tickerNow)
                     val healthPlaying = player.isPlaying || _state.value.isPlaying
+                    if (karaokeEnabled) {
+                        playerToSink[player]?.updateSongClockAnchor(pos, healthPlaying)
+                    }
                     if (healthPlaying && tickerNow - lastSignalPathMs >= SIGNAL_PATH_TICK_MS) {
                         lastSignalPathMs = tickerNow
                         val exclusiveRate = exclusiveUsbOutput.currentRateHz()
@@ -3685,6 +3707,11 @@ class MusicPlayer @Inject constructor(
         audioSinks.forEach { sink ->
             sink.karaokeEnabled = enabled
             sink.karaokeRemovalIntensity = (1f - karaokeVocalLevel).coerceIn(0f, 1f)
+            if (enabled) {
+                sink.updateSongClockAnchor(currentPositionMs(), _state.value.isPlaying)
+            } else {
+                sink.clearSongClockAnchor()
+            }
         }
         runCatching { nativeAudioEngine.get().setKaraoke(enabled, karaokeVocalLevel) }
         updateBitPerfectState()
@@ -3718,22 +3745,35 @@ class MusicPlayer @Inject constructor(
         )
     }
 
+    private fun createKaraokeMediaSourceFactory(): MediaSource.Factory {
+        val resolvingFactory = ResolvingDataSource.Factory(readOnlyCacheDataSourceFactory) { dataSpec ->
+            val stream = dataSpec.key?.let(preparedStreams::get)
+                ?: preparedStreams.values.firstOrNull { it.url == dataSpec.uri.toString() }
+            if (stream != null) {
+                dataSpec.buildUpon()
+                    .setKey(stream.cacheKey)
+                    .build()
+                    .withRequestHeaders(mediaRequestHeaders(stream))
+            } else {
+                dataSpec
+            }
+        }
+        return createAudioMediaSourceFactory(resolvingFactory)
+    }
+
     private fun buildCurrentKaraokeSource(): com.lastwave.app.playback.karaoke.AiKaraokeEngine.TrackAudioSource? {
         if (!playerDelegate.isInitialized()) return null
         val item = player.currentMediaItem ?: return null
         val uri = item.localConfiguration?.uri ?: return null
         if (uri.scheme == "lastwave") return null
-        val stream = item.localConfiguration?.customCacheKey?.let(preparedStreams::get)
-            ?: preparedStreams.values.firstOrNull { it.url == uri.toString() }
         val key = item.mediaId.takeIf { it.isNotBlank() } ?: uri.toString()
         val duration = player.duration.takeIf { it > 0L } ?: _state.value.durationMs
         return com.lastwave.app.playback.karaoke.AiKaraokeEngine.TrackAudioSource(
             trackKey = key,
             uri = uri,
-            cacheKey = item.localConfiguration?.customCacheKey ?: stream?.cacheKey,
-            headers = mediaRequestHeaders(stream),
-            dataSourceFactory = cacheDataSourceFactory,
+            mediaItem = item,
             durationMs = duration,
+            mediaSourceFactoryProvider = ::createKaraokeMediaSourceFactory,
         )
     }
 
@@ -3814,6 +3854,10 @@ class MusicPlayer @Inject constructor(
         playheadWallMs = now
         exclusiveUsbOutput.noteSeek(target * 1_000L)
         player.seekTo(target)
+        audioSinks.forEach {
+            it.clearSongClockAnchor()
+            if (karaokeEnabled) it.updateSongClockAnchor(target, _state.value.isPlaying)
+        }
         aiKaraokeEngine.onSeek(target)
         _state.update { it.copy(positionMs = target, isBuffering = true) }
         checkpointPodcastProgress()

@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">Отзывы и предложения</string>
     <string name="settings_feedback_sub">Сообщить об ошибке или предложить идею разработчику</string>
     <string name="feedback_sheet_title">Отзывы и предложения</string>
-    <string name="feedback_sheet_sub">Отправляется напрямую в консоль разработчика</string>
+    <string name="feedback_sheet_sub">Сообщите об ошибке или предложите улучшение</string>
     <string name="feedback_cat_bug">Ошибка</string>
     <string name="feedback_cat_suggestion">Идея</string>
     <string name="feedback_cat_general">Отзыв</string>

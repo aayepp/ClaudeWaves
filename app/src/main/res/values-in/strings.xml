@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">Masukan &amp; Saran</string>
     <string name="settings_feedback_sub">Laporkan bug atau kirim ide fitur baru ke developer</string>
     <string name="feedback_sheet_title">Masukan &amp; Saran</string>
-    <string name="feedback_sheet_sub">Dikirim langsung ke Developer Console</string>
+    <string name="feedback_sheet_sub">Laporkan bug atau kirim cadangan penambahbaikan</string>
     <string name="feedback_cat_bug">Bug</string>
     <string name="feedback_cat_suggestion">Saran</string>
     <string name="feedback_cat_general">Masukan</string>

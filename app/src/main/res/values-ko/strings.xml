@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">피드백 및 제안</string>
     <string name="settings_feedback_sub">버그를 신고하거나 개발자에게 새 기능을 제안하세요</string>
     <string name="feedback_sheet_title">피드백 및 제안</string>
-    <string name="feedback_sheet_sub">개발자 콘솔로 바로 전송됩니다</string>
+    <string name="feedback_sheet_sub">버그를 신고하거나 개선 아이디어를 보내세요</string>
     <string name="feedback_cat_bug">버그</string>
     <string name="feedback_cat_suggestion">제안</string>
     <string name="feedback_cat_general">피드백</string>

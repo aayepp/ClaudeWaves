@@ -1105,7 +1105,7 @@
     <string name="settings_feedback_title">फ़ीडबैक और सुझाव</string>
     <string name="settings_feedback_sub">बग रिपोर्ट करें या डेवलपर को नया फ़ीचर सुझाएँ</string>
     <string name="feedback_sheet_title">फ़ीडबैक और सुझाव</string>
-    <string name="feedback_sheet_sub">सीधे डेवलपर कंसोल पर भेजा जाएगा</string>
+    <string name="feedback_sheet_sub">बग की रिपोर्ट करें या नया सुझाव भेजें</string>
     <string name="feedback_cat_bug">बग</string>
     <string name="feedback_cat_suggestion">सुझाव</string>
     <string name="feedback_cat_general">फ़ीडबैक</string>

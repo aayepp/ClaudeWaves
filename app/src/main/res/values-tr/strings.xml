@@ -1195,7 +1195,7 @@
     <string name="settings_feedback_title">Geri Bildirim &amp; Öneriler</string>
     <string name="settings_feedback_sub">Hata bildirin veya geliştiriciye yeni özellik önerin</string>
     <string name="feedback_sheet_title">Geri Bildirim &amp; Öneriler</string>
-    <string name="feedback_sheet_sub">Doğrudan Geliştirici Konsoluna gönderilir</string>
+    <string name="feedback_sheet_sub">Hata bildirin veya geliştirme önerin</string>
     <string name="feedback_cat_bug">Hata</string>
     <string name="feedback_cat_suggestion">Öneri</string>
     <string name="feedback_cat_general">Görüş</string>

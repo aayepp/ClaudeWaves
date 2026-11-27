@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">Feedback &amp; Vorschläge</string>
     <string name="settings_feedback_sub">Fehler melden oder neue Funktion vorschlagen</string>
     <string name="feedback_sheet_title">Feedback &amp; Vorschläge</string>
-    <string name="feedback_sheet_sub">Direkt an die Developer Console senden</string>
+    <string name="feedback_sheet_sub">Melde einen Fehler oder schlage eine Verbesserung vor</string>
     <string name="feedback_cat_bug">Fehler</string>
     <string name="feedback_cat_suggestion">Vorschlag</string>
     <string name="feedback_cat_general">Feedback</string>

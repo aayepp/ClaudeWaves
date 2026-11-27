@@ -1516,7 +1516,7 @@
     <string name="settings_feedback_title">Feedback &amp; Suggestions</string>
     <string name="settings_feedback_sub">Report a bug or suggest a new feature to the developer</string>
     <string name="feedback_sheet_title">Feedback &amp; Suggestions</string>
-    <string name="feedback_sheet_sub">Sent directly to the Developer Console</string>
+    <string name="feedback_sheet_sub">Report a bug or suggest an improvement</string>
     <string name="feedback_cat_bug">Bug</string>
     <string name="feedback_cat_suggestion">Suggestion</string>
     <string name="feedback_cat_general">Feedback</string>

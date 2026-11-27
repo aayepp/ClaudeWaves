@@ -1154,7 +1154,7 @@
     <string name="settings_feedback_title">Avis &amp; Suggestions</string>
     <string name="settings_feedback_sub">Signaler un bug ou proposer une fonctionnalité</string>
     <string name="feedback_sheet_title">Avis &amp; Suggestions</string>
-    <string name="feedback_sheet_sub">Envoyé directement à la Developer Console</string>
+    <string name="feedback_sheet_sub">Signalez un bug ou suggérez une amélioration</string>
     <string name="feedback_cat_bug">Bug</string>
     <string name="feedback_cat_suggestion">Suggestion</string>
     <string name="feedback_cat_general">Avis</string>

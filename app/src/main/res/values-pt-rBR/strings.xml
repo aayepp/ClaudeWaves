@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">Feedback e Sugestões</string>
     <string name="settings_feedback_sub">Reporte um erro ou sugira um recurso ao desenvolvedor</string>
     <string name="feedback_sheet_title">Feedback e Sugestões</string>
-    <string name="feedback_sheet_sub">Enviado diretamente ao Console do Desenvolvedor</string>
+    <string name="feedback_sheet_sub">Reporte um bug ou sugira uma melhoria</string>
     <string name="feedback_cat_bug">Erro</string>
     <string name="feedback_cat_suggestion">Sugestão</string>
     <string name="feedback_cat_general">Feedback</string>

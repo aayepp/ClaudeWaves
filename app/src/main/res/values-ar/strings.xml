@@ -1101,7 +1101,7 @@
     <string name="settings_feedback_title">الملاحظات والاقتراحات</string>
     <string name="settings_feedback_sub">أبلغ عن خطأ أو اقترح ميزة جديدة للمطور</string>
     <string name="feedback_sheet_title">الملاحظات والاقتراحات</string>
-    <string name="feedback_sheet_sub">تُرسل مباشرة إلى لوحة المطور</string>
+    <string name="feedback_sheet_sub">أبلغ عن مشكلة أو اقترح ميزة جديدة</string>
     <string name="feedback_cat_bug">خطأ</string>
     <string name="feedback_cat_suggestion">اقتراح</string>
     <string name="feedback_cat_general">ملاحظة</string>

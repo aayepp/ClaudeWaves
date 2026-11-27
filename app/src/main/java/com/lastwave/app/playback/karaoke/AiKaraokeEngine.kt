@@ -6,13 +6,24 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
-import android.media.AudioFormat
-import android.media.MediaCodec
-import android.media.MediaExtractor
-import android.media.MediaFormat
 import android.net.Uri
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
-import androidx.media3.datasource.DataSource
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import com.lastwave.app.playback.FfmpegCompat
+import com.lastwave.app.playback.accurateAudioMediaCodecSelector
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +40,9 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -36,8 +50,9 @@ import kotlin.math.abs
 /**
  * Coordinates background on-device MDX-Net ONNX vocal separation while Instant C++ STFT
  * runs synchronously in [com.lastwave.app.playback.NativeProcessingAudioSink].
- * Decodes ahead up to 35 seconds past playhead via MediaExtractor + MediaCodec, computes
- * 5120-pt STFT/iSTFT in C++20, and seamlessly hands playback over to separated stems.
+ * Decodes ahead up to 35 seconds past playhead via an off-air ExoPlayer +
+ * [KaraokePcmCaptureSink], computes 5120-pt STFT/iSTFT in C++20, and seamlessly
+ * hands playback over to separated stems across DASH, HLS, DRM, YouTube, and local files.
  */
 @Singleton
 class AiKaraokeEngine @Inject constructor(
@@ -48,10 +63,9 @@ class AiKaraokeEngine @Inject constructor(
     data class TrackAudioSource(
         val trackKey: String,
         val uri: Uri,
-        val cacheKey: String?,
-        val headers: Map<String, String>,
-        val dataSourceFactory: DataSource.Factory,
+        val mediaItem: MediaItem,
         val durationMs: Long,
+        val mediaSourceFactoryProvider: () -> MediaSource.Factory,
     )
 
     private val _status = MutableStateFlow<KaraokeStatus>(KaraokeStatus.Off)
@@ -117,6 +131,7 @@ class AiKaraokeEngine @Inject constructor(
         playheadUs = positionMs.coerceAtLeast(0L) * 1_000L
         val source = activeSource ?: return
         if (!stemBuffer.hasCoverageAround(positionMs)) {
+            stemBuffer.resetAlignment()
             startPipeline(source, positionMs)
         }
     }
@@ -207,49 +222,83 @@ class AiKaraokeEngine @Inject constructor(
         }
         val env = ortEnv ?: return
 
-        var extractor: MediaExtractor? = null
-        var codec: MediaCodec? = null
-        var mediaDataSource: Media3MediaDataSource? = null
+        val sink = KaraokePcmCaptureSink(
+            playheadUsProvider = { playheadUs },
+            maxAheadUs = MAX_AHEAD_US,
+        )
+        var decoderThread: HandlerThread? = null
+        var decoderHandler: Handler? = null
+        var exoPlayer: ExoPlayer? = null
 
         try {
-            extractor = MediaExtractor()
-            val scheme = source.uri.scheme?.lowercase().orEmpty()
-            if (scheme == "file" || scheme == "content") {
-                extractor.setDataSource(context, source.uri, null)
-            } else {
-                val mds = Media3MediaDataSource(
-                    dataSourceFactory = source.dataSourceFactory,
-                    uri = source.uri,
-                    cacheKey = source.cacheKey,
-                    headers = source.headers,
-                )
-                mediaDataSource = mds
-                extractor.setDataSource(mds)
+            var currentGeneration = sink.prepareForSeek(startPosMs.coerceAtLeast(0L) * 1_000L)
+            val thread = HandlerThread("AiKaraokeDecoder").apply { start() }
+            decoderThread = thread
+            val handler = Handler(thread.looper)
+            decoderHandler = handler
+
+            val readyLatch = CountDownLatch(1)
+            handler.post {
+                runCatching {
+                    val renderersFactory = object : DefaultRenderersFactory(context) {
+                        override fun buildAudioSink(
+                            context: Context,
+                            enableFloatOutput: Boolean,
+                            enableAudioTrackPlaybackParams: Boolean,
+                        ): AudioSink = sink
+                    }.apply {
+                        setExtensionRendererMode(
+                            if (FfmpegCompat.isUsable) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                            else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF,
+                        )
+                        setEnableDecoderFallback(true)
+                        setMediaCodecSelector(accurateAudioMediaCodecSelector)
+                    }
+                    val trackSelector = DefaultTrackSelector(context).apply {
+                        parameters = buildUponParameters()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .build()
+                    }
+                    val loadControl = DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(15_000, 30_000, 1_000, 1_000)
+                        .build()
+
+                    val player = ExoPlayer.Builder(context, renderersFactory)
+                        .setLooper(thread.looper)
+                        .setTrackSelector(trackSelector)
+                        .setMediaSourceFactory(source.mediaSourceFactoryProvider())
+                        .setLoadControl(loadControl)
+                        .setAudioAttributes(AudioAttributes.DEFAULT, false)
+                        .setHandleAudioBecomingNoisy(false)
+                        .setSeekParameters(SeekParameters.EXACT)
+                        .build()
+                    player.addListener(
+                        object : Player.Listener {
+                            override fun onPlayerError(error: PlaybackException) {
+                                sink.signalError(error)
+                            }
+
+                            override fun onPlaybackStateChanged(playbackState: Int) {
+                                if (playbackState == Player.STATE_ENDED) {
+                                    sink.signalEnded()
+                                }
+                            }
+                        },
+                    )
+                    player.volume = 1f
+                    player.setMediaItem(source.mediaItem, startPosMs.coerceAtLeast(0L))
+                    player.prepare()
+                    player.playWhenReady = true
+                    exoPlayer = player
+                }.onFailure { err ->
+                    sink.signalError(err)
+                }
+                readyLatch.countDown()
             }
+            readyLatch.await(3_000L, TimeUnit.MILLISECONDS)
 
-            val trackIndex = findAudioTrackIndex(extractor)
-            if (trackIndex < 0) {
-                if (activeEnabled) _status.value = KaraokeStatus.InstantStft
-                return
-            }
-            extractor.selectTrack(trackIndex)
-            val format = extractor.getTrackFormat(trackIndex)
-            val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
-            var sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-            var channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-            var pcmEncoding = AudioFormat.ENCODING_PCM_16BIT
-
-            val seekTargetUs = ((startPosMs - 500L).coerceAtLeast(0L)) * 1_000L
-            extractor.seekTo(seekTargetUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-
-            codec = MediaCodec.createDecoderByType(mime)
-            codec.configure(format, null, null, 0)
-            codec.start()
-
-            val bufferInfo = MediaCodec.BufferInfo()
-            var inputDone = false
             var outputDone = false
-
             val inputTensorBuf = ByteBuffer
                 .allocateDirect(MdxStftNative.MDX_TENSOR_FLOATS * Float.SIZE_BYTES)
                 .order(ByteOrder.nativeOrder())
@@ -268,65 +317,39 @@ class AiKaraokeEngine @Inject constructor(
             var chunkStartFrame44k = -1L
             var hasEmittedFirstChunk = false
             var resamplePhase = 0.0
-            var decodedScratch = FloatArray(0)
 
             while (!outputDone) {
                 currentCoroutineContext().ensureActive()
                 if (!activeEnabled) return
 
-                // Feed MediaCodec input
-                if (!inputDone) {
-                    val inIdx = codec.dequeueInputBuffer(10_000L)
-                    if (inIdx >= 0) {
-                        val inBuf = codec.getInputBuffer(inIdx)
-                        val sampleSize = if (inBuf != null) extractor.readSampleData(inBuf, 0) else -1
-                        if (sampleSize < 0) {
-                            codec.queueInputBuffer(inIdx, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            val pts = extractor.sampleTime.coerceAtLeast(0L)
-                            codec.queueInputBuffer(inIdx, 0, sampleSize, pts, 0)
-                            extractor.advance()
-                        }
+                sink.terminalError?.let { err ->
+                    Log.w(TAG, "Off-air karaoke decoder failed; continuing Instant C++ STFT", err)
+                    if (activeEnabled && _status.value !is KaraokeStatus.AiActive) {
+                        _status.value = KaraokeStatus.InstantStft
                     }
+                    return
                 }
 
-                // Drain MediaCodec output
-                val outIdx = codec.dequeueOutputBuffer(bufferInfo, 10_000L)
-                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    val outFmt = codec.outputFormat
-                    if (outFmt.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
-                        sampleRate = outFmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                    }
-                    if (outFmt.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
-                        channelCount = outFmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                    }
-                    pcmEncoding = if (outFmt.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
-                        outFmt.getInteger(MediaFormat.KEY_PCM_ENCODING)
-                    } else {
-                        AudioFormat.ENCODING_PCM_16BIT
-                    }
-                } else if (outIdx >= 0) {
-                    val outBuf = codec.getOutputBuffer(outIdx)
-                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                val block = sink.pollBlock(50L)
+                if (block == null) {
+                    if (sink.eosReached && sink.isQueueEmpty()) {
                         outputDone = true
+                    } else {
+                        continue
                     }
-                    if (outBuf != null && bufferInfo.size > 0 && sampleRate > 0 && channelCount >= 1) {
-                        outBuf.position(bufferInfo.offset)
-                        outBuf.limit(bufferInfo.offset + bufferInfo.size)
-                        val bytesPerSample = if (pcmEncoding == AudioFormat.ENCODING_PCM_FLOAT) 4 else 2
-                        val inFrames = bufferInfo.size / (bytesPerSample * channelCount)
-                        if (inFrames > 0) {
+                } else {
+                    if (block.generation != currentGeneration) continue
+                    if (block.isEos) {
+                        outputDone = true
+                    } else {
+                        val inFrames = block.frameCount
+                        val sampleRate = block.sampleRate
+                        if (inFrames > 0 && sampleRate > 0) {
                             if (chunkStartFrame44k < 0L) {
                                 chunkStartFrame44k =
-                                    (bufferInfo.presentationTimeUs.coerceAtLeast(0L) * MdxStftNative.MDX_SAMPLE_RATE) / 1_000_000L
+                                    (block.songTimeUs.coerceAtLeast(0L) * MdxStftNative.MDX_SAMPLE_RATE) / 1_000_000L
                             }
-                            if (decodedScratch.size < inFrames * 2) {
-                                decodedScratch = FloatArray(inFrames * 2)
-                            }
-                            decodeBufferToStereoFloat(outBuf, inFrames, channelCount, pcmEncoding, decodedScratch)
-
-                            // Resample / append directly into accumStereo at 44,100 Hz
+                            val decodedScratch = block.stereoFloat
                             val step = sampleRate.toDouble() / MdxStftNative.MDX_SAMPLE_RATE.toDouble()
                             if (abs(sampleRate - MdxStftNative.MDX_SAMPLE_RATE) == 0) {
                                 val spaceLeft = accumCap - accumFrames
@@ -350,7 +373,6 @@ class AiKaraokeEngine @Inject constructor(
                             }
                         }
                     }
-                    codec.releaseOutputBuffer(outIdx, false)
                 }
 
                 // Process ready full chunk(s) whenever GEN_SIZE + right TRIM frames are accumulated
@@ -424,6 +446,30 @@ class AiKaraokeEngine @Inject constructor(
                     }
                     accumFrames = remaining
                     chunkStartFrame44k += validGenFrames
+
+                    // Catch up if a slow device fell > 2s behind real-time playhead
+                    val nextStartUs = (chunkStartFrame44k * 1_000_000L) / MdxStftNative.MDX_SAMPLE_RATE
+                    val behindUs = playheadUs - nextStartUs
+                    if (!outputDone && behindUs > CATCHUP_BEHIND_US) {
+                        val jumpMs = ((playheadUs + 2_000_000L).coerceAtLeast(0L)) / 1_000L
+                        val seekGen = AtomicInteger(currentGeneration)
+                        val seekLatch = CountDownLatch(1)
+                        val posted = decoderHandler?.post {
+                            seekGen.set(sink.prepareForSeek(jumpMs * 1_000L))
+                            exoPlayer?.seekTo(jumpMs)
+                            seekLatch.countDown()
+                        } == true
+                        if (posted) {
+                            seekLatch.await(1_000L, TimeUnit.MILLISECONDS)
+                        }
+                        currentGeneration = seekGen.get()
+                        accumFrames = 0
+                        chunkStartFrame44k = -1L
+                        hasEmittedFirstChunk = false
+                        resamplePhase = 0.0
+                        outputDone = false
+                        break
+                    }
                 }
             }
         } catch (c: CancellationException) {
@@ -434,10 +480,26 @@ class AiKaraokeEngine @Inject constructor(
                 _status.value = KaraokeStatus.InstantStft
             }
         } finally {
-            runCatching { codec?.stop() }
-            runCatching { codec?.release() }
-            runCatching { extractor?.release() }
-            runCatching { mediaDataSource?.close() }
+            sink.close()
+            val handler = decoderHandler
+            val thread = decoderThread
+            if (handler != null) {
+                val releaseLatch = CountDownLatch(1)
+                val posted = handler.post {
+                    runCatching { exoPlayer?.stop() }
+                    runCatching { exoPlayer?.release() }
+                    exoPlayer = null
+                    releaseLatch.countDown()
+                    thread?.quitSafely()
+                }
+                if (posted) {
+                    releaseLatch.await(1_000L, TimeUnit.MILLISECONDS)
+                } else {
+                    thread?.quitSafely()
+                }
+            } else {
+                thread?.quitSafely()
+            }
         }
     }
 
@@ -488,49 +550,9 @@ class AiKaraokeEngine @Inject constructor(
         }
     }
 
-    private fun findAudioTrackIndex(extractor: MediaExtractor): Int {
-        for (i in 0 until extractor.trackCount) {
-            val mime = extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)
-            if (mime?.startsWith("audio/") == true) return i
-        }
-        return -1
-    }
-
-    private fun decodeBufferToStereoFloat(
-        buffer: ByteBuffer,
-        frames: Int,
-        channels: Int,
-        pcmEncoding: Int,
-        outStereo: FloatArray,
-    ) {
-        val origOrder = buffer.order()
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-        try {
-            if (pcmEncoding == AudioFormat.ENCODING_PCM_FLOAT) {
-                for (f in 0 until frames) {
-                    val l = buffer.getFloat()
-                    val r = if (channels >= 2) buffer.getFloat() else l
-                    for (extra in 2 until channels) buffer.getFloat()
-                    outStereo[f * 2] = l
-                    outStereo[f * 2 + 1] = r
-                }
-            } else {
-                for (f in 0 until frames) {
-                    val l = buffer.getShort() * INV_SHORT
-                    val r = if (channels >= 2) buffer.getShort() * INV_SHORT else l
-                    for (extra in 2 until channels) buffer.getShort()
-                    outStereo[f * 2] = l
-                    outStereo[f * 2 + 1] = r
-                }
-            }
-        } finally {
-            buffer.order(origOrder)
-        }
-    }
-
     companion object {
         private const val TAG = "AiKaraokeEngine"
         private const val MAX_AHEAD_US = 35_000_000L
-        private const val INV_SHORT = 1f / 32768f
+        private const val CATCHUP_BEHIND_US = 2_000_000L
     }
 }

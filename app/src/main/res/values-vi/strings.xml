@@ -1398,7 +1398,7 @@
     <string name="settings_feedback_title">Phản hồi &amp; Đề xuất</string>
     <string name="settings_feedback_sub">Báo lỗi hoặc đề xuất tính năng mới cho nhà phát triển</string>
     <string name="feedback_sheet_title">Phản hồi &amp; Đề xuất</string>
-    <string name="feedback_sheet_sub">Gửi trực tiếp đến Developer Console</string>
+    <string name="feedback_sheet_sub">Báo lỗi hoặc đề xuất tính năng mới</string>
     <string name="feedback_cat_bug">Lỗi</string>
     <string name="feedback_cat_suggestion">Đề xuất</string>
     <string name="feedback_cat_general">Phản hồi</string>
