@@ -353,6 +353,7 @@ fun LastWaveNavHost(
                 onOpenOnboarding = {
                     navController.navigate(Screen.Onboarding.createRoute(repeat = true))
                 },
+                onOpenJam = { navController.navigate(Screen.Jam.createRoute()) },
                 onOpenSearch = { navController.navigate(Screen.Search.route) },
                 onOpenDiscover = { navController.navigate(Screen.Discover.route) },
                 onOpenGenres = { navController.navigate(Screen.Genres.route) },

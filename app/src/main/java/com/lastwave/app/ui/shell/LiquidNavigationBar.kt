@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
 import com.lastwave.app.ui.player.kick
 import kotlinx.coroutines.launch
+import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -108,9 +109,10 @@ internal fun LiquidNavigationBar(
     modifier: Modifier = Modifier,
     style: LiquidNavigationStyle = LiquidNavigationStyle.Tabs,
     isVisible: () -> Boolean = { true },
+    onLongPress: () -> Unit = {},
 ) {
     key(style) {
-        LiquidNavigationBarContent(liquidState, items, selectedIndex, onSelect, onScrubSelect, onSearch, modifier, style, isVisible)
+        LiquidNavigationBarContent(liquidState, items, selectedIndex, onSelect, onScrubSelect, onSearch, modifier, style, isVisible, onLongPress)
     }
 }
 
@@ -125,8 +127,10 @@ private fun LiquidNavigationBarContent(
     modifier: Modifier,
     style: LiquidNavigationStyle,
     isVisible: () -> Boolean,
+    onLongPress: () -> Unit,
 ) {
     if (items.isEmpty()) return
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
     val compact = style == LiquidNavigationStyle.Material3
     val isDark = LocalIsDarkTheme.current
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -276,10 +280,31 @@ private fun LiquidNavigationBarContent(
                             touchY = 0f
                             pressed = true
                             var dragged = false
+                            val longPressAt = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis
+                            var longPressed = false
                             try {
                                 while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    // Held still past the long-press timeout: open the dock editor.
+                                    val event = if (dragged || longPressed) {
+                                        awaitPointerEvent(PointerEventPass.Initial)
+                                    } else {
+                                        withTimeoutOrNull((longPressAt - SystemClock.uptimeMillis()).coerceAtLeast(0L)) {
+                                            awaitPointerEvent(PointerEventPass.Initial)
+                                        }
+                                    }
+                                    if (event == null) {
+                                        longPressed = true
+                                        touchPosition = Float.NaN
+                                        currentOnLongPress()
+                                        continue
+                                    }
                                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (longPressed) {
+                                        // Swallow the rest so the release is never also a tab tap.
+                                        event.changes.forEach { it.consume() }
+                                        if (!change.pressed) break
+                                        continue
+                                    }
                                     val dx = change.position.x - down.position.x
                                     val dy = change.position.y - down.position.y
                                     if (event.changes.count { it.pressed } > 1 ||

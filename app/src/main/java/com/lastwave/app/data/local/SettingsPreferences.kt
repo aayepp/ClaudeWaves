@@ -159,6 +159,8 @@ data class MiscSettings(
     val collapsingNavBar: Boolean = true,
     /** The Home circle and docked tab sit at the right edge instead of the left (easier one-handed reach). */
     val homeButtonRight: Boolean = false,
+    /** Ordered ids of the home dock's buttons (max 4): pager tabs and shortcuts, see DockItem. */
+    val dockItems: String = "feed,stats,playlists",
     /** 2nd shortcut revealed when holding the Home / docked nav pill. */
     val homeHoldShortcut: String = HomeHoldShortcut.LIBRARY.id,
     /** Last.fm usernames pinned to the top of Home's friend-switcher sheet
@@ -482,6 +484,7 @@ class SettingsPreferences @Inject constructor(
         val USE_BOLD_FONT = booleanPreferencesKey("lw_use_bold_font")
         val COLLAPSING_NAV_BAR = booleanPreferencesKey("lw_collapsing_nav_bar")
         val HOME_BUTTON_RIGHT = booleanPreferencesKey("lw_home_button_right")
+        val DOCK_ITEMS = stringPreferencesKey("lw_dock_items")
         val HOME_HOLD_SHORTCUT = stringPreferencesKey("lw_home_hold_shortcut")
         val PINNED_FRIENDS = stringSetPreferencesKey("lw_pinned_friends")
         val PREFER_LOSSLESS_STREAMING = booleanPreferencesKey("lw_prefer_lossless_streaming")
@@ -611,6 +614,7 @@ class SettingsPreferences @Inject constructor(
                 useBoldFont = p.readSafely(Keys.USE_BOLD_FONT) ?: false,
                 collapsingNavBar = p.readSafely(Keys.COLLAPSING_NAV_BAR) ?: true,
                 homeButtonRight = p.readSafely(Keys.HOME_BUTTON_RIGHT) ?: false,
+                dockItems = p.readSafely(Keys.DOCK_ITEMS) ?: "feed,stats,playlists",
                 homeHoldShortcut = p.readSafely(Keys.HOME_HOLD_SHORTCUT) ?: HomeHoldShortcut.LIBRARY.id,
                 pinnedFriends = p.readSafely(Keys.PINNED_FRIENDS) ?: emptySet(),
                 preferLosslessStreaming = p.readSafely(Keys.PREFER_LOSSLESS_STREAMING) ?: true,
@@ -931,6 +935,10 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setHomeButtonRight(enabled: Boolean) {
         dataStore.edit { it[Keys.HOME_BUTTON_RIGHT] = enabled }
+    }
+
+    suspend fun setDockItems(ids: String) {
+        dataStore.edit { it[Keys.DOCK_ITEMS] = ids }
     }
 
     suspend fun setHomeHoldShortcut(shortcutId: String) {

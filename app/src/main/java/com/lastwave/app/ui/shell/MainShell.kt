@@ -137,6 +137,8 @@ import kotlin.time.Duration.Companion.seconds
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import com.lastwave.app.ui.common.AmbientAnimationsGate
 import com.lastwave.app.ui.common.ExpressiveMotion
 import com.lastwave.app.ui.common.PredictiveBackScreen
@@ -192,6 +194,8 @@ class MainShellViewModel @Inject constructor(
     val ytAuthManager: com.lastwave.app.data.ytmusic.YtMusicAuthManager,
     val settingsPreferences: com.lastwave.app.data.local.SettingsPreferences,
     addonHealthMonitor: com.lastwave.app.data.addon.AddonHealthMonitor,
+    private val playlistRepository: com.lastwave.app.data.playlist.PlaylistRepository,
+    private val musicPlayer: dagger.Lazy<com.lastwave.app.playback.MusicPlayer>,
 ) : ViewModel() {
     val updateInfo = appUpdateManager.updateInfo
     val ytConnection = ytAuthManager.connection
@@ -219,9 +223,21 @@ class MainShellViewModel @Inject constructor(
             settingsPreferences.setSuppressYouTubeLoginPrompt(suppress)
         }
     }
+
+    fun setDockItems(items: List<DockItem>) {
+        viewModelScope.launch { settingsPreferences.setDockItems(DockItem.serialize(items)) }
+    }
+
+    fun openLikedSongs(open: (Long) -> Unit) {
+        viewModelScope.launch { open(playlistRepository.ensureLikedSongs().id) }
+    }
+
+    fun shuffleLiked() {
+        viewModelScope.launch { musicPlayer.get().playLikedOrTopShuffle() }
+    }
 }
 
-private enum class MainTab(val labelRes: Int) {
+internal enum class MainTab(val labelRes: Int) {
     FEED(com.lastwave.app.R.string.nav_feed),
     STATS(com.lastwave.app.R.string.nav_stats),
     PLAYLISTS(com.lastwave.app.R.string.nav_playlists),
@@ -278,11 +294,20 @@ fun MainShell(
     onOpenPodcastShow: (String) -> Unit = {},
     onOpenYouTubeLogin: () -> Unit = {},
     onOpenModules: () -> Unit = {},
+    onOpenJam: () -> Unit = {},
     onReturnToHome: () -> Boolean = { false },
     mainShellViewModel: MainShellViewModel = hiltViewModel(),
 ) {
-    val tabs = MainTab.entries
-    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    // The dock is user-arranged (DockItem); only its tab entries become pager pages, so a
+    // removed tab is never composed at all.
+    val dockConfig by remember(mainShellViewModel) {
+        mainShellViewModel.settings.map { it.dockItems }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
+    val dockItems = remember(dockConfig) { DockItem.parse(dockConfig ?: DockItem.serialize(DockItem.DEFAULT)) }
+    val tabs = remember(dockItems) { dockItems.mapNotNull { it.tab } }
+    val latestTabs by androidx.compose.runtime.rememberUpdatedState(tabs)
+    val pagerState = rememberPagerState(pageCount = { latestTabs.size })
+    var showDockEditor by remember { mutableStateOf(false) }
     val feedTapEvents = remember { kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -476,6 +501,12 @@ fun MainShell(
 
     Box(Modifier.fillMaxSize()) {
         val feedIndex = tabs.indexOf(MainTab.FEED)
+        // Back from another tab returns here: Feed, or the first tab when Feed is not in the dock.
+        val homeIndex = feedIndex.coerceAtLeast(0)
+        LaunchedEffect(tabs) {
+            if (selectedTabIndex > tabs.lastIndex) selectedTabIndex = homeIndex
+            if (pagerState.currentPage > tabs.lastIndex) pagerState.scrollToPage(homeIndex)
+        }
         HorizontalPager(
             state = pagerState,
             // Keep every tab composed. With 1, jumping Playlists -> Home
@@ -502,14 +533,14 @@ fun MainShell(
             }
             AmbientAnimationsGate(visible = { pageShown }) {
                 PredictiveBackScreen(
-                    enabled = isCurrent && tabs[page] != MainTab.FEED,
+                    enabled = isCurrent && page != homeIndex,
                     onBack = {
                         scope.launch {
-                            if (kotlin.math.abs(pagerState.currentPage - feedIndex) > 1) {
-                                pagerState.scrollToPage(feedIndex)
+                            if (kotlin.math.abs(pagerState.currentPage - homeIndex) > 1) {
+                                pagerState.scrollToPage(homeIndex)
                             } else {
                                 pagerState.animateScrollToPage(
-                                    feedIndex,
+                                    homeIndex,
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioNoBouncy,
                                         stiffness = 650f,
@@ -519,7 +550,7 @@ fun MainShell(
                         }
                     },
                 ) {
-                    when (tabs[page]) {
+                    when (tabs.getOrNull(page)) {
                         MainTab.FEED -> FeedScreen(
                             onOpenSettings = onOpenSettings,
                             onOpenOnboarding = onOpenOnboarding,
@@ -552,6 +583,8 @@ fun MainShell(
                             onOpenFeedPlaylist = onOpenFeedPlaylist,
                             onOpenGenerator = onOpenGenerator,
                         )
+                        // A page dropped from the dock while the pager still measured it.
+                        null -> Unit
                     }
                 }
             }
@@ -659,7 +692,41 @@ fun MainShell(
             selectLiquidTab(index, refreshIfSelected = false)
         }
 
-        androidx.compose.runtime.DisposableEffect(navigationBackdrop, navigationLiquidState, tabs, hideNavTabs) {
+        // Dock buttons are DockItems; tabs map to pager pages, shortcuts open their screen.
+        val currentOnShortcut by androidx.compose.runtime.rememberUpdatedState { item: DockItem ->
+            navHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
+            when (item) {
+                DockItem.LIKED -> mainShellViewModel.openLikedSongs(onOpenPlaylist)
+                DockItem.SHUFFLE_LIKED -> mainShellViewModel.shuffleLiked()
+                DockItem.DOWNLOADS -> onOpenDownloads()
+                DockItem.DISCOVER -> onOpenDiscover()
+                DockItem.PODCASTS -> onOpenPodcasts()
+                DockItem.NEW_RELEASES -> onOpenNewReleases()
+                DockItem.GENRES -> onOpenGenres()
+                DockItem.JAM -> onOpenJam()
+                DockItem.SETTINGS -> onOpenSettings()
+                DockItem.FEED, DockItem.STATS, DockItem.PLAYLISTS -> Unit
+            }
+        }
+        val openDockEditor = remember { { showDockEditor = true } }
+        fun dockAction(dockIndex: Int, onTab: (Int) -> Unit) {
+            val item = dockItems.getOrNull(dockIndex) ?: return
+            val tab = item.tab
+            if (tab != null) tabs.indexOf(tab).takeIf { it >= 0 }?.let(onTab) else currentOnShortcut(item)
+        }
+
+        if (showDockEditor) {
+            DockEditorSheet(
+                current = dockItems,
+                onDismiss = { showDockEditor = false },
+                onSave = { items ->
+                    showDockEditor = false
+                    mainShellViewModel.setDockItems(items)
+                },
+            )
+        }
+
+        androidx.compose.runtime.DisposableEffect(navigationBackdrop, navigationLiquidState, dockItems, hideNavTabs) {
             if (!hideNavTabs) {
                 bottomNavSlot.value = { material3NavigationEnabled ->
                     Box(Modifier.fillMaxSize()) {
@@ -673,44 +740,54 @@ fun MainShell(
                         val expand = remember(collapse) { { collapse?.expand(); Unit } }
                         val barVisible = remember(collapseProgress) { { collapseProgress() < 0.95f } }
                         val pillVisible = remember(collapseProgress) { { collapseProgress() > 0.05f } }
+                        // Read here, not captured outside: the slot lives across selection changes.
+                        val selectedDockIndex = dockItems.indexOfFirst { it.tab == tabs.getOrNull(currentSelectedIndex) }.coerceAtLeast(0)
+                        val labels = dockItems.map { item ->
+                            item.tab?.let { androidx.compose.ui.res.stringResource(it.labelRes) } ?: item.label
+                        }
                         if (navigationLiquidState != null) {
-                            val labels = tabs.map { androidx.compose.ui.res.stringResource(it.labelRes) }
-                            val items = remember(tabs, labels) {
-                                tabs.mapIndexed { index, tab ->
+                            val items = remember(dockItems, labels) {
+                                dockItems.mapIndexed { index, item ->
                                     LiquidNavigationItem(
                                         label = labels[index],
-                                        icon = tab.icon(),
-                                        glyph = tab.glyph(),
+                                        icon = item.tab?.icon() ?: item.icon,
+                                        glyph = item.tab?.glyph(),
                                     )
                                 }
                             }
                             LiquidNavigationBar(
                                 liquidState = navigationLiquidState,
                                 items = items,
-                                selectedIndex = currentSelectedIndex,
-                                onSelect = currentOnLiquidSelect,
-                                onScrubSelect = currentOnScrubSelect,
+                                selectedIndex = selectedDockIndex,
+                                onSelect = { dockAction(it, currentOnLiquidSelect) },
+                                // A scrub released on a shortcut does nothing: only a tap opens it.
+                                onScrubSelect = { index -> if (dockItems.getOrNull(index)?.isTab == true) dockAction(index, currentOnScrubSelect) },
                                 modifier = barModifier,
                                 onSearch = currentOnOpenSearch,
-                                style = if (material3NavigationEnabled) {
+                                // Four buttons fit only as icons with the active one's label (the
+                                // expanding capsule); three keep the user's chosen style.
+                                style = if (material3NavigationEnabled || dockItems.size >= DockItem.MAX) {
                                     LiquidNavigationStyle.Material3
                                 } else {
                                     LiquidNavigationStyle.Tabs
                                 },
                                 isVisible = barVisible,
+                                onLongPress = openDockEditor,
                             )
-                            LiquidNavigationPill(navigationLiquidState, items[currentSelectedIndex], expand, pillModifier, isVisible = pillVisible)
+                            LiquidNavigationPill(navigationLiquidState, items[selectedDockIndex], expand, pillModifier, isVisible = pillVisible)
                         } else {
                             FloatingNavBar(
                                 backdrop = navigationBackdrop,
-                                tabs = tabs,
-                                selectedIndex = currentSelectedIndex,
-                                onSelect = currentOnSelect,
+                                items = dockItems,
+                                labels = labels,
+                                selectedIndex = selectedDockIndex,
+                                onSelect = { dockAction(it, currentOnSelect) },
                                 modifier = barModifier,
                                 onOpenSearch = currentOnOpenSearch,
                                 isVisible = barVisible,
+                                onLongPress = openDockEditor,
                             )
-                            FloatingNavPill(navigationBackdrop, tabs[currentSelectedIndex], expand, pillModifier, isVisible = pillVisible)
+                            FloatingNavPill(navigationBackdrop, tabs.getOrElse(currentSelectedIndex) { tabs.first() }, expand, pillModifier, isVisible = pillVisible)
                         }
                     }
                 }
@@ -726,12 +803,14 @@ fun MainShell(
 @Composable
 private fun FloatingNavBar(
     backdrop: LayerBackdrop?,
-    tabs: List<MainTab>,
+    items: List<DockItem>,
+    labels: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     onOpenSearch: () -> Unit,
     modifier: Modifier = Modifier,
     isVisible: () -> Boolean = { true },
+    onLongPress: () -> Unit = {},
 ) {
     val liquidGlass = LocalLiquidGlass.current
     val glassNavBounds = remember { mutableStateMapOf<Int, Rect>() }
@@ -746,7 +825,7 @@ private fun FloatingNavBar(
         backdrop = sharedBackdrop,
         bounds = dockBackdropBounds,
         enabled = glassActive,
-        slots = tabs.size,
+        slots = items.size,
         scrimBaseAlpha = 0.28f,
         isVisible = isVisible,
     )
@@ -804,6 +883,7 @@ private fun FloatingNavBar(
             ) {
                 val latestSelectedIndex by androidx.compose.runtime.rememberUpdatedState(selectedIndex)
                 val latestOnSelect by androidx.compose.runtime.rememberUpdatedState(onSelect)
+                val latestOnLongPress by androidx.compose.runtime.rememberUpdatedState(onLongPress)
                 val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
                 val isSakugaDock = LocalSakugaTheme.current
                 val sakugaFxDock = LocalSakugaFx.current
@@ -823,12 +903,14 @@ private fun FloatingNavBar(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .pointerInput(tabs) {
+                        .pointerInput(items) {
                             val bridge = 8.dp.toPx()
+                            // Only tabs follow the finger; a shortcut acts on its own tap.
                             val hitIndex: (Offset) -> Int? = { pos ->
                                 glassNavBounds.entries
                                     .firstOrNull { it.value.inflate(bridge).contains(pos) }
                                     ?.key
+                                    ?.takeIf { items.getOrNull(it)?.isTab == true }
                             }
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
@@ -836,10 +918,28 @@ private fun FloatingNavBar(
                                 if (initialHit != null && initialHit != latestSelectedIndex) {
                                     latestOnSelect(initialHit)
                                 }
+                                val longPressAt = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis
+                                var moved = false
                                 while (true) {
-                                    val event = awaitPointerEvent()
+                                    val event = if (moved) awaitPointerEvent() else
+                                        withTimeoutOrNull((longPressAt - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0L)) {
+                                            awaitPointerEvent()
+                                        }
+                                    if (event == null) {
+                                        // Held still: open the dock editor and swallow the release
+                                        // (Initial pass) so the item under the finger is not tapped.
+                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        latestOnLongPress()
+                                        while (true) {
+                                            val held = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                            held.changes.forEach { it.consume() }
+                                            if (held.changes.none { it.pressed }) break
+                                        }
+                                        break
+                                    }
                                     val change = event.changes.firstOrNull { it.id == down.id }
                                     if (change == null || !change.pressed) break
+                                    if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
                                     val currentHit = hitIndex(change.position)
                                     if (currentHit != null && currentHit != latestSelectedIndex) {
                                         // A tick per tab crossed while the pill is carried across.
@@ -852,14 +952,14 @@ private fun FloatingNavBar(
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    tabs.forEachIndexed { index, tab ->
+                    items.forEachIndexed { index, item ->
                         val onClick = remember(index) { { onSelect(index) } }
                         FloatingNavItem(
-                            label = androidx.compose.ui.res.stringResource(tab.labelRes),
-                            icon = tab.icon(),
+                            label = labels[index],
+                            icon = item.icon,
                             selected = selectedIndex == index,
                             onClick = onClick,
-                            adaptiveUseLightInk = if (glassActive) dockUseLightInk[if (dockRtl) tabs.size - 1 - index else index] else null,
+                            adaptiveUseLightInk = if (glassActive) dockUseLightInk[if (dockRtl) items.size - 1 - index else index] else null,
                             modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
                                 glassNavBounds[index] = coords.boundsInParent()
                                 if (coords.isAttached) dockTabRootBounds[index] = coords.boundsInRoot()
