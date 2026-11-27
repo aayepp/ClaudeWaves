@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.53] - 2026-11-27
+
+### Changed
+- **GPU-accelerated Karaoke Engine & ~29 MB smaller APK:** replaced bundled ONNX Runtime CPU libraries with Google Play Services LiteRT/TFLite GPU acceleration (`OpenCL` FP16 + serialized shader caching), returning APK size to ~28–29 MB while running vocal separation directly on the device GPU.
+- **Original-music-preserving `UVR-MDX-NET-Voc_FT` model:** switched to a vocal-prediction (`primary_stem = Vocals`, `7680`-pt mixed-radix C++20 STFT/iSTFT, `2.77s` low-latency chunks) pipeline that subtracts only the isolated human voice (`orig - intensity * vocals`), keeping bass, drums, and rhythm intact like Apple Music Sing, and automatically removes the legacy `.onnx` model file.
+
+### Fixed
+- **Honest live Karaoke status & Hi-Res alignment:** reverted the `AI Active` indicator accurately if inference falls behind playback, extended dry-reference cross-correlation alignment to 24-bit and 32-bit PCM tracks, and tightened the instant C++ STFT warmup fallback (`<= 135 Hz` bass floor).
+
 ## [1.0.52] - 2026-11-27
 
 ### Changed
