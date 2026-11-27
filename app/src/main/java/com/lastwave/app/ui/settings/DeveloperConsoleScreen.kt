@@ -7,11 +7,7 @@ import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
@@ -60,7 +57,6 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -80,12 +76,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -104,13 +98,10 @@ import com.lastwave.app.data.update.AppStatsManager
 import com.lastwave.app.data.update.BroadcastManager
 import com.lastwave.app.data.update.BroadcastMessage
 import com.lastwave.app.data.update.BroadcastType
-import com.lastwave.app.data.update.DailyActivePoint
 import com.lastwave.app.data.update.DevLockState
 import com.lastwave.app.data.update.DeveloperFeedbackSnapshot
 import com.lastwave.app.data.update.DeveloperStatsSnapshot
 import com.lastwave.app.data.update.FeedbackCategory
-import com.lastwave.app.data.update.GitHubReleaseStats
-import com.lastwave.app.data.update.StatBucket
 import com.lastwave.app.data.update.UserFeedbackItem
 import com.lastwave.app.data.update.formatBroadcastDate
 import com.lastwave.app.ui.player.LocalMiniPlayerScrollClearance
@@ -469,7 +460,7 @@ class DeveloperConsoleViewModel @Inject constructor(
     }
 }
 
-private enum class DevMetricInfo(
+internal enum class DevMetricInfo(
     val title: String,
     val description: String,
 ) {
@@ -1143,7 +1134,9 @@ private fun UnlockedConsoleContent(
     onRequestSignOut: () -> Unit,
 ) {
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
-    var inboxFilterIndex by rememberSaveable { mutableIntStateOf(0) }
+    // Category (0 all, 1 bug, 2 suggestion, 3 feedback) and status (0 open, 1 resolved, 2 all) filter together.
+    var inboxCategory by rememberSaveable { mutableIntStateOf(0) }
+    var inboxStatus by rememberSaveable { mutableIntStateOf(0) }
     var selectedType by rememberSaveable { mutableStateOf(BroadcastType.INFO) }
     var title by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("") }
@@ -1229,52 +1222,37 @@ private fun UnlockedConsoleContent(
         ) {
             when (selectedTabIndex) {
                 0 -> {
-                    item(key = "stats_hero") {
-                        StatsHeroSection(
-                            ui = ui,
+                    val live = ui.stats?.liveStats
+                    item(key = "stats_live") {
+                        LiveStatsBento(
+                            live = live,
+                            error = ui.stats?.liveError,
+                            isLoading = ui.isLoadingStats,
                             isComic = isComic,
                             onHoldMetric = onHoldMetric,
                             onTestPing = onTestPing,
                             onRetry = onRefresh,
                         )
                     }
-
-                    val live = ui.stats?.liveStats
-                    if (live != null && live.dailyTrend14d.isNotEmpty()) {
-                        item(key = "stats_trend") {
-                            StatsTrendSection(
-                                points = live.dailyTrend14d,
-                                isComic = isComic,
-                            )
-                        }
+                    if (live != null && live.byCountry.isNotEmpty()) {
+                        item(key = "stats_countries") { CountriesTile(live.byCountry, isComic) }
                     }
-
                     if (live != null && live.byVersion.isNotEmpty()) {
-                        item(key = "stats_versions") {
-                            AppVersionsSection(
-                                buckets = live.byVersion.take(6),
+                        item(key = "stats_versions") { VersionsTile(live.byVersion, isComic) }
+                    }
+                    item(key = "stats_android_release") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (live != null && live.byAndroid.isNotEmpty()) {
+                                AndroidTile(live.byAndroid, isComic, Modifier.weight(1f))
+                            }
+                            ReleaseTile(
+                                gh = ui.stats?.githubStats,
+                                error = ui.stats?.githubError,
+                                isLoading = ui.isLoadingStats,
                                 isComic = isComic,
+                                modifier = Modifier.weight(1f),
                             )
                         }
-                    }
-
-                    if (live != null && (live.byCountry.isNotEmpty() || live.byAndroid.isNotEmpty())) {
-                        item(key = "stats_regions_android") {
-                            RegionsAndAndroidSection(
-                                countries = live.byCountry,
-                                androids = live.byAndroid,
-                                isComic = isComic,
-                            )
-                        }
-                    }
-
-                    item(key = "stats_github") {
-                        GitHubReleasesSection(
-                            gh = ui.stats?.githubStats,
-                            githubError = ui.stats?.githubError,
-                            isLoading = ui.isLoadingStats,
-                            isComic = isComic,
-                        )
                     }
 
                     val fetchedAt = ui.stats?.fetchedAtMs ?: 0L
@@ -1313,39 +1291,40 @@ private fun UnlockedConsoleContent(
                 1 -> {
                     val snap = ui.feedback
                     val allItems = snap?.items.orEmpty()
-                    val filtered = when (inboxFilterIndex) {
-                        1 -> allItems.filter { !it.isResolved }
-                        2 -> allItems.filter { it.category == FeedbackCategory.BUG }
-                        3 -> allItems.filter { it.category == FeedbackCategory.SUGGESTION }
-                        4 -> allItems.filter { it.category == FeedbackCategory.FEEDBACK }
-                        else -> allItems
+                    val categories = listOf(null, FeedbackCategory.BUG, FeedbackCategory.SUGGESTION, FeedbackCategory.FEEDBACK)
+                    val inCategory = categories[inboxCategory]?.let { c -> allItems.filter { it.category == c } } ?: allItems
+                    val filtered = when (inboxStatus) {
+                        0 -> inCategory.filter { !it.isResolved }
+                        1 -> inCategory.filter { it.isResolved }
+                        else -> inCategory
                     }
 
-                    item(key = "inbox_filters") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            val chips = listOf(
-                                "Semua (${allItems.size})",
-                                "Baru ($unreadCount)",
-                                "Bug",
-                                "Cadangan",
-                                "Feedback",
-                            )
-                            chips.forEachIndexed { idx, label ->
-                                val selected = inboxFilterIndex == idx
+                    item(key = "inbox_summary") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            categories.forEachIndexed { idx, category ->
+                                InboxCountTile(
+                                    category = category,
+                                    count = category?.let { c -> allItems.count { it.category == c } } ?: allItems.size,
+                                    selected = inboxCategory == idx,
+                                    isComic = isComic,
+                                    onClick = { inboxCategory = idx },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+
+                    item(key = "inbox_status") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                "Belum selesai · ${inCategory.count { !it.isResolved }}",
+                                "Selesai · ${inCategory.count { it.isResolved }}",
+                                "Semua",
+                            ).forEachIndexed { idx, label ->
                                 FilterChip(
-                                    selected = selected,
-                                    onClick = { inboxFilterIndex = idx },
-                                    label = {
-                                        Text(
-                                            text = label,
-                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                        )
-                                    },
+                                    selected = inboxStatus == idx,
+                                    onClick = { inboxStatus = idx },
+                                    label = { Text(label, fontWeight = if (inboxStatus == idx) FontWeight.Bold else FontWeight.Medium) },
                                     shape = CircleShape,
                                 )
                             }
@@ -1678,7 +1657,20 @@ private fun InboxFeedbackCard(
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
-                Spacer(Modifier.width(4.dp))
+                val clipboard = LocalClipboardManager.current
+                TextButton(
+                    onClick = {
+                        // One paste carries everything needed to reproduce the report elsewhere.
+                        clipboard.setText(
+                            AnnotatedString(
+                                "[$catLabel] ${item.title}\n${item.body}" +
+                                    (if (metaParts.isNotEmpty()) "\n" + metaParts.joinToString(" · ") else ""),
+                            ),
+                        )
+                    },
+                ) {
+                    Text("Salin", fontWeight = FontWeight.SemiBold)
+                }
                 TextButton(
                     onClick = onDelete,
                     enabled = !isBusy,
@@ -1697,6 +1689,48 @@ private fun InboxFeedbackCard(
     }
 }
 
+@Composable
+private fun InboxCountTile(
+    category: FeedbackCategory?,
+    count: Int,
+    selected: Boolean,
+    isComic: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val (label, icon, tint) = when (category) {
+        null -> Triple("Semua", Icons.Filled.Inbox, MaterialTheme.colorScheme.onSurface)
+        FeedbackCategory.BUG -> Triple("Bug", Icons.Filled.BugReport, MaterialTheme.colorScheme.error)
+        FeedbackCategory.SUGGESTION -> Triple("Cadangan", Icons.Filled.Lightbulb, MaterialTheme.colorScheme.tertiary)
+        FeedbackCategory.FEEDBACK -> Triple("Feedback", Icons.Filled.ChatBubbleOutline, MaterialTheme.colorScheme.primary)
+    }
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = glassCardColor(
+            if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        border = if (selected && !isComic) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else devCardBorder(isComic),
+        modifier = modifier,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 10.dp),
+        ) {
+            Text(
+                text = formatStatsNumber(count),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (category == null) MaterialTheme.colorScheme.onSurface else tint,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(12.dp))
+                Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            }
+        }
+    }
+}
+
 private fun formatRelativeSec(epochSec: Long): String {
     if (epochSec <= 0L) return ""
     val diffSec = (System.currentTimeMillis() / 1000L - epochSec).coerceAtLeast(0L)
@@ -1705,582 +1739,6 @@ private fun formatRelativeSec(epochSec: Long): String {
         diffSec < 3600L -> "${diffSec / 60L}m lalu"
         diffSec < 86400L -> "${diffSec / 3600L}j lalu"
         else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(epochSec * 1000L))
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun StatsHeroSection(
-    ui: DeveloperConsoleUiState,
-    isComic: Boolean,
-    onHoldMetric: (DevMetricInfo) -> Unit,
-    onTestPing: () -> Unit,
-    onRetry: () -> Unit,
-) {
-    val snapshot = ui.stats
-    val live = snapshot?.liveStats
-    val haptic = LocalHapticFeedback.current
-    val tabularStyle = remember { TextStyle(fontFeatureSettings = "tnum") }
-
-    Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
-        border = devCardBorder(isComic),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        when {
-            ui.isLoadingStats && live == null -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 28.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.5.dp)
-                }
-            }
-            live == null -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = snapshot?.liveError ?: "Gagal memuat turun data statistik",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    TextButton(onClick = onRetry, enabled = !ui.isLoadingStats) {
-                        Text("Cuba lagi")
-                    }
-                }
-            }
-            else -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .combinedClickable(
-                                    onClick = { onHoldMetric(DevMetricInfo.ONLINE_15M) },
-                                    onLongClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onHoldMetric(DevMetricInfo.ONLINE_15M)
-                                    },
-                                )
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(9.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (live.online15m > 0) Color(0xFF30D158)
-                                        else MaterialTheme.colorScheme.outlineVariant,
-                                    ),
-                            )
-                            Text(
-                                text = "Online (15m)",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = formatStatsNumber(live.online15m),
-                                style = MaterialTheme.typography.headlineMedium.merge(tabularStyle),
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-
-                        Text(
-                            text = "+${formatStatsNumber(live.newToday)} hari ini",
-                            style = MaterialTheme.typography.labelLarge.merge(tabularStyle),
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .combinedClickable(
-                                    onClick = { onHoldMetric(DevMetricInfo.NEW_TODAY) },
-                                    onLongClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onHoldMetric(DevMetricInfo.NEW_TODAY)
-                                    },
-                                )
-                                .padding(horizontal = 6.dp, vertical = 4.dp),
-                        )
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f))
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            HeroMetricCell(
-                                value = formatStatsNumber(live.dauToday),
-                                label = "Aktif Hari Ini (DAU)",
-                                tabularStyle = tabularStyle,
-                                onInspect = { onHoldMetric(DevMetricInfo.DAU) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            HeroMetricCell(
-                                value = formatStatsNumber(live.wau7d),
-                                label = "Aktif 7 Hari (WAU)",
-                                tabularStyle = tabularStyle,
-                                onInspect = { onHoldMetric(DevMetricInfo.WAU) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            HeroMetricCell(
-                                value = formatStatsNumber(live.mau30d),
-                                label = "Aktif 30 Hari (MAU)",
-                                tabularStyle = tabularStyle,
-                                onInspect = { onHoldMetric(DevMetricInfo.MAU) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            HeroMetricCell(
-                                value = formatStatsNumber(live.totalInstalls),
-                                label = "Jumlah Pasang",
-                                tabularStyle = tabularStyle,
-                                onInspect = { onHoldMetric(DevMetricInfo.INSTALLS) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = "Tahan mana-mana metrik untuk penerangan",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(
-                            onClick = onTestPing,
-                            enabled = !ui.isLoadingStats,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                        ) {
-                            Text("Test Ping", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun HeroMetricCell(
-    value: String,
-    label: String,
-    tabularStyle: TextStyle,
-    onInspect: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val haptic = LocalHapticFeedback.current
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(
-                onClick = onInspect,
-                onLongClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onInspect()
-                },
-            )
-            .padding(vertical = 8.dp, horizontal = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge.merge(tabularStyle),
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-private fun StatsTrendSection(
-    points: List<DailyActivePoint>,
-    isComic: Boolean,
-) {
-    val maxDau = points.maxOfOrNull { it.dau }?.coerceAtLeast(1) ?: 1
-    val peak = points.maxOfOrNull { it.dau } ?: 0
-    val accent = if (isComic) ComicAccent else MaterialTheme.colorScheme.primary
-    val mutedBar = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f)
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Active Users · 14 Days",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = "Puncak: ${formatStatsNumber(peak)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
-            border = devCardBorder(isComic),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // A line reads a 14-day trend at a glance; bars made every day compete equally.
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(96.dp),
-                ) {
-                    if (points.isEmpty()) return@Canvas
-                    val inset = 5.dp.toPx()
-                    val chartH = size.height - inset * 2
-                    val stepX = if (points.size > 1) (size.width - inset * 2) / (points.size - 1) else 0f
-                    val coords = points.mapIndexed { index, point ->
-                        Offset(inset + index * stepX, inset + chartH * (1f - point.dau.toFloat() / maxDau.toFloat()))
-                    }
-                    val line = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(coords.first().x, coords.first().y)
-                        for (k in 1 until coords.size) {
-                            val prev = coords[k - 1]
-                            val cur = coords[k]
-                            val midX = (prev.x + cur.x) / 2f
-                            cubicTo(midX, prev.y, midX, cur.y, cur.x, cur.y)
-                        }
-                    }
-                    val area = androidx.compose.ui.graphics.Path().apply {
-                        addPath(line)
-                        lineTo(coords.last().x, size.height)
-                        lineTo(coords.first().x, size.height)
-                        close()
-                    }
-                    drawPath(
-                        area,
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(accent.copy(alpha = 0.28f), accent.copy(alpha = 0f)),
-                        ),
-                    )
-                    drawPath(
-                        line,
-                        accent,
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(
-                            width = 2.5.dp.toPx(),
-                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                        ),
-                    )
-                    val peakIndex = points.indexOfFirst { it.dau == peak }
-                    listOf(peakIndex, points.lastIndex).distinct().filter { it >= 0 }.forEach { k ->
-                        drawCircle(mutedBar.copy(alpha = 1f), radius = 5.dp.toPx(), center = coords[k])
-                        drawCircle(accent, radius = 3.5.dp.toPx(), center = coords[k])
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = points.firstOrNull()?.day?.takeLast(5).orEmpty().ifBlank { "14h lepas" },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Hari ini",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AppVersionsSection(
-    buckets: List<StatBucket>,
-    isComic: Boolean,
-) {
-    val total = buckets.sumOf { it.count }.coerceAtLeast(1)
-    val fill = if (isComic) ComicAccent else MaterialTheme.colorScheme.primary
-    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "App Versions",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
-            border = devCardBorder(isComic),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                buckets.forEach { bucket ->
-                    val ratio = (bucket.count.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                    val pct = (ratio * 100f).toInt()
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            text = "v${bucket.label.removePrefix("v")}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.width(68.dp),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(6.dp)
-                                .clip(CircleShape)
-                                .background(track),
-                        ) {
-                            if (ratio > 0f) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(ratio.coerceAtLeast(0.03f))
-                                        .height(6.dp)
-                                        .clip(CircleShape)
-                                        .background(fill),
-                                )
-                            }
-                        }
-                        Text(
-                            text = "$pct% · ${formatStatsNumber(bucket.count)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RegionsAndAndroidSection(
-    countries: List<StatBucket>,
-    androids: List<StatBucket>,
-    isComic: Boolean,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "Top Regions & Android",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
-            border = devCardBorder(isComic),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (countries.isNotEmpty()) {
-                    Text(
-                        text = formatPercentageSummary(countries),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-                if (countries.isNotEmpty() && androids.isNotEmpty()) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f))
-                }
-                if (androids.isNotEmpty()) {
-                    Text(
-                        text = formatPercentageSummary(androids),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GitHubReleasesSection(
-    gh: GitHubReleaseStats?,
-    githubError: String?,
-    isLoading: Boolean,
-    isComic: Boolean,
-) {
-    val fill = if (isComic) ComicAccent else MaterialTheme.colorScheme.primary
-    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "GitHub Releases",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
-            border = devCardBorder(isComic),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            when {
-                isLoading && gh == null -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 22.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                    }
-                }
-                gh == null -> {
-                    Text(
-                        text = githubError ?: "Tiada data GitHub",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                }
-                else -> {
-                    val topReleases = gh.releases.take(6)
-                    val maxDl = topReleases.maxOfOrNull { it.downloads }?.coerceAtLeast(1L) ?: 1L
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "APK Downloads: ${formatStatsNumber(gh.totalDownloads)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                text = "★ ${formatStatsNumber(gh.stars)}",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-
-                        if (topReleases.isNotEmpty()) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f))
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                topReleases.forEach { rel ->
-                                    val ratio = (rel.downloads.toFloat() / maxDl.toFloat()).coerceIn(0f, 1f)
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Text(
-                                                text = if (rel.publishedAt.isNotBlank()) "${rel.tag} · ${rel.publishedAt}" else rel.tag,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Medium,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text(
-                                                text = formatStatsNumber(rel.downloads),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                            )
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(5.dp)
-                                                .clip(CircleShape)
-                                                .background(track),
-                                        ) {
-                                            if (ratio > 0f) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth(ratio.coerceAtLeast(0.03f))
-                                                        .height(5.dp)
-                                                        .clip(CircleShape)
-                                                        .background(fill),
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -2664,7 +2122,7 @@ private fun DevGateIconBadge(
 }
 
 @Composable
-private fun devCardBorder(isComic: Boolean): BorderStroke? {
+internal fun devCardBorder(isComic: Boolean): BorderStroke? {
     if (isComic) return null
     return glassCardBorder() ?: BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
 }
@@ -2676,15 +2134,7 @@ private fun devPrimaryButtonColors(isComic: Boolean) = if (isComic) {
     ButtonDefaults.buttonColors()
 }
 
-private fun formatPercentageSummary(buckets: List<StatBucket>): String {
-    val total = buckets.sumOf { it.count }.coerceAtLeast(1)
-    return buckets.take(6).joinToString(" · ") { bucket ->
-        val pct = ((bucket.count.toFloat() / total.toFloat()) * 100f).toInt()
-        "${bucket.label} $pct%"
-    }
-}
-
-private fun formatStatsNumber(value: Number): String =
+internal fun formatStatsNumber(value: Number): String =
     NumberFormat.getIntegerInstance(Locale.US).format(value.toLong())
 
 private fun formatClockTime(timeMs: Long): String =
