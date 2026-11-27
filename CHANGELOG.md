@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.48] - 2026-11-27
+
+### Fixed
+- **Album & playlist cover mismatch across screens:** added `preferEmbedded` mode to `ArtworkImage` so official YouTube Music covers on `ArtistDetailScreen` (`ArtistAlbumCard`), `AlbumDetailScreen` (hero, sticky top bar, tracklist, and `AlbumCard`), `FeedPlaylistDetailScreen`, `SearchScreen`, and Home/Feed album/playlist cards are no longer overwritten by external song-search lookups; also fixed `InnerTubeMusicApi.fetchAlbumPage` header thumbnail parsing using recursive `extractThumbnailsUrl`.
+
 ## [1.0.47] - 2026-11-26
 
 ### Changed
