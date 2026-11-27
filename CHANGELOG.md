@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.49] - 2026-11-27
+
+### Added
+- **Anonymous app usage telemetry:** added a lightweight random-ID launch and background heartbeat (zero personal data collected, excluded from cloud backup and device transfer).
+
+### Fixed
+- **Settings & announcement reliability:** refined internal announcement state handling and dialog rendering consistency across themes.
+
 ## [1.0.48] - 2026-11-27
 
 ### Fixed
