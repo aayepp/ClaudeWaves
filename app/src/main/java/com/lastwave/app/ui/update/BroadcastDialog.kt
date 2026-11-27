@@ -126,18 +126,8 @@ internal fun BroadcastDialog(
         else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f))
     }
 
-    val accent = when (message.type) {
-        BroadcastType.INFO -> MaterialTheme.colorScheme.primary
-        BroadcastType.WARNING -> MaterialTheme.colorScheme.error
-        BroadcastType.MAINTENANCE -> MaterialTheme.colorScheme.tertiary
-        BroadcastType.UPDATE -> MaterialTheme.colorScheme.secondary
-    }
-    val icon: ImageVector = when (message.type) {
-        BroadcastType.INFO -> Icons.Filled.Campaign
-        BroadcastType.WARNING -> Icons.Filled.Warning
-        BroadcastType.MAINTENANCE -> Icons.Filled.Build
-        BroadcastType.UPDATE -> Icons.Filled.NewReleases
-    }
+    val accent = message.type.accent()
+    val icon = message.type.icon()
     val iconContainer = when {
         isComic && message.type == BroadcastType.WARNING -> MaterialTheme.colorScheme.errorContainer
         isComic -> ComicAccent
@@ -447,4 +437,20 @@ private fun BroadcastActionFooter(
             }
         }
     }
+}
+
+/** One icon per broadcast type, shared by the user dialog and the Developer console. */
+internal fun BroadcastType.icon(): ImageVector = when (this) {
+    BroadcastType.INFO -> Icons.Filled.Campaign
+    BroadcastType.WARNING -> Icons.Filled.Warning
+    BroadcastType.MAINTENANCE -> Icons.Filled.Build
+    BroadcastType.UPDATE -> Icons.Filled.NewReleases
+}
+
+@Composable
+internal fun BroadcastType.accent(): Color = when (this) {
+    BroadcastType.INFO -> MaterialTheme.colorScheme.primary
+    BroadcastType.WARNING -> MaterialTheme.colorScheme.error
+    BroadcastType.MAINTENANCE -> MaterialTheme.colorScheme.tertiary
+    BroadcastType.UPDATE -> MaterialTheme.colorScheme.secondary
 }

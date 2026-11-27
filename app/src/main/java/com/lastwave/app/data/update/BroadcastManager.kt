@@ -33,11 +33,12 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class BroadcastType(val key: String, val label: String) {
-    INFO("info", "Info"),
-    WARNING("warning", "Amaran"),
-    MAINTENANCE("maintenance", "Selenggara"),
-    UPDATE("update", "Update");
+/** [emoji] marks the type in the notification shade, which cannot show a vector icon. */
+enum class BroadcastType(val key: String, val label: String, val emoji: String) {
+    INFO("info", "Info", "\uD83D\uDCE2"),
+    WARNING("warning", "Amaran", "\u26A0\uFE0F"),
+    MAINTENANCE("maintenance", "Selenggara", "\uD83D\uDD27"),
+    UPDATE("update", "Update", "\uD83C\uDD95");
 
     companion object {
         fun fromKey(raw: String?): BroadcastType =

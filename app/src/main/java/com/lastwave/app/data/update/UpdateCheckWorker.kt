@@ -108,7 +108,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         val body = message.message.ifBlank { message.type.label }
         val notification = NotificationCompat.Builder(context, BROADCAST_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_wave)
-            .setContentTitle(message.title)
+            .setContentTitle("${message.type.emoji} ${message.title}")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(open)
@@ -122,14 +122,19 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         private const val NOTIFICATION_ID = 4210
         private const val BROADCAST_CHANNEL_ID = "app_broadcasts"
         private const val BROADCAST_NOTIFICATION_ID = 4211
-        private const val WORK_NAME = "app_update_check"
+        // Renamed with the period: KEEP would leave existing installs on the old 12 h
+        // schedule, and WorkManager 2.7 has no UPDATE policy.
+        private const val WORK_NAME = "app_update_check_hourly"
+        private const val LEGACY_WORK_NAME = "app_update_check"
 
         /** Idempotent: KEEP leaves an existing schedule and its timing alone. */
         fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(12, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(1, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            val workManager = WorkManager.getInstance(context)
+            workManager.cancelUniqueWork(LEGACY_WORK_NAME)
+            workManager.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
         }
     }
 }

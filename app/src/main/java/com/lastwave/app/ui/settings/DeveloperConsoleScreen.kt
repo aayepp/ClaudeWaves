@@ -80,9 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -136,6 +134,8 @@ import com.lastwave.app.ui.theme.glassCardBorder
 import com.lastwave.app.ui.theme.glassCardColor
 import com.lastwave.app.ui.theme.pageBackground
 import com.lastwave.app.ui.update.BroadcastDialog
+import com.lastwave.app.ui.update.accent
+import com.lastwave.app.ui.update.icon
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1974,37 +1974,52 @@ private fun StatsTrendSection(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // A line reads a 14-day trend at a glance; bars made every day compete equally.
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(92.dp),
+                        .height(96.dp),
                 ) {
-                    val count = points.size.coerceAtLeast(1)
-                    val gap = 6.dp.toPx()
-                    val totalGap = gap * (count - 1).coerceAtLeast(0)
-                    val barW = ((size.width - totalGap) / count).coerceAtLeast(3f)
-                    val radius = CornerRadius(barW * 0.4f, barW * 0.4f)
-                    val minH = 6.dp.toPx()
-
-                    points.forEachIndexed { index, point ->
-                        val x = index * (barW + gap)
-                        val isLatestOrPeak = index == points.lastIndex || (peak > 0 && point.dau == peak)
-                        val barH = if (point.dau == 0) {
-                            minH
-                        } else {
-                            ((point.dau.toFloat() / maxDau.toFloat()) * size.height).coerceAtLeast(minH)
+                    if (points.isEmpty()) return@Canvas
+                    val inset = 5.dp.toPx()
+                    val chartH = size.height - inset * 2
+                    val stepX = if (points.size > 1) (size.width - inset * 2) / (points.size - 1) else 0f
+                    val coords = points.mapIndexed { index, point ->
+                        Offset(inset + index * stepX, inset + chartH * (1f - point.dau.toFloat() / maxDau.toFloat()))
+                    }
+                    val line = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(coords.first().x, coords.first().y)
+                        for (k in 1 until coords.size) {
+                            val prev = coords[k - 1]
+                            val cur = coords[k]
+                            val midX = (prev.x + cur.x) / 2f
+                            cubicTo(midX, prev.y, midX, cur.y, cur.x, cur.y)
                         }
-                        val y = size.height - barH
-                        drawRoundRect(
-                            color = when {
-                                point.dau == 0 -> mutedBar.copy(alpha = 0.12f)
-                                isLatestOrPeak -> accent
-                                else -> mutedBar
-                            },
-                            topLeft = Offset(x, y),
-                            size = Size(barW, barH),
-                            cornerRadius = radius,
-                        )
+                    }
+                    val area = androidx.compose.ui.graphics.Path().apply {
+                        addPath(line)
+                        lineTo(coords.last().x, size.height)
+                        lineTo(coords.first().x, size.height)
+                        close()
+                    }
+                    drawPath(
+                        area,
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(accent.copy(alpha = 0.28f), accent.copy(alpha = 0f)),
+                        ),
+                    )
+                    drawPath(
+                        line,
+                        accent,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 2.5.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        ),
+                    )
+                    val peakIndex = points.indexOfFirst { it.dau == peak }
+                    listOf(peakIndex, points.lastIndex).distinct().filter { it >= 0 }.forEach { k ->
+                        drawCircle(mutedBar.copy(alpha = 1f), radius = 5.dp.toPx(), center = coords[k])
+                        drawCircle(accent, radius = 3.5.dp.toPx(), center = coords[k])
                     }
                 }
                 Row(
@@ -2312,11 +2327,11 @@ private fun ActiveBroadcastsSection(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF30D158)),
+                            Icon(
+                                imageVector = item.type.icon(),
+                                contentDescription = item.type.label,
+                                tint = if (isComic) ComicInk else item.type.accent(),
+                                modifier = Modifier.size(22.dp),
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -2416,6 +2431,14 @@ private fun NewBroadcastSection(
                         FilterChip(
                             selected = selectedType == type,
                             onClick = { onSelectType(type) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = type.icon(),
+                                    contentDescription = null,
+                                    tint = if (isComic) ComicInk else type.accent(),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
                             label = {
                                 Text(
                                     text = type.label,
