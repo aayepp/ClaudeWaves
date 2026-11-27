@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.50] - 2026-11-27
+
+### Added
+- **Anime Sakuga theme & 165Hz VFX engine:** added Paper & Ink (Light) and Midnight Cel (Dark/AMOLED) flat cel theme with full accent color selection, toggleable Japanese katakana Manga SFX lettering, frame-rate-independent squash/dust/shard/cloud reactions up to 165Hz, typing dust under input carets, and a glitch-free teardrop seekbar.
+- **Real-time Karaoke Mode (Lyrics):** added C++ Mid-Side vocal reduction preserving bass and stereo instruments, with a compact Mic toggle next to Fullscreen and an auto-hiding vocal level slider in Lyrics Mode.
+- **In-app Feedback & Suggestions:** added a Feedback & Suggestions entry in Settings (localized across all app languages) linked to the developer inbox.
+
+### Changed
+- **Redesigned Developer Console:** pinned 3-tab navigation (`Ringkasan`, `Inbox`, `Broadcast`), clearer Malay metric labels, and feedback status/delete management.
+
+### Fixed
+- **Developer Console & segmented tab scrolling:** added mini-player bottom scroll clearance, independent scroll state per tab, and directional touch-slop handling on segmented controls so vertical scrolling never stalls.
+
 ## [1.0.49] - 2026-11-27
 
 ### Added
