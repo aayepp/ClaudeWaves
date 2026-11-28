@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.61] - 2026-11-28
+
+### Changed
+- **UI smoothness & budget-device optimization:** eliminated redundant recompositions on Home/MiniPlayer/Playback chrome, replaced 28 parallel theme color animators with a single shared animator, tuned Coil thumbnail memory usage (`RGB_565` & `224px` cap), and automatically scaled down heavy shaders/glass effects on low-RAM and entry-tier devices.
+
+### Fixed
+- **AutoMix & Crossfade reliability:** fixed AutoMix DSP band resets between consecutive transitions, preserved repeat mode and playback speed across deck swaps, prevented standby resets during active blends or A-B loops, and stopped seek actions from cancelling preloaded next tracks.
+- **Post-crash prompt accuracy:** suppressed false unexpected-shutdown prompts caused by normal OS background kills or clean task removals so only genuine crashes and ANRs trigger bug report prompts.
+- **15-locale localization:** defaulted remaining dock editor, shortcut, broadcast, and AutoMix/Crossfade audio settings labels to English and translated them across all 15 supported languages.
+
 ## [1.0.60] - 2026-11-28
 
 ### Added
