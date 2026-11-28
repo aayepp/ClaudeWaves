@@ -43,8 +43,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +58,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,13 +70,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.lastwave.app.R
+import com.lastwave.app.data.update.AppStatsManager
 import com.lastwave.app.data.update.AppUpdateManager
 import com.lastwave.app.data.update.BroadcastManager
 import com.lastwave.app.data.update.BroadcastMessage
 import com.lastwave.app.data.update.BroadcastType
+import com.lastwave.app.data.update.FeedbackCategory
+import com.lastwave.app.data.update.FeedbackDiagnosticsStore
+import com.lastwave.app.data.update.PendingCrashReport
 import com.lastwave.app.data.update.formatBroadcastDate
+import com.lastwave.app.ui.comic.AlertDialog
 import com.lastwave.app.ui.comic.Button
 import com.lastwave.app.ui.comic.TextButton
+import com.lastwave.app.ui.settings.FeedbackBottomSheet
 import com.lastwave.app.ui.theme.ComicAccent
 import com.lastwave.app.ui.theme.ComicInk
 import com.lastwave.app.ui.theme.LocalComicTheme
@@ -96,6 +106,7 @@ class BroadcastDialogViewModel @Inject constructor(
 @Composable
 fun BroadcastDialogHost(
     splashDismissed: Boolean,
+    onInAppAction: (String) -> Unit = {},
     viewModel: BroadcastDialogViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.manager.state.collectAsStateWithLifecycle()
@@ -107,6 +118,7 @@ fun BroadcastDialogHost(
     BroadcastDialog(
         message = active,
         onDismiss = { viewModel.manager.dismiss(active.id) },
+        onInAppAction = onInAppAction,
     )
 }
 
@@ -114,6 +126,7 @@ fun BroadcastDialogHost(
 internal fun BroadcastDialog(
     message: BroadcastMessage,
     onDismiss: () -> Unit,
+    onInAppAction: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val metrics = rememberDialogLayoutMetrics()
@@ -215,10 +228,15 @@ internal fun BroadcastDialog(
                             isComic = isComic,
                             onDismiss = onDismiss,
                             onOpenAction = { url ->
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                if (url.startsWith("claudewaves://", ignoreCase = true)) {
+                                    onDismiss()
+                                    onInAppAction(url)
+                                } else {
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    }
+                                    onDismiss()
                                 }
-                                onDismiss()
                             },
                         )
                     }
@@ -270,10 +288,15 @@ internal fun BroadcastDialog(
                             isComic = isComic,
                             onDismiss = onDismiss,
                             onOpenAction = { url ->
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                if (url.startsWith("claudewaves://", ignoreCase = true)) {
+                                    onDismiss()
+                                    onInAppAction(url)
+                                } else {
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    }
+                                    onDismiss()
                                 }
-                                onDismiss()
                             },
                         )
                     }
@@ -370,7 +393,7 @@ private fun BroadcastTitleHeader(
                 overflow = TextOverflow.Ellipsis,
             )
             val dateText = formatBroadcastDate(message.publishedAt).takeIf { it.isNotBlank() }
-            val subtitle = listOfNotNull(dateText, message.type.label).joinToString(" • ")
+            val subtitle = listOfNotNull(dateText, message.type.localizedUserLabel()).joinToString(" • ")
             if (subtitle.isNotEmpty()) {
                 Text(
                     text = subtitle,
@@ -425,14 +448,14 @@ private fun BroadcastActionFooter(
         }
         if (!actionUrl.isNullOrBlank()) {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text(stringResource(R.string.broadcast_close))
             }
             Button(
                 onClick = { onOpenAction(actionUrl) },
                 colors = buttonColors,
             ) {
                 Text(
-                    text = message.actionLabel?.ifBlank { null } ?: "Info Lanjut",
+                    text = message.actionLabel?.ifBlank { null } ?: stringResource(R.string.broadcast_more_info),
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -441,7 +464,7 @@ private fun BroadcastActionFooter(
                 onClick = onDismiss,
                 colors = buttonColors,
             ) {
-                Text("Close", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.broadcast_close), fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -533,14 +556,15 @@ internal fun HomeBroadcastTickerPill(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    val badgeLabel = message.type.localizedUserLabel()
                     Icon(
                         imageVector = message.type.icon(),
-                        contentDescription = message.type.label,
+                        contentDescription = badgeLabel,
                         tint = if (isComic) ComicInk else accent,
                         modifier = Modifier.size(13.dp),
                     )
                     Text(
-                        text = message.type.label.uppercase(),
+                        text = badgeLabel.uppercase(),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isComic) ComicInk else accent,
@@ -583,6 +607,107 @@ internal fun HomeBroadcastTickerPill(
             }
         }
     }
+}
+
+@Composable
+internal fun BroadcastType.localizedUserLabel(): String = when (this) {
+    BroadcastType.INFO -> stringResource(R.string.broadcast_type_info)
+    BroadcastType.WARNING -> stringResource(R.string.broadcast_type_warning)
+    BroadcastType.MAINTENANCE -> stringResource(R.string.broadcast_type_maintenance)
+    BroadcastType.UPDATE -> stringResource(R.string.broadcast_type_update)
+}
+
+@HiltViewModel
+class CrashPromptViewModel @Inject constructor(
+    val diagnosticsStore: FeedbackDiagnosticsStore,
+    val appStatsManager: AppStatsManager,
+    val updateManager: AppUpdateManager,
+    val broadcastManager: BroadcastManager,
+) : ViewModel()
+
+/**
+ * Prompts once after an unexpected previous-session crash so the user can send a
+ * pre-filled bug report without hunting through Settings. Yields to Update & Broadcast dialogs.
+ */
+@Composable
+fun CrashReportPromptHost(
+    splashDismissed: Boolean,
+    viewModel: CrashPromptViewModel = hiltViewModel(),
+) {
+    val updateInfo by viewModel.updateManager.updateInfo.collectAsStateWithLifecycle()
+    val broadcastState by viewModel.broadcastManager.state.collectAsStateWithLifecycle()
+    var pendingCrash by remember { mutableStateOf<PendingCrashReport?>(null) }
+    var openFeedbackForCrash by remember { mutableStateOf<PendingCrashReport?>(null) }
+
+    LaunchedEffect(Unit) {
+        pendingCrash = viewModel.diagnosticsStore.findUnpromptedRecentCrash()
+    }
+
+    val activeSheetCrash = openFeedbackForCrash
+    if (activeSheetCrash != null) {
+        FeedbackBottomSheet(
+            onDismiss = { openFeedbackForCrash = null },
+            prefillCrash = activeSheetCrash,
+            recentSubmissions = remember { viewModel.diagnosticsStore.getRecentSubmissions() },
+            onSubmit = { category, title, body, contact, includeDeviceInfo, includeDiagnostics, screenshots ->
+                val finalBody = if (includeDiagnostics) {
+                    val snapshot = viewModel.diagnosticsStore.buildCompactDiagnosticsSnapshot()
+                    if (snapshot.isNotBlank()) "$body\n\n--- Diagnostics ---\n$snapshot" else body
+                } else {
+                    body
+                }
+                val encoded = screenshots.take(5).mapNotNull { uri ->
+                    viewModel.appStatsManager.encodeScreenshotToDataUri(uri, maxDimension = if (screenshots.size > 2) 800 else 960)
+                }
+                viewModel.appStatsManager.submitFeedback(category, title, finalBody, contact, includeDeviceInfo, encoded)
+                    .onSuccess { id ->
+                        viewModel.diagnosticsStore.recordSubmission(id, category, title)
+                    }
+            },
+        )
+        return
+    }
+
+    val crash = pendingCrash ?: return
+    val updateVisible = updateInfo.showDialog && updateInfo.isUpdateAvailable
+    if (!splashDismissed || updateVisible || broadcastState.showDialog) return
+
+    AlertDialog(
+        onDismissRequest = {
+            viewModel.diagnosticsStore.markCrashPromptHandled(crash.fileName)
+            pendingCrash = null
+        },
+        title = {
+            Text(
+                text = stringResource(R.string.crash_prompt_title),
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Text(stringResource(R.string.crash_prompt_body, crash.crashType))
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    viewModel.diagnosticsStore.markCrashPromptHandled(crash.fileName)
+                    pendingCrash = null
+                    openFeedbackForCrash = crash
+                },
+            ) {
+                Text(stringResource(R.string.crash_prompt_report), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    viewModel.diagnosticsStore.markCrashPromptHandled(crash.fileName)
+                    pendingCrash = null
+                },
+            ) {
+                Text(stringResource(R.string.crash_prompt_dismiss))
+            }
+        },
+    )
 }
 
 /** One icon per broadcast type, shared by the user dialog and the Developer console. */

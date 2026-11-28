@@ -1139,4 +1139,19 @@
     <string name="feedback_screenshots_add">Adicionar mais</string>
     <string name="feedback_screenshots_remove">Remover</string>
     <string name="feedback_send_bug">Enviar relatório de bug</string>
+    <string name="broadcast_type_info">Info</string>
+    <string name="broadcast_type_warning">Aviso</string>
+    <string name="broadcast_type_maintenance">Manutenção</string>
+    <string name="broadcast_type_update">Atualização</string>
+    <string name="broadcast_close">Fechar</string>
+    <string name="broadcast_more_info">Saiba mais</string>
+    <string name="feedback_include_diagnostics">Incluir diagnóstico de erros e áudio</string>
+    <string name="feedback_include_diagnostics_sub">Anexa logs recentes limpos sem dados pessoais</string>
+    <string name="feedback_clear_draft">Limpar rascunho</string>
+    <string name="feedback_recent_title">Seus envios recentes (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">O ClaudeWaves fechou inesperadamente</string>
+    <string name="crash_prompt_body">Um registro de falha (%1$s) foi salvo na última sessão. Enviar para ajudar a corrigir?</string>
+    <string name="crash_prompt_report">Reportar bug</string>
+    <string name="crash_prompt_dismiss">Dispensar</string>
 </resources>

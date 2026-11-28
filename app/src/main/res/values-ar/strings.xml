@@ -1139,4 +1139,19 @@
     <string name="feedback_screenshots_add">إضافة المزيد</string>
     <string name="feedback_screenshots_remove">إزالة</string>
     <string name="feedback_send_bug">إرسال بلاغ الخطأ</string>
+    <string name="broadcast_type_info">معلومات</string>
+    <string name="broadcast_type_warning">تحذير</string>
+    <string name="broadcast_type_maintenance">صيانة</string>
+    <string name="broadcast_type_update">تحديث</string>
+    <string name="broadcast_close">إغلاق</string>
+    <string name="broadcast_more_info">المزيد</string>
+    <string name="feedback_include_diagnostics">تضمين سجلات الأخطاء والصوت</string>
+    <string name="feedback_include_diagnostics_sub">يرفق السجلات المختصرة وآخر تعطل دون بيانات شخصية</string>
+    <string name="feedback_clear_draft">مسح المسودة</string>
+    <string name="feedback_recent_title">إرسالاتك الأخيرة (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">توقف ClaudeWaves بشكل غير متوقع</string>
+    <string name="crash_prompt_body">تم حفظ سجل تعطل (%1$s) من جلستك السابقة. هل تريد إرساله للمساعدة في الإصلاح؟</string>
+    <string name="crash_prompt_report">الإبلاغ عن خطأ</string>
+    <string name="crash_prompt_dismiss">تجاهل</string>
 </resources>

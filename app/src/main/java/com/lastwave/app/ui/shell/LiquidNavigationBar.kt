@@ -69,8 +69,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -206,24 +204,24 @@ private fun LiquidNavigationBarContent(
     val railHeight = if (compact) 60.dp else 64.dp
     val pressedScale = railHeight.value / (railHeight.value - 8f)
     val captionIndex = if (pressed) captionAtPress else selectedIndex
-    val railMaxWidth = if (compact) {
-        val textMeasurer = rememberTextMeasurer()
-        val captionText = items[captionIndex.coerceIn(items.indices)].label
-        val captionStyle = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
-        val captionSlotWidth = remember(textMeasurer, captionText, captionStyle, density) {
-            val caption = textMeasurer.measure(
-                text = captionText,
-                style = captionStyle,
-                softWrap = false,
-                maxLines = 1,
-            )
-            with(density) {
-                // Match glyph padding and reserve a pixel for equal-slot rounding.
-                (caption.size.width + 24.dp.roundToPx() + 6.dp.roundToPx() + 2 * 4.dp.roundToPx() + 1).toDp()
+    // Keep the full 360dp 3-tab width even when compact/4 buttons are shown; 4+ compact items
+    // expand the active capsule so its width stays spacious like a 3-tab pill instead of 1/4 of 280dp.
+    val railMaxWidth = 360.dp
+    val useExpandedActiveSlot = compact && count >= 4
+    val slotWeights = List(count) { idx ->
+        val targetWeight = if (useExpandedActiveSlot && idx == captionIndex) 1.75f else 1f
+        if (!useExpandedActiveSlot) {
+            1f
+        } else {
+            key(idx) {
+                animateFloatAsState(
+                    targetValue = targetWeight,
+                    animationSpec = spring(dampingRatio = 0.80f, stiffness = 360f),
+                    label = "liquidNavSlotWeight",
+                ).value
             }
         }
-        maxOf(280.dp, captionSlotWidth * count + 8.dp)
-    } else 360.dp
+    }
 
     Box(
         modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
@@ -238,10 +236,11 @@ private fun LiquidNavigationBarContent(
                 .testTag("liquid_navigation_bar")
                 .railShadow(),
         ) {
+            val innerWidthPx = with(density) { (maxWidth - 8.dp).toPx() }
+            val (slotLeftsPx, slotWidthsPx) = liquidNavigationSlotMetrics(slotWeights, innerWidthPx, isRtl)
+            val currentSlotMetrics by rememberUpdatedState(slotLeftsPx to slotWidthsPx)
             val tabWidth = (maxWidth - 8.dp) / count
-            val lensWidth = tabWidth
             val tabPx = with(density) { tabWidth.toPx() }
-            val lensPx = with(density) { lensWidth.toPx() }
 
             // A -> B -> C is acyclic: page A, clear navigation plane B,
             // sibling lens C. The visible opaque rail covers B's original draw.
@@ -259,6 +258,7 @@ private fun LiquidNavigationBarContent(
                 NavigationGlyphs(
                     items, selectedIndex, captionIndex, compact, inkAt,
                     captured = true, onSelect = {}, modifier = Modifier.fillMaxSize().padding(4.dp),
+                    slotWeights = slotWeights,
                 )
             }
             // A has an opaque theme background. This covers the clearer source copy
@@ -266,14 +266,19 @@ private fun LiquidNavigationBarContent(
             Box(Modifier.matchParentSize().background(surfaceColor, CircleShape).navigationRail(pageState, railTint).glassRim())
             Box(
                 Modifier.fillMaxSize().padding(4.dp).selectableGroup()
-                    .pointerInput(count, isRtl, lensPx, tabPx) {
+                    .pointerInput(count, isRtl, useExpandedActiveSlot, innerWidthPx, tabPx) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                             val width = size.width
                             val height = size.height
-                            val fingerStart = liquidNavigationRawPosition(down.position.x, width.toFloat(), count)
+                            val (curLefts, curWidths) = currentSlotMetrics
+                            val fingerStart = if (useExpandedActiveSlot) {
+                                liquidNavigationRawPositionWeighted(down.position.x, curLefts, curWidths)
+                            } else {
+                                liquidNavigationRawPosition(down.position.x, width.toFloat(), count)
+                            }
                             val visualStart = currentPosition()
-                            val onExistingLens = abs(fingerStart - visualStart) <= lensPx / (2f * tabPx)
+                            val onExistingLens = abs(fingerStart - visualStart) <= 0.5f
                             val grabOffset = if (onExistingLens) visualStart - fingerStart else 0f
                             captionAtPress = selected
                             touchPosition = liquidNavigationRubberBand(fingerStart + grabOffset, count)
@@ -318,10 +323,13 @@ private fun LiquidNavigationBarContent(
                                         change.consume()
                                         break
                                     }
-                                    touchPosition = liquidNavigationRubberBand(
-                                        liquidNavigationRawPosition(change.position.x, width.toFloat(), count) + grabOffset,
-                                        count,
-                                    )
+                                    val (moveLefts, moveWidths) = currentSlotMetrics
+                                    val rawAtMove = if (useExpandedActiveSlot) {
+                                        liquidNavigationRawPositionWeighted(change.position.x, moveLefts, moveWidths)
+                                    } else {
+                                        liquidNavigationRawPosition(change.position.x, width.toFloat(), count)
+                                    }
+                                    touchPosition = liquidNavigationRubberBand(rawAtMove + grabOffset, count)
                                     touchY = (dy / height.coerceAtLeast(1)).coerceIn(-0.2f, 0.2f)
                                     if (!change.pressed) {
                                         if (dragged) {
@@ -347,11 +355,23 @@ private fun LiquidNavigationBarContent(
                     items, selectedIndex, captionIndex, compact,
                     { i -> inkAt(i).let { if (i == selectedIndex && !pressed) it else it.copy(alpha = 0.92f) } },
                     captured = false, onSelect = { select(it) }, modifier = Modifier.fillMaxSize(),
+                    slotWeights = slotWeights,
                 )
+                val (_, liveLensWidthPx) = if (useExpandedActiveSlot) {
+                    liquidNavigationContinuousLeftAndWidth(currentPosition(), slotLeftsPx, slotWidthsPx)
+                } else {
+                    0f to tabPx
+                }
+                val liveLensWidthDp = with(density) { liveLensWidthPx.coerceAtLeast(1f).toDp() }
                 Box(
                     Modifier.align(AbsoluteAlignment.TopLeft).absoluteOffset {
-                        IntOffset((currentPosition() * tabPx + (tabPx - lensPx) / 2f).roundToInt(), 0)
-                    }.width(lensWidth).fillMaxHeight().graphicsLayer {
+                        val offsetPx = if (useExpandedActiveSlot) {
+                            liquidNavigationContinuousLeftAndWidth(currentPosition(), slotLeftsPx, slotWidthsPx).first
+                        } else {
+                            currentPosition() * tabPx
+                        }
+                        IntOffset(offsetPx.roundToInt(), 0)
+                    }.width(liveLensWidthDp).fillMaxHeight().graphicsLayer {
                         val amount = liftState.value.coerceIn(0f, 1f)
                         val flow = ((currentPosition() - trailingPosition.value) * 2f).coerceIn(-1f, 1f)
                         // Keep the frosted selection visible at rest; never

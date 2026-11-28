@@ -38,3 +38,75 @@ internal fun liquidNavigationVisualIndex(index: Int, itemCount: Int, isRtl: Bool
     val logicalIndex = index.coerceIn(0, itemCount - 1)
     return (if (isRtl) itemCount - 1 - logicalIndex else logicalIndex).toFloat()
 }
+
+/** Computes physical left-to-right slot origins and widths from logical slot weights. */
+internal fun liquidNavigationSlotMetrics(
+    slotWeights: List<Float>,
+    totalWidth: Float,
+    isRtl: Boolean,
+): Pair<FloatArray, FloatArray> {
+    val n = slotWeights.size
+    if (n == 0 || totalWidth <= 0f || !totalWidth.isFinite()) {
+        return FloatArray(n) to FloatArray(n)
+    }
+    val ordered = FloatArray(n) { i ->
+        val logicalIdx = if (isRtl) n - 1 - i else i
+        slotWeights[logicalIdx].takeIf { it.isFinite() && it > 0f } ?: 1f
+    }
+    val weightSum = ordered.sum().coerceAtLeast(1f)
+    val lefts = FloatArray(n)
+    val widths = FloatArray(n)
+    var x = 0f
+    for (i in 0 until n) {
+        val w = totalWidth * ordered[i] / weightSum
+        lefts[i] = x
+        widths[i] = w
+        x += w
+    }
+    return lefts to widths
+}
+
+/** Maps a physical finger X coordinate into continuous slot space for weighted slots. */
+internal fun liquidNavigationRawPositionWeighted(
+    x: Float,
+    slotLefts: FloatArray,
+    slotWidths: FloatArray,
+): Float {
+    val n = minOf(slotLefts.size, slotWidths.size)
+    if (n <= 1 || !x.isFinite()) return 0f
+    for (i in 0 until n) {
+        val left = slotLefts[i]
+        val w = slotWidths[i]
+        if (w <= 0f) continue
+        if (x < left + w || i == n - 1) {
+            return i - 0.5f + (x - left) / w
+        }
+    }
+    return 0f
+}
+
+/** Interpolates left edge and width for the pill at continuous visual [position]. */
+internal fun liquidNavigationContinuousLeftAndWidth(
+    position: Float,
+    slotLefts: FloatArray,
+    slotWidths: FloatArray,
+): Pair<Float, Float> {
+    val n = minOf(slotLefts.size, slotWidths.size)
+    if (n == 0) return 0f to 0f
+    if (n == 1 || !position.isFinite()) return slotLefts[0] to slotWidths[0]
+    val p = position
+    return when {
+        p <= 0f -> (slotLefts[0] + p * slotWidths[0]) to slotWidths[0]
+        p >= n - 1 -> {
+            val last = n - 1
+            (slotLefts[last] + (p - last) * slotWidths[last]) to slotWidths[last]
+        }
+        else -> {
+            val idx = p.toInt().coerceIn(0, n - 2)
+            val frac = p - idx
+            val left = slotLefts[idx] + (slotLefts[idx + 1] - slotLefts[idx]) * frac
+            val width = slotWidths[idx] + (slotWidths[idx + 1] - slotWidths[idx]) * frac
+            left to width
+        }
+    }
+}

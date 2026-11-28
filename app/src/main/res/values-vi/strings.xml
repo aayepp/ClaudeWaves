@@ -1436,4 +1436,19 @@
     <string name="feedback_screenshots_add">Thêm nữa</string>
     <string name="feedback_screenshots_remove">Xóa</string>
     <string name="feedback_send_bug">Gửi báo cáo lỗi</string>
+    <string name="broadcast_type_info">Thông tin</string>
+    <string name="broadcast_type_warning">Cảnh báo</string>
+    <string name="broadcast_type_maintenance">Bảo trì</string>
+    <string name="broadcast_type_update">Cập nhật</string>
+    <string name="broadcast_close">Đóng</string>
+    <string name="broadcast_more_info">Tìm hiểu thêm</string>
+    <string name="feedback_include_diagnostics">Kèm nhật ký lỗi &amp; âm thanh</string>
+    <string name="feedback_include_diagnostics_sub">Đính kèm nhật ký rút gọn đã ẩn dữ liệu cá nhân</string>
+    <string name="feedback_clear_draft">Xóa bản nháp</string>
+    <string name="feedback_recent_title">Báo cáo đã gửi gần đây (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves vừa đóng đột ngột</string>
+    <string name="crash_prompt_body">Đã lưu nhật ký sự cố (%1$s) từ phiên trước. Gửi để giúp khắc phục lỗi này?</string>
+    <string name="crash_prompt_report">Báo lỗi</string>
+    <string name="crash_prompt_dismiss">Bỏ qua</string>
 </resources>

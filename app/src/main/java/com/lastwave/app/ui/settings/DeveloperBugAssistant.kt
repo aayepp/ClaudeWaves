@@ -1,9 +1,18 @@
 package com.lastwave.app.ui.settings
 
+import android.content.ClipData
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Base64
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.FileProvider
 import com.lastwave.app.data.update.FeedbackCategory
 import com.lastwave.app.data.update.UserFeedbackItem
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +23,7 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 internal enum class DevLanguage(
@@ -153,6 +163,7 @@ internal object FeedbackTranslator {
 internal object BugTriageAnalyzer {
     private val areaRegex = Regex("""\[Area:\s*([^\]]+)]""", RegexOption.IGNORE_CASE)
     private val freqRegex = Regex("""\[Freq:\s*([^\]]+)]""", RegexOption.IGNORE_CASE)
+    private val exceptionRegex = Regex("""\b([A-Za-z0-9_]+(?:Exception|Error)|SIGSEGV|SIGABRT|ANR)\b""")
 
     fun analyze(
         item: UserFeedbackItem,
@@ -164,11 +175,15 @@ internal object BugTriageAnalyzer {
         val taggedArea = areaRegex.find(rawBody)?.groupValues?.getOrNull(1)?.trim()
         val taggedFreq = freqRegex.find(rawBody)?.groupValues?.getOrNull(1)?.trim()
         val combinedLower = "${item.title} $rawBody $displayTitle $displayBody".lowercase()
+        val exceptionHint = exceptionRegex.find(rawBody)?.groupValues?.getOrNull(1)
+        val hasDiagnosticsCrash = rawBody.contains("--- Diagnostics ---", ignoreCase = true) &&
+            (rawBody.contains("Crash:", ignoreCase = true) || exceptionHint != null)
 
         val (detectedArea, suspects) = detectModuleAndFiles(taggedArea, combinedLower)
         val symptom = detectSymptom(taggedArea, combinedLower)
         val priority = when {
-            symptom == BugSymptomKind.CRASH || symptom == BugSymptomKind.AUDIO_FAIL || symptom == BugSymptomKind.FREEZE_LAG ->
+            hasDiagnosticsCrash || exceptionHint != null ||
+                symptom == BugSymptomKind.CRASH || symptom == BugSymptomKind.AUDIO_FAIL || symptom == BugSymptomKind.FREEZE_LAG ->
                 BugPriority.HIGH
             taggedFreq?.containsAny("setiap", "always", "every") == true -> BugPriority.HIGH
             item.category != FeedbackCategory.BUG -> BugPriority.LOW
@@ -185,7 +200,16 @@ internal object BugTriageAnalyzer {
             cleanLead = displayTitle.trim().trimEnd('.'),
             stepCount = steps.size,
         )
-        val likelyCause = buildLikelyCause(lang, symptom, detectedArea)
+        val baseCause = buildLikelyCause(lang, symptom, detectedArea)
+        val likelyCause = if (exceptionHint != null) {
+            if (lang == DevLanguage.BM) {
+                "Dikesan ralat $exceptionHint dalam log diagnostik. $baseCause"
+            } else {
+                "Detected $exceptionHint in attached diagnostics. $baseCause"
+            }
+        } else {
+            baseCause
+        }
 
         return BugTriageDigest(
             area = detectedArea,
@@ -387,4 +411,124 @@ internal suspend fun decodeDataUriBitmap(raw: String): ImageBitmap? = withContex
         val bytes = Base64.decode(raw.substring(comma + 1), Base64.DEFAULT)
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
     }.getOrNull()
+}
+
+private val screenshotHttpClient by lazy {
+    OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.SECONDS)
+        .build()
+}
+
+private suspend fun loadScreenshotBytes(source: String): ByteArray? = withContext(Dispatchers.IO) {
+    if (source.startsWith("data:image/", ignoreCase = true)) {
+        val comma = source.indexOf(',')
+        if (comma <= 0 || comma >= source.lastIndex) return@withContext null
+        return@withContext runCatching { Base64.decode(source.substring(comma + 1), Base64.DEFAULT) }.getOrNull()
+    }
+    if (source.startsWith("https://", ignoreCase = true) || source.startsWith("http://", ignoreCase = true)) {
+        return@withContext runCatching {
+            val req = Request.Builder().url(source).get().build()
+            screenshotHttpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) resp.body?.bytes() else null
+            }
+        }.getOrNull()
+    }
+    null
+}
+
+internal suspend fun saveScreenshotToGallery(context: Context, source: String): Result<String> = withContext(Dispatchers.IO) {
+    val bytes = loadScreenshotBytes(source)
+        ?: return@withContext Result.failure(IllegalStateException("Screenshot unreadable"))
+    val fileName = "ClaudeWaves_Bug_${System.currentTimeMillis()}.jpg"
+    runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/ClaudeWaves")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: error("MediaStore insert failed")
+            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("Cannot write image")
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            "Pictures/ClaudeWaves/$fileName"
+        } else {
+            val dir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir
+            val outDir = File(dir, "ClaudeWaves").apply { mkdirs() }
+            val outFile = File(outDir, fileName)
+            outFile.writeBytes(bytes)
+            outFile.absolutePath
+        }
+    }
+}
+
+private fun writeShareImageUri(context: Context, bytes: ByteArray, index: Int): Uri {
+    val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+    val outFile = File(dir, "dev_bug_${System.currentTimeMillis()}_$index.jpg")
+    outFile.writeBytes(bytes)
+    return FileProvider.getUriForFile(context, "${context.packageName}.provider", outFile)
+}
+
+internal suspend fun shareScreenshot(context: Context, source: String): Result<Unit> = withContext(Dispatchers.IO) {
+    val bytes = loadScreenshotBytes(source)
+        ?: return@withContext Result.failure(IllegalStateException("Screenshot unreadable"))
+    runCatching {
+        val uri = writeShareImageUri(context, bytes, 0)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/jpeg"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(context.contentResolver, "Screenshot", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(intent, "Share Screenshot").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(chooser)
+    }
+}
+
+internal suspend fun shareBugPack(
+    context: Context,
+    promptText: String,
+    screenshots: List<String>,
+): Result<Unit> = withContext(Dispatchers.IO) {
+    runCatching {
+        val uris = ArrayList<Uri>()
+        screenshots.take(5).forEachIndexed { idx, src ->
+            loadScreenshotBytes(src)?.let { bytes ->
+                uris += writeShareImageUri(context, bytes, idx)
+            }
+        }
+        val intent = when (uris.size) {
+            0 -> Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, promptText)
+            }
+            1 -> Intent(Intent.ACTION_SEND).apply {
+                type = "image/jpeg"
+                putExtra(Intent.EXTRA_TEXT, promptText)
+                putExtra(Intent.EXTRA_STREAM, uris.first())
+                clipData = ClipData.newUri(context.contentResolver, "Bug Screenshot", uris.first())
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            else -> Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "image/jpeg"
+                putExtra(Intent.EXTRA_TEXT, promptText)
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                clipData = ClipData.newUri(context.contentResolver, "Bug Screenshots", uris.first()).apply {
+                    for (i in 1 until uris.size) addItem(ClipData.Item(uris[i]))
+                }
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        val chooser = Intent.createChooser(intent, "Share Bug Pack").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(chooser)
+    }
 }

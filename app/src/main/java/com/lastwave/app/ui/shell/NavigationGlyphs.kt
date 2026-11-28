@@ -76,6 +76,7 @@ internal fun NavigationGlyphs(
     captured: Boolean,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    slotWeights: List<Float>? = null,
 ) {
     Row(modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         items.forEachIndexed { index, item ->
@@ -113,9 +114,10 @@ internal fun NavigationGlyphs(
             }
             // Clear Text itself as well: unmerged semantic queries must not find the hidden copy.
             val textSemantics = if (captured) Modifier.clearAndSetSemantics { } else Modifier
+            val slotWeight = slotWeights?.getOrNull(index)?.coerceAtLeast(0.5f) ?: 1f
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(slotWeight)
                     .fillMaxHeight()
                     .then(inputModifier)
                     .padding(horizontal = 4.dp),

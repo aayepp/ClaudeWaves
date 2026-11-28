@@ -1192,4 +1192,19 @@
     <string name="feedback_screenshots_add">Ajouter</string>
     <string name="feedback_screenshots_remove">Supprimer</string>
     <string name="feedback_send_bug">Envoyer le rapport</string>
+    <string name="broadcast_type_info">Info</string>
+    <string name="broadcast_type_warning">Alerte</string>
+    <string name="broadcast_type_maintenance">Maintenance</string>
+    <string name="broadcast_type_update">Mise à jour</string>
+    <string name="broadcast_close">Fermer</string>
+    <string name="broadcast_more_info">En savoir plus</string>
+    <string name="feedback_include_diagnostics">Inclure le diagnostic audio et erreurs</string>
+    <string name="feedback_include_diagnostics_sub">Ajoute les journaux récents nettoyés sans données personnelles</string>
+    <string name="feedback_clear_draft">Effacer le brouillon</string>
+    <string name="feedback_recent_title">Vos envois récents (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves s’est fermé de façon inattendue</string>
+    <string name="crash_prompt_body">Un journal de plantage (%1$s) a été enregistré. L’envoyer pour aider à corriger le problème ?</string>
+    <string name="crash_prompt_report">Signaler le bug</string>
+    <string name="crash_prompt_dismiss">Ignorer</string>
 </resources>

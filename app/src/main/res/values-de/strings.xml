@@ -1139,4 +1139,19 @@
     <string name="feedback_screenshots_add">Mehr hinzufügen</string>
     <string name="feedback_screenshots_remove">Entfernen</string>
     <string name="feedback_send_bug">Fehlerbericht senden</string>
+    <string name="broadcast_type_info">Info</string>
+    <string name="broadcast_type_warning">Warnung</string>
+    <string name="broadcast_type_maintenance">Wartung</string>
+    <string name="broadcast_type_update">Update</string>
+    <string name="broadcast_close">Schließen</string>
+    <string name="broadcast_more_info">Mehr Infos</string>
+    <string name="feedback_include_diagnostics">Fehler- &amp; Audiodiagnose beifügen</string>
+    <string name="feedback_include_diagnostics_sub">Fügt bereinigte Logs &amp; Absturzinfos hinzu (keine Token/Daten)</string>
+    <string name="feedback_clear_draft">Entwurf löschen</string>
+    <string name="feedback_recent_title">Deine letzten Meldungen (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves wurde unerwartet beendet</string>
+    <string name="crash_prompt_body">Ein Absturzprotokoll (%1$s) wurde gespeichert. Jetzt melden, um beim Beheben zu helfen?</string>
+    <string name="crash_prompt_report">Fehler melden</string>
+    <string name="crash_prompt_dismiss">Verwerfen</string>
 </resources>

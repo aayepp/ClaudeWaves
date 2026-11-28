@@ -1139,4 +1139,19 @@
     <string name="feedback_screenshots_add">追加</string>
     <string name="feedback_screenshots_remove">削除</string>
     <string name="feedback_send_bug">バグ報告を送信</string>
+    <string name="broadcast_type_info">お知らせ</string>
+    <string name="broadcast_type_warning">警告</string>
+    <string name="broadcast_type_maintenance">メンテナンス</string>
+    <string name="broadcast_type_update">アップデート</string>
+    <string name="broadcast_close">閉じる</string>
+    <string name="broadcast_more_info">詳しく見る</string>
+    <string name="feedback_include_diagnostics">エラー・オーディオ診断ログを含める</string>
+    <string name="feedback_include_diagnostics_sub">個人情報を除外した最新ログとクラッシュ概要を添付します</string>
+    <string name="feedback_clear_draft">下書きを消去</string>
+    <string name="feedback_recent_title">最近の送信履歴 (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves が予期せず終了しました</string>
+    <string name="crash_prompt_body">前回のセッションからクラッシュログ (%1$s) が保存されました。修正のため送信しますか？</string>
+    <string name="crash_prompt_report">バグを報告</string>
+    <string name="crash_prompt_dismiss">閉じる</string>
 </resources>

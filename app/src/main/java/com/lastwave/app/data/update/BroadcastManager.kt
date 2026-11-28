@@ -26,6 +26,9 @@ import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.security.KeyStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -69,6 +72,10 @@ data class BroadcastMessage(
     val actionUrl: String?,
     val notify: Boolean,
     val displayMode: BroadcastDisplayMode = BroadcastDisplayMode.POPUP,
+    val minVersion: String? = null,
+    val maxVersion: String? = null,
+    val expiresAtEpochMs: Long? = null,
+    val isOpen: Boolean = true,
 )
 
 data class BroadcastUiState(
@@ -109,6 +116,14 @@ class BroadcastManager @Inject constructor(
         checkForBroadcast()
     }
 
+    private fun isPopupDismissed(id: String): Boolean =
+        prefs.getString(KEY_DISMISSED_POPUP_ID, null) == id ||
+            prefs.getString(KEY_DISMISSED_ID, null) == id
+
+    private fun isTickerDismissed(id: String): Boolean =
+        prefs.getString(KEY_DISMISSED_TICKER_ID, null) == id ||
+            prefs.getString(KEY_DISMISSED_ID, null) == id
+
     fun checkForBroadcast() {
         scope.launch {
             val latest = try {
@@ -121,12 +136,12 @@ class BroadcastManager @Inject constructor(
                 _state.value = BroadcastUiState()
                 return@launch
             }
-            val dismissedId = prefs.getString(KEY_DISMISSED_ID, null)
-            val visible = latest.id != dismissedId
+            val popupHidden = isPopupDismissed(latest.id)
+            val tickerHidden = isTickerDismissed(latest.id)
             _state.value = BroadcastUiState(
                 active = latest,
-                showDialog = visible && latest.displayMode != BroadcastDisplayMode.TICKER,
-                showTicker = visible && latest.displayMode != BroadcastDisplayMode.POPUP,
+                showDialog = !popupHidden && latest.displayMode != BroadcastDisplayMode.TICKER,
+                showTicker = !tickerHidden && latest.displayMode != BroadcastDisplayMode.POPUP,
             )
         }
     }
@@ -139,12 +154,13 @@ class BroadcastManager @Inject constructor(
             return null
         } ?: return null
 
-        val dismissedId = prefs.getString(KEY_DISMISSED_ID, null)
-        if (latest.id == dismissedId) return null
+        val popupHidden = isPopupDismissed(latest.id)
+        val tickerHidden = isTickerDismissed(latest.id)
+        if (popupHidden && tickerHidden) return null
 
         _state.value = _state.value.copy(
             active = latest,
-            showTicker = latest.displayMode != BroadcastDisplayMode.POPUP,
+            showTicker = !tickerHidden && latest.displayMode != BroadcastDisplayMode.POPUP,
         )
         if (!latest.notify) return null
         val notifiedId = prefs.getString(KEY_NOTIFIED_ID, null)
@@ -156,12 +172,13 @@ class BroadcastManager @Inject constructor(
 
     fun showDialog() {
         val current = _state.value.active ?: return
-        val dismissedId = prefs.getString(KEY_DISMISSED_ID, null)
-        if (current.id == dismissedId) return
+        if (!isEligibleForCurrentClient(current)) return
+        val popupHidden = isPopupDismissed(current.id)
+        val tickerHidden = isTickerDismissed(current.id)
         _state.value = _state.value.copy(
             active = current,
-            showDialog = current.displayMode != BroadcastDisplayMode.TICKER,
-            showTicker = current.displayMode != BroadcastDisplayMode.POPUP,
+            showDialog = !popupHidden && current.displayMode != BroadcastDisplayMode.TICKER,
+            showTicker = !tickerHidden && current.displayMode != BroadcastDisplayMode.POPUP,
         )
     }
 
@@ -173,15 +190,24 @@ class BroadcastManager @Inject constructor(
     fun dismiss(id: String) {
         val current = _state.value.active
         if (current != null && current.displayMode != BroadcastDisplayMode.POPUP) {
+            // In BOTH mode, closing the modal must stay dismissed across restarts while keeping the ticker visible.
+            prefs.edit().putString(KEY_DISMISSED_POPUP_ID, id).apply()
             _state.value = _state.value.copy(showDialog = false)
             return
         }
-        prefs.edit().putString(KEY_DISMISSED_ID, id).apply()
+        prefs.edit()
+            .putString(KEY_DISMISSED_ID, id)
+            .putString(KEY_DISMISSED_POPUP_ID, id)
+            .apply()
         _state.value = _state.value.copy(showDialog = false, showTicker = false)
     }
 
     fun dismissTicker(id: String) {
-        prefs.edit().putString(KEY_DISMISSED_ID, id).apply()
+        prefs.edit()
+            .putString(KEY_DISMISSED_ID, id)
+            .putString(KEY_DISMISSED_POPUP_ID, id)
+            .putString(KEY_DISMISSED_TICKER_ID, id)
+            .apply()
         _state.value = _state.value.copy(showTicker = false, showDialog = false)
     }
 
@@ -393,6 +419,28 @@ class BroadcastManager @Inject constructor(
         }
     }
 
+    suspend fun fetchBroadcastHistory(limit: Int = 10): Result<List<BroadcastMessage>> = withContext(Dispatchers.IO) {
+        try {
+            val token = readOwnerToken()
+            val url =
+                "https://api.github.com/repos/$REPO/issues?labels=$BROADCAST_LABEL&state=closed&creator=$OWNER_LOGIN&per_page=$limit&sort=updated&direction=desc"
+            val builder = githubRequestBuilder(url)
+                .cacheControl(CacheControl.FORCE_NETWORK)
+                .get()
+            if (token != null) builder.header("Authorization", "Bearer $token")
+            okHttpClient.newCall(builder.build()).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(IllegalStateException(extractGithubError(response.code, bodyStr)))
+                }
+                Result.success(parseIssueList(bodyStr, isOpen = false))
+            }
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(e)
+        }
+    }
+
     suspend fun sendBroadcast(
         title: String,
         message: String,
@@ -402,6 +450,9 @@ class BroadcastManager @Inject constructor(
         actionUrl: String?,
         notify: Boolean,
         displayMode: BroadcastDisplayMode = BroadcastDisplayMode.POPUP,
+        minVersion: String? = null,
+        maxVersion: String? = null,
+        expiresAtEpochMs: Long? = null,
         closePrevious: Boolean = true,
     ): Result<BroadcastMessage> = withContext(Dispatchers.IO) {
         val token = readOwnerToken()
@@ -415,9 +466,17 @@ class BroadcastManager @Inject constructor(
         if (!imageUrl.isNullOrBlank() && cleanImageUrl == null) {
             return@withContext Result.failure(IllegalArgumentException("URL gambar mesti bermula dengan http:// atau https://"))
         }
-        val cleanUrl = sanitizeHttpUrl(actionUrl)
+        val cleanUrl = sanitizeActionUrl(actionUrl)
         if (!actionUrl.isNullOrBlank() && cleanUrl == null) {
-            return@withContext Result.failure(IllegalArgumentException("URL mesti bermula dengan http:// atau https://"))
+            return@withContext Result.failure(IllegalArgumentException("URL mesti http(s):// atau claudewaves://"))
+        }
+        val cleanMinVer = sanitizeVersionString(minVersion)
+        if (!minVersion.isNullOrBlank() && cleanMinVer == null) {
+            return@withContext Result.failure(IllegalArgumentException("Format versi minimum tidak sah (cth: 1.0.55)"))
+        }
+        val cleanMaxVer = sanitizeVersionString(maxVersion)
+        if (!maxVersion.isNullOrBlank() && cleanMaxVer == null) {
+            return@withContext Result.failure(IllegalArgumentException("Format versi maksimum tidak sah (cth: 1.0.60)"))
         }
         try {
             if (closePrevious) {
@@ -427,7 +486,21 @@ class BroadcastManager @Inject constructor(
             }
             val payload = JSONObject().apply {
                 put("title", cleanTitle)
-                put("body", buildIssueBody(cleanMessage, type, cleanImageUrl, actionLabel, cleanUrl, notify, displayMode))
+                put(
+                    "body",
+                    buildIssueBody(
+                        message = cleanMessage,
+                        type = type,
+                        imageUrl = cleanImageUrl,
+                        actionLabel = actionLabel,
+                        actionUrl = cleanUrl,
+                        notify = notify,
+                        displayMode = displayMode,
+                        minVersion = cleanMinVer,
+                        maxVersion = cleanMaxVer,
+                        expiresAtEpochMs = expiresAtEpochMs,
+                    ),
+                )
                 put("labels", JSONArray().put(BROADCAST_LABEL))
             }
             val request = githubRequestBuilder("https://api.github.com/repos/$REPO/issues")
@@ -444,6 +517,141 @@ class BroadcastManager @Inject constructor(
                 val created = parseIssue(JSONObject(bodyStr))
                     ?: return@withContext Result.failure(IllegalStateException("Gagal baca respons issue baru"))
                 Result.success(created)
+            }
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateBroadcast(
+        issueNumber: Int,
+        title: String,
+        message: String,
+        type: BroadcastType,
+        imageUrl: String? = null,
+        actionLabel: String?,
+        actionUrl: String?,
+        notify: Boolean,
+        displayMode: BroadcastDisplayMode = BroadcastDisplayMode.POPUP,
+        minVersion: String? = null,
+        maxVersion: String? = null,
+        expiresAtEpochMs: Long? = null,
+    ): Result<BroadcastMessage> = withContext(Dispatchers.IO) {
+        val token = readOwnerToken()
+            ?: return@withContext Result.failure(IllegalStateException("Tiada token admin disimpan"))
+        val cleanTitle = title.trim()
+        val cleanMessage = message.trim()
+        if (cleanTitle.isEmpty() || cleanMessage.isEmpty()) {
+            return@withContext Result.failure(IllegalArgumentException("Tajuk & mesej wajib diisi"))
+        }
+        val cleanImageUrl = sanitizeHttpUrl(imageUrl)
+        if (!imageUrl.isNullOrBlank() && cleanImageUrl == null) {
+            return@withContext Result.failure(IllegalArgumentException("URL gambar mesti bermula dengan http:// atau https://"))
+        }
+        val cleanUrl = sanitizeActionUrl(actionUrl)
+        if (!actionUrl.isNullOrBlank() && cleanUrl == null) {
+            return@withContext Result.failure(IllegalArgumentException("URL mesti http(s):// atau claudewaves://"))
+        }
+        val cleanMinVer = sanitizeVersionString(minVersion)
+        if (!minVersion.isNullOrBlank() && cleanMinVer == null) {
+            return@withContext Result.failure(IllegalArgumentException("Format versi minimum tidak sah (cth: 1.0.55)"))
+        }
+        val cleanMaxVer = sanitizeVersionString(maxVersion)
+        if (!maxVersion.isNullOrBlank() && cleanMaxVer == null) {
+            return@withContext Result.failure(IllegalArgumentException("Format versi maksimum tidak sah (cth: 1.0.60)"))
+        }
+        try {
+            val payload = JSONObject().apply {
+                put("title", cleanTitle)
+                put(
+                    "body",
+                    buildIssueBody(
+                        message = cleanMessage,
+                        type = type,
+                        imageUrl = cleanImageUrl,
+                        actionLabel = actionLabel,
+                        actionUrl = cleanUrl,
+                        notify = notify,
+                        displayMode = displayMode,
+                        minVersion = cleanMinVer,
+                        maxVersion = cleanMaxVer,
+                        expiresAtEpochMs = expiresAtEpochMs,
+                    ),
+                )
+            }
+            val request = githubRequestBuilder("https://api.github.com/repos/$REPO/issues/$issueNumber")
+                .header("Authorization", "Bearer $token")
+                .cacheControl(CacheControl.FORCE_NETWORK)
+                .patch(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(IllegalStateException(extractGithubError(response.code, bodyStr)))
+                }
+                invalidateCache()
+                val updated = parseIssue(JSONObject(bodyStr))
+                    ?: return@withContext Result.failure(IllegalStateException("Gagal baca respons kemas kini broadcast"))
+                val cur = _state.value.active
+                if (cur != null && cur.issueNumber == issueNumber) {
+                    _state.value = if (isEligibleForCurrentClient(updated)) {
+                        val popupHidden = isPopupDismissed(updated.id)
+                        val tickerHidden = isTickerDismissed(updated.id)
+                        BroadcastUiState(
+                            active = updated,
+                            showDialog = !popupHidden && updated.displayMode != BroadcastDisplayMode.TICKER,
+                            showTicker = !tickerHidden && updated.displayMode != BroadcastDisplayMode.POPUP,
+                        )
+                    } else {
+                        BroadcastUiState()
+                    }
+                }
+                Result.success(updated)
+            }
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createGitHubIssue(
+        title: String,
+        body: String,
+        labels: List<String> = emptyList(),
+    ): Result<Pair<Int, String>> = withContext(Dispatchers.IO) {
+        val token = readOwnerToken()
+            ?: return@withContext Result.failure(IllegalStateException("Tiada token admin disimpan"))
+        val cleanTitle = title.trim().take(180)
+        val cleanBody = body.trim()
+        if (cleanTitle.isEmpty()) {
+            return@withContext Result.failure(IllegalArgumentException("Tajuk isu kosong"))
+        }
+        try {
+            val payload = JSONObject().apply {
+                put("title", cleanTitle)
+                put("body", cleanBody)
+                if (labels.isNotEmpty()) {
+                    put("labels", JSONArray(labels))
+                }
+            }
+            val request = githubRequestBuilder("https://api.github.com/repos/$REPO/issues")
+                .header("Authorization", "Bearer $token")
+                .cacheControl(CacheControl.FORCE_NETWORK)
+                .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(IllegalStateException(extractGithubError(response.code, bodyStr)))
+                }
+                val json = JSONObject(bodyStr)
+                val num = json.optInt("number", 0)
+                val htmlUrl = json.optString("html_url", "")
+                if (num <= 0) {
+                    return@withContext Result.failure(IllegalStateException("Nombor isu GitHub tidak sah"))
+                }
+                Result.success(num to htmlUrl)
             }
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
@@ -500,9 +708,29 @@ class BroadcastManager @Inject constructor(
                 }
                 else -> return@withContext null
             }
-            parseIssueList(rawJson).firstOrNull()
+            parseIssueList(rawJson).firstOrNull { isEligibleForCurrentClient(it) }
         }
     }
+
+    internal fun isEligibleForCurrentClient(
+        msg: BroadcastMessage,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Boolean {
+        val exp = msg.expiresAtEpochMs
+        if (exp != null && nowMs >= exp) return false
+        val currentVersion = currentAppVersionName()
+        if (currentVersion.isNotBlank()) {
+            val minV = msg.minVersion
+            if (!minV.isNullOrBlank() && compareSemVer(currentVersion, minV) < 0) return false
+            val maxV = msg.maxVersion
+            if (!maxV.isNullOrBlank() && compareSemVer(currentVersion, maxV) > 0) return false
+        }
+        return true
+    }
+
+    private fun currentAppVersionName(): String = runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+    }.getOrDefault("")
 
     private fun invalidateCache() {
         prefs.edit()
@@ -517,18 +745,18 @@ class BroadcastManager @Inject constructor(
         .header("X-GitHub-Api-Version", GITHUB_API_VERSION)
         .header("User-Agent", USER_AGENT)
 
-    private fun parseIssueList(rawJson: String): List<BroadcastMessage> {
+    private fun parseIssueList(rawJson: String, isOpen: Boolean = true): List<BroadcastMessage> {
         if (rawJson.isBlank()) return emptyList()
         val array = runCatching { JSONArray(rawJson) }.getOrNull() ?: return emptyList()
         val out = ArrayList<BroadcastMessage>(array.length())
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
-            parseIssue(item)?.let(out::add)
+            parseIssue(item, isOpen = isOpen)?.let(out::add)
         }
         return out
     }
 
-    private fun parseIssue(item: JSONObject): BroadcastMessage? {
+    private fun parseIssue(item: JSONObject, isOpen: Boolean = true): BroadcastMessage? {
         if (item.has("pull_request")) return null
         val login = item.optJSONObject("user")?.optString("login").orEmpty()
         val association = item.optString("author_association").orEmpty()
@@ -554,6 +782,10 @@ class BroadcastManager @Inject constructor(
             actionUrl = parsed.actionUrl,
             notify = parsed.notify,
             displayMode = parsed.displayMode,
+            minVersion = parsed.minVersion,
+            maxVersion = parsed.maxVersion,
+            expiresAtEpochMs = parsed.expiresAtEpochMs,
+            isOpen = isOpen,
         )
     }
 
@@ -564,6 +796,9 @@ class BroadcastManager @Inject constructor(
         val actionLabel: String?,
         val actionUrl: String?,
         val displayMode: BroadcastDisplayMode,
+        val minVersion: String?,
+        val maxVersion: String?,
+        val expiresAtEpochMs: Long?,
         val message: String,
     )
 
@@ -575,6 +810,9 @@ class BroadcastManager @Inject constructor(
         var actionLabel: String? = null
         var actionUrl: String? = null
         var displayMode = BroadcastDisplayMode.POPUP
+        var minVersion: String? = null
+        var maxVersion: String? = null
+        var expiresAtEpochMs: Long? = null
 
         if (match != null) {
             val tokens = match.groupValues[1].trim().split(WHITESPACE_REGEX)
@@ -588,8 +826,11 @@ class BroadcastManager @Inject constructor(
                     "notify" -> notify = rawValue.toBooleanStrictOrNull() ?: true
                     "imageUrl" -> imageUrl = sanitizeHttpUrl(urlDecode(rawValue))
                     "actionLabel" -> actionLabel = urlDecode(rawValue)?.trim()?.ifBlank { null }
-                    "actionUrl" -> actionUrl = sanitizeHttpUrl(urlDecode(rawValue))
+                    "actionUrl" -> actionUrl = sanitizeActionUrl(urlDecode(rawValue))
                     "display" -> displayMode = BroadcastDisplayMode.fromKey(rawValue)
+                    "minVer" -> minVersion = sanitizeVersionString(urlDecode(rawValue))
+                    "maxVer" -> maxVersion = sanitizeVersionString(urlDecode(rawValue))
+                    "expiresAt" -> expiresAtEpochMs = rawValue.toLongOrNull()?.takeIf { it > 0L }?.let { it * 1000L }
                 }
             }
         }
@@ -605,6 +846,9 @@ class BroadcastManager @Inject constructor(
             actionLabel = actionLabel,
             actionUrl = actionUrl,
             displayMode = displayMode,
+            minVersion = minVersion,
+            maxVersion = maxVersion,
+            expiresAtEpochMs = expiresAtEpochMs,
             message = cleanBody,
         )
     }
@@ -617,8 +861,11 @@ class BroadcastManager @Inject constructor(
         actionUrl: String?,
         notify: Boolean,
         displayMode: BroadcastDisplayMode,
+        minVersion: String? = null,
+        maxVersion: String? = null,
+        expiresAtEpochMs: Long? = null,
     ): String {
-        val meta = ArrayList<String>(6).apply {
+        val meta = ArrayList<String>(9).apply {
             add("type=${type.key}")
             add("notify=$notify")
             add("display=${displayMode.key}")
@@ -626,6 +873,11 @@ class BroadcastManager @Inject constructor(
             val label = actionLabel?.trim()?.takeIf { it.isNotEmpty() }
             if (label != null) add("actionLabel=${urlEncode(label)}")
             if (!actionUrl.isNullOrBlank()) add("actionUrl=${urlEncode(actionUrl)}")
+            if (!minVersion.isNullOrBlank()) add("minVer=${urlEncode(minVersion)}")
+            if (!maxVersion.isNullOrBlank()) add("maxVer=${urlEncode(maxVersion)}")
+            if (expiresAtEpochMs != null && expiresAtEpochMs > 0L) {
+                add("expiresAt=${expiresAtEpochMs / 1000L}")
+            }
         }
         return "<!-- cw-broadcast ${meta.joinToString(" ")} -->\n$message"
     }
@@ -652,6 +904,8 @@ class BroadcastManager @Inject constructor(
             "https://api.github.com/repos/$REPO/issues?labels=$BROADCAST_LABEL&state=open&creator=$OWNER_LOGIN&per_page=5&sort=created&direction=desc"
 
         private const val KEY_DISMISSED_ID = "dismissed_id"
+        private const val KEY_DISMISSED_POPUP_ID = "dismissed_popup_id"
+        private const val KEY_DISMISSED_TICKER_ID = "dismissed_ticker_id"
         private const val KEY_NOTIFIED_ID = "notified_id"
         private const val KEY_CACHED_ETAG = "cached_etag"
         private const val KEY_CACHED_JSON = "cached_json"
@@ -690,22 +944,57 @@ class BroadcastManager @Inject constructor(
             val validHost = runCatching { !Uri.parse(trimmed).host.isNullOrBlank() }.getOrDefault(false)
             return trimmed.takeIf { validHost }
         }
+
+        private val ALLOWED_INAPP_TARGETS = setOf(
+            "update",
+            "feedback",
+            "settings",
+            "settings/audio",
+            "settings/appearance",
+            "themes",
+            "downloads",
+            "discover",
+            "search",
+        )
+
+        internal fun sanitizeActionUrl(raw: String?): String? {
+            val trimmed = raw?.trim().orEmpty()
+            if (trimmed.isEmpty()) return null
+            if (trimmed.startsWith("claudewaves://", ignoreCase = true)) {
+                val target = trimmed.substringAfter("://").trim('/').lowercase()
+                return if (target in ALLOWED_INAPP_TARGETS) "claudewaves://$target" else null
+            }
+            return sanitizeHttpUrl(trimmed)
+        }
+
+        internal fun sanitizeVersionString(raw: String?): String? {
+            val cleaned = raw?.trim()?.removePrefix("v")?.removePrefix("V")?.trim().orEmpty()
+            if (cleaned.isEmpty()) return null
+            val core = cleaned.substringBefore('-').substringBefore('+')
+            val parts = core.split('.')
+            if (parts.isEmpty() || parts.any { it.toIntOrNull() == null }) return null
+            return core
+        }
+
+        internal fun compareSemVer(a: String, b: String): Int {
+            val pa = sanitizeVersionString(a)?.split('.')?.mapNotNull { it.toIntOrNull() } ?: return 0
+            val pb = sanitizeVersionString(b)?.split('.')?.mapNotNull { it.toIntOrNull() } ?: return 0
+            val len = maxOf(pa.size, pb.size)
+            for (i in 0 until len) {
+                val va = pa.getOrElse(i) { 0 }
+                val vb = pb.getOrElse(i) { 0 }
+                if (va != vb) return va.compareTo(vb)
+            }
+            return 0
+        }
     }
 }
 
-private val MONTH_NAMES = arrayOf(
-    "Jan", "Feb", "Mac", "Apr", "Mei", "Jun",
-    "Jul", "Ogos", "Sep", "Okt", "Nov", "Dis",
-)
-
-/** Formats ISO-8601 date (`YYYY-MM-DD...`) safely on minSdk 24 without `java.time`. */
+/** Formats ISO-8601 date (`YYYY-MM-DD...`) using device locale safely on minSdk 24+. */
 internal fun formatBroadcastDate(isoDate: String): String {
     val datePart = isoDate.substringBefore('T').trim()
-    val parts = datePart.split('-')
-    if (parts.size != 3) return datePart
-    val year = parts[0].toIntOrNull() ?: return datePart
-    val month = parts[1].toIntOrNull() ?: return datePart
-    val day = parts[2].toIntOrNull() ?: return datePart
-    val monthName = MONTH_NAMES.getOrNull(month - 1) ?: return datePart
-    return "$day $monthName $year"
+    val parsed = runCatching {
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(datePart)
+    }.getOrNull() ?: return datePart
+    return SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(parsed)
 }

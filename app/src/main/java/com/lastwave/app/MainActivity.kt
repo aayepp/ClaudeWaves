@@ -67,6 +67,12 @@ open class MainShellActivity : androidx.fragment.app.FragmentActivity() {
     @Inject
     lateinit var idleColdStartCoordinator: dagger.Lazy<IdleColdStartCoordinator>
 
+    @Inject
+    lateinit var feedbackDiagnosticsStore: com.lastwave.app.data.update.FeedbackDiagnosticsStore
+
+    @Inject
+    lateinit var appUpdateManager: dagger.Lazy<com.lastwave.app.data.update.AppUpdateManager>
+
     private var freshlyCreated = false
     private var ignoreRestoreInstanceState = false
 
@@ -324,7 +330,34 @@ open class MainShellActivity : androidx.fragment.app.FragmentActivity() {
                             )
                         }
                         com.lastwave.app.ui.update.ChangelogHost(splashDismissed = !showSplash)
-                        com.lastwave.app.ui.update.BroadcastDialogHost(splashDismissed = !showSplash)
+                        com.lastwave.app.ui.update.BroadcastDialogHost(
+                            splashDismissed = !showSplash,
+                            onInAppAction = { actionUrl ->
+                                when (actionUrl.substringAfter("://").trim('/').lowercase()) {
+                                    "update" -> {
+                                        appUpdateManager.get().checkForUpdate(isSilent = false)
+                                        appUpdateManager.get().showDialog()
+                                    }
+                                    "feedback" -> {
+                                        feedbackDiagnosticsStore.requestSettingsDeepLink(null, openFeedback = true)
+                                        navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                                    }
+                                    "settings/audio" -> {
+                                        feedbackDiagnosticsStore.requestSettingsDeepLink("audio", openFeedback = false)
+                                        navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                                    }
+                                    "settings/appearance", "themes" -> {
+                                        feedbackDiagnosticsStore.requestSettingsDeepLink("appearance", openFeedback = false)
+                                        navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                                    }
+                                    "settings" -> navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                                    "downloads" -> navController.navigate(Screen.Downloads.route) { launchSingleTop = true }
+                                    "discover" -> navController.navigate(Screen.Discover.route) { launchSingleTop = true }
+                                    "search" -> navController.navigate(Screen.Search.route) { launchSingleTop = true }
+                                }
+                            },
+                        )
+                        com.lastwave.app.ui.update.CrashReportPromptHost(splashDismissed = !showSplash)
                     }
                 }
             }

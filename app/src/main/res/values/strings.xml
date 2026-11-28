@@ -1554,4 +1554,19 @@
     <string name="feedback_screenshots_add">Add more</string>
     <string name="feedback_screenshots_remove">Remove</string>
     <string name="feedback_send_bug">Submit Bug Report</string>
+    <string name="broadcast_type_info">Info</string>
+    <string name="broadcast_type_warning">Warning</string>
+    <string name="broadcast_type_maintenance">Maintenance</string>
+    <string name="broadcast_type_update">Update</string>
+    <string name="broadcast_close">Close</string>
+    <string name="broadcast_more_info">Learn more</string>
+    <string name="feedback_include_diagnostics">Include error &amp; audio diagnostics</string>
+    <string name="feedback_include_diagnostics_sub">Adds sanitized recent logs &amp; crash info (no tokens or personal data)</string>
+    <string name="feedback_clear_draft">Clear draft</string>
+    <string name="feedback_recent_title">Your recent submissions (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves closed unexpectedly</string>
+    <string name="crash_prompt_body">A crash log (%1$s) was saved from your last session. Send it to help fix the issue?</string>
+    <string name="crash_prompt_report">Report Bug</string>
+    <string name="crash_prompt_dismiss">Dismiss</string>
 </resources>

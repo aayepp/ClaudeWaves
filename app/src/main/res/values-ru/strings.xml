@@ -1139,4 +1139,19 @@
     <string name="feedback_screenshots_add">Добавить ещё</string>
     <string name="feedback_screenshots_remove">Удалить</string>
     <string name="feedback_send_bug">Отправить отчёт</string>
+    <string name="broadcast_type_info">Инфо</string>
+    <string name="broadcast_type_warning">Внимание</string>
+    <string name="broadcast_type_maintenance">Обслуживание</string>
+    <string name="broadcast_type_update">Обновление</string>
+    <string name="broadcast_close">Закрыть</string>
+    <string name="broadcast_more_info">Подробнее</string>
+    <string name="feedback_include_diagnostics">Приложить диагностику ошибок и аудио</string>
+    <string name="feedback_include_diagnostics_sub">Добавляет очищенные логи и сводку сбоя без личных данных</string>
+    <string name="feedback_clear_draft">Очистить черновик</string>
+    <string name="feedback_recent_title">Недавние отправки (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves неожиданно завершил работу</string>
+    <string name="crash_prompt_body">Сохранён отчёт о сбое (%1$s) с прошлой сессии. Отправить его для исправления?</string>
+    <string name="crash_prompt_report">Сообщить об ошибке</string>
+    <string name="crash_prompt_dismiss">Закрыть</string>
 </resources>

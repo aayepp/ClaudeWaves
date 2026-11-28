@@ -105,4 +105,24 @@ class LiquidNavigationGeometryTest {
         assertEquals(0f, liquidNavigationVisualIndex(-1, 3, isRtl = false), 0f)
         assertEquals(2f, liquidNavigationVisualIndex(99, 3, isRtl = false), 0f)
     }
+
+    @Test
+    fun weightedSlotMetricsAlignActiveCapsuleAndPreserveFullWidth() {
+        val (lefts, widths) = liquidNavigationSlotMetrics(listOf(1.75f, 1f, 1f, 1f), 475f, isRtl = false)
+        assertEquals(0f, lefts[0], 0.01f)
+        assertEquals(175f, widths[0], 0.01f)
+        assertEquals(175f, lefts[1], 0.01f)
+        assertEquals(100f, widths[1], 0.01f)
+        assertEquals(475f, lefts[3] + widths[3], 0.01f)
+
+        val (rtlLefts, rtlWidths) = liquidNavigationSlotMetrics(listOf(1.75f, 1f, 1f, 1f), 475f, isRtl = true)
+        assertEquals(175f, rtlWidths[3], 0.01f)
+        assertEquals(300f, rtlLefts[3], 0.01f)
+
+        assertEquals(0f, liquidNavigationRawPositionWeighted(87.5f, lefts, widths), 0.01f)
+        assertEquals(1f, liquidNavigationRawPositionWeighted(225f, lefts, widths), 0.01f)
+        val (atTwoLeft, atTwoW) = liquidNavigationContinuousLeftAndWidth(2f, lefts, widths)
+        assertEquals(lefts[2], atTwoLeft, 0.01f)
+        assertEquals(widths[2], atTwoW, 0.01f)
+    }
 }

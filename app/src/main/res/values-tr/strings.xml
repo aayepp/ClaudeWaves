@@ -1233,4 +1233,19 @@
     <string name="feedback_screenshots_add">Daha ekle</string>
     <string name="feedback_screenshots_remove">Kaldır</string>
     <string name="feedback_send_bug">Hata Raporu Gönder</string>
+    <string name="broadcast_type_info">Bilgi</string>
+    <string name="broadcast_type_warning">Uyarı</string>
+    <string name="broadcast_type_maintenance">Bakım</string>
+    <string name="broadcast_type_update">Güncelleme</string>
+    <string name="broadcast_close">Kapat</string>
+    <string name="broadcast_more_info">Daha fazla bilgi</string>
+    <string name="feedback_include_diagnostics">Hata ve ses tanılama günlüklerini ekle</string>
+    <string name="feedback_include_diagnostics_sub">Kişisel veri olmadan temizlenmiş son günlükleri ve çökme bilgisini ekler</string>
+    <string name="feedback_clear_draft">Taslağı temizle</string>
+    <string name="feedback_recent_title">Son gönderimlerin (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves beklenmedik şekilde kapandı</string>
+    <string name="crash_prompt_body">Önceki oturumdan bir çökme kaydı (%1$s) kaydedildi. Düzeltmemize yardımcı olması için gönderilsin mi?</string>
+    <string name="crash_prompt_report">Hata Bildir</string>
+    <string name="crash_prompt_dismiss">Kapat</string>
 </resources>

@@ -109,6 +109,12 @@ data class DeveloperFeedbackSnapshot(
     val error: String?,
 )
 
+data class NewFeedbackAlert(
+    val newCount: Int,
+    val latestTitle: String,
+    val latestCategory: FeedbackCategory,
+)
+
 /**
  * Sends anonymous install heartbeats (random UUIDv4 + app version + Android API level;
  * zero PII) to the Cloudflare Worker backend and fetches live DAU/WAU/MAU plus
@@ -439,6 +445,32 @@ class AppStatsManager @Inject constructor(
         }
     }
 
+    /**
+     * Checks for new unread feedback reports for the signed-in owner only.
+     * Establishes a silent baseline on first run so existing historical items do not alert.
+     */
+    suspend fun checkNewDeveloperFeedbackToNotify(): NewFeedbackAlert? = withContext(Dispatchers.IO) {
+        if (!broadcastManager.hasOwnerToken()) return@withContext null
+        val snapshot = fetchDeveloperFeedback()
+        if (snapshot.error != null) return@withContext null
+        val unread = snapshot.items.filter { !it.isResolved }
+        val maxUnreadId = unread.maxOfOrNull { it.id } ?: 0L
+        val lastNotified = prefs.getLong(KEY_LAST_NOTIFIED_FEEDBACK_ID, -1L)
+        if (lastNotified < 0L) {
+            prefs.edit().putLong(KEY_LAST_NOTIFIED_FEEDBACK_ID, maxUnreadId).apply()
+            return@withContext null
+        }
+        val newer = unread.filter { it.id > lastNotified }.sortedByDescending { it.id }
+        if (newer.isEmpty()) return@withContext null
+        prefs.edit().putLong(KEY_LAST_NOTIFIED_FEEDBACK_ID, maxUnreadId).apply()
+        val head = newer.first()
+        NewFeedbackAlert(
+            newCount = newer.size,
+            latestTitle = head.title,
+            latestCategory = head.category,
+        )
+    }
+
     suspend fun fetchDeveloperStats(): DeveloperStatsSnapshot = withContext(Dispatchers.IO) {
         val token = broadcastManager.readOwnerToken()
         coroutineScope {
@@ -638,6 +670,7 @@ class AppStatsManager @Inject constructor(
         private const val PREFS_NAME = "lastwave_stats_prefs"
         private const val KEY_INSTALL_ID = "install_id"
         private const val KEY_LAST_PING_MS = "last_ping_ms"
+        private const val KEY_LAST_NOTIFIED_FEEDBACK_ID = "last_notified_feedback_id"
         private const val PING_INTERVAL_MS = 15L * 60L * 1000L
         private const val USER_AGENT = "ClaudeWaves-Android"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()

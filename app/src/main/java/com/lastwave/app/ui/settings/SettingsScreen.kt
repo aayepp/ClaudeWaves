@@ -516,6 +516,19 @@ fun SettingsScreen(
 
         val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
         val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
+        val pendingDeepLink by viewModel.pendingSettingsDeepLink.collectAsStateWithLifecycle()
+
+        LaunchedEffect(pendingDeepLink) {
+            val dl = pendingDeepLink ?: return@LaunchedEffect
+            when (dl.tab) {
+                "audio" -> activeTab = SettingsTab.AUDIO
+                "appearance", "themes" -> activeTab = SettingsTab.APPEARANCE
+            }
+            if (dl.openFeedback) {
+                showFeedbackSheet = true
+            }
+            viewModel.consumeSettingsDeepLink()
+        }
 
         LaunchedEffect(highlightedSettingId) {
             if (highlightedSettingId != null) {
@@ -2678,8 +2691,14 @@ fun SettingsScreen(
 
     // -- Edit Profile sheet (username & avatar) --
     if (showFeedbackSheet) {
+        val initialDraft = remember { viewModel.loadFeedbackDraft() }
+        val recentSubmissions = remember { viewModel.getRecentFeedbackSubmissions() }
         FeedbackBottomSheet(
             onDismiss = { showFeedbackSheet = false },
+            initialDraft = initialDraft,
+            recentSubmissions = recentSubmissions,
+            onDraftChange = viewModel::saveFeedbackDraft,
+            onClearDraft = viewModel::clearFeedbackDraft,
             onSubmit = viewModel::submitUserFeedback,
         )
     }

@@ -1139,4 +1139,19 @@
     <string name="feedback_screenshots_add">더 추가</string>
     <string name="feedback_screenshots_remove">제거</string>
     <string name="feedback_send_bug">버그 리포트 보내기</string>
+    <string name="broadcast_type_info">안내</string>
+    <string name="broadcast_type_warning">경고</string>
+    <string name="broadcast_type_maintenance">점검</string>
+    <string name="broadcast_type_update">업데이트</string>
+    <string name="broadcast_close">닫기</string>
+    <string name="broadcast_more_info">자세히 보기</string>
+    <string name="feedback_include_diagnostics">오류 및 오디오 진단 로그 포함</string>
+    <string name="feedback_include_diagnostics_sub">개인정보가 제거된 최근 로그 및 충돌 요약을 첨부합니다</string>
+    <string name="feedback_clear_draft">임시 저장 지우기</string>
+    <string name="feedback_recent_title">최근 제출 내역 (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves가 예기치 않게 종료되었습니다</string>
+    <string name="crash_prompt_body">이전 세션의 충돌 로그(%1$s)가 저장되었습니다. 문제 해결을 위해 보낼까요?</string>
+    <string name="crash_prompt_report">버그 신고</string>
+    <string name="crash_prompt_dismiss">닫기</string>
 </resources>

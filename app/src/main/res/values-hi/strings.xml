@@ -1143,4 +1143,19 @@
     <string name="feedback_screenshots_add">और जोड़ें</string>
     <string name="feedback_screenshots_remove">हटाएं</string>
     <string name="feedback_send_bug">बग रिपोर्ट भेजें</string>
+    <string name="broadcast_type_info">जानकारी</string>
+    <string name="broadcast_type_warning">चेतावनी</string>
+    <string name="broadcast_type_maintenance">रखरखाव</string>
+    <string name="broadcast_type_update">अपडेट</string>
+    <string name="broadcast_close">बंद करें</string>
+    <string name="broadcast_more_info">और जानें</string>
+    <string name="feedback_include_diagnostics">त्रुटि और ऑडियो डायग्नोस्टिक्स शामिल करें</string>
+    <string name="feedback_include_diagnostics_sub">बिना निजी डेटा के हाल के लॉग और क्रैश सारांश जोड़ता है</string>
+    <string name="feedback_clear_draft">ड्राफ़्ट साफ़ करें</string>
+    <string name="feedback_recent_title">आपकी हाल की रिपोर्ट (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves अचानक बंद हो गया</string>
+    <string name="crash_prompt_body">पिछले सत्र से क्रैश लॉग (%1$s) सहेजा गया है। इसे ठीक करने में मदद के लिए भेजें?</string>
+    <string name="crash_prompt_report">बग रिपोर्ट करें</string>
+    <string name="crash_prompt_dismiss">ख़ारिज करें</string>
 </resources>

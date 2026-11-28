@@ -4,12 +4,18 @@ import android.app.Activity
 import android.app.KeyguardManager
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,10 +59,15 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Visibility
@@ -79,17 +90,22 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -118,6 +134,8 @@ import com.lastwave.app.data.update.DeveloperStatsSnapshot
 import com.lastwave.app.data.update.FeedbackCategory
 import com.lastwave.app.data.update.UserFeedbackItem
 import com.lastwave.app.data.update.formatBroadcastDate
+import com.lastwave.app.diagnostics.AppLog
+import com.lastwave.app.diagnostics.CrashRecorder
 import com.lastwave.app.ui.player.LocalMiniPlayerScrollClearance
 import com.lastwave.app.ui.comic.AlertDialog
 import com.lastwave.app.ui.comic.Button
@@ -161,6 +179,7 @@ internal data class DeveloperConsoleUiState(
     val isUnlocked: Boolean = false,
     val lockState: DevLockState = DevLockState.Open(remainingAttempts = 3, isFinalChanceAfterCooldown = false),
     val openBroadcasts: List<BroadcastMessage> = emptyList(),
+    val broadcastHistory: List<BroadcastMessage> = emptyList(),
     val isBusy: Boolean = false,
     val authError: String? = null,
     val broadcastStatus: String? = null,
@@ -171,6 +190,9 @@ internal data class DeveloperConsoleUiState(
     val feedback: DeveloperFeedbackSnapshot? = null,
     val isLoadingFeedback: Boolean = false,
     val feedbackBusyId: Long? = null,
+    val creatingIssueIds: Set<Long> = emptySet(),
+    val createdIssues: Map<Long, Pair<Int, String>> = emptyMap(),
+    val issueErrorById: Map<Long, String> = emptyMap(),
     val devLanguage: DevLanguage = DevLanguage.BM,
     val translateTarget: DevLanguage = DevLanguage.BM,
     val autoTranslateEnabled: Boolean = false,
@@ -239,12 +261,14 @@ class DeveloperConsoleViewModel @Inject constructor(
             it.copy(
                 isUnlocked = false,
                 openBroadcasts = emptyList(),
+                broadcastHistory = emptyList(),
                 stats = null,
                 isLoadingStats = false,
                 pingFeedback = null,
                 feedback = null,
                 isLoadingFeedback = false,
                 feedbackBusyId = null,
+                creatingIssueIds = emptySet(),
                 authError = null,
                 lockState = manager.getDevLockState(),
             )
@@ -296,12 +320,16 @@ class DeveloperConsoleViewModel @Inject constructor(
                 ownerLogin = null,
                 isUnlocked = false,
                 openBroadcasts = emptyList(),
+                broadcastHistory = emptyList(),
                 stats = null,
                 isLoadingStats = false,
                 pingFeedback = null,
                 feedback = null,
                 isLoadingFeedback = false,
                 feedbackBusyId = null,
+                creatingIssueIds = emptySet(),
+                createdIssues = emptyMap(),
+                issueErrorById = emptyMap(),
                 authError = null,
                 broadcastStatus = null,
                 broadcastStatusIsError = false,
@@ -319,6 +347,11 @@ class DeveloperConsoleViewModel @Inject constructor(
             manager.fetchOpenBroadcasts().onSuccess { list ->
                 if (_uiState.value.isUnlocked) {
                     _uiState.update { it.copy(openBroadcasts = list) }
+                }
+            }
+            manager.fetchBroadcastHistory(limit = 10).onSuccess { hist ->
+                if (_uiState.value.isUnlocked) {
+                    _uiState.update { it.copy(broadcastHistory = hist) }
                 }
             }
         }
@@ -484,6 +517,52 @@ class DeveloperConsoleViewModel @Inject constructor(
         }
     }
 
+    internal fun createGitHubIssue(
+        item: UserFeedbackItem,
+        translation: FeedbackTranslation?,
+        digest: BugTriageDigest,
+    ) {
+        if (!_uiState.value.isUnlocked) return
+        val cur = _uiState.value
+        if (item.id in cur.creatingIssueIds || cur.createdIssues.containsKey(item.id)) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    creatingIssueIds = it.creatingIssueIds + item.id,
+                    issueErrorById = it.issueErrorById - item.id,
+                )
+            }
+            val issueTitle = translation?.translatedTitle ?: item.title
+            val issueBody = BugTriageAnalyzer.buildAiAgentPrompt(item, translation, digest, DevLanguage.EN)
+            val labels = listOf(
+                if (item.category == FeedbackCategory.BUG) "bug" else "enhancement",
+                "from-app",
+            )
+            val res = manager.createGitHubIssue(
+                title = issueTitle,
+                body = issueBody,
+                labels = labels,
+            )
+            if (_uiState.value.isUnlocked) {
+                res.onSuccess { created ->
+                    _uiState.update { state ->
+                        state.copy(
+                            creatingIssueIds = state.creatingIssueIds - item.id,
+                            createdIssues = state.createdIssues + (item.id to created),
+                        )
+                    }
+                }.onFailure { err ->
+                    _uiState.update { state ->
+                        state.copy(
+                            creatingIssueIds = state.creatingIssueIds - item.id,
+                            issueErrorById = state.issueErrorById + (item.id to (err.message ?: "Failed")),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     fun sendBroadcast(
         title: String,
         message: String,
@@ -493,11 +572,15 @@ class DeveloperConsoleViewModel @Inject constructor(
         actionUrl: String,
         notify: Boolean,
         displayMode: BroadcastDisplayMode,
+        minVersion: String,
+        maxVersion: String,
+        expiryDays: Int?,
         onSuccess: () -> Unit,
     ) {
         if (!_uiState.value.isUnlocked) return
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, broadcastStatus = null, broadcastStatusIsError = false) }
+            val expiresAt = expiryDays?.let { System.currentTimeMillis() + it * 86_400_000L }
             val result = manager.sendBroadcast(
                 title = title,
                 message = message,
@@ -507,14 +590,19 @@ class DeveloperConsoleViewModel @Inject constructor(
                 actionUrl = actionUrl.ifBlank { null },
                 notify = notify,
                 displayMode = displayMode,
+                minVersion = minVersion.ifBlank { null },
+                maxVersion = maxVersion.ifBlank { null },
+                expiresAtEpochMs = expiresAt,
                 closePrevious = true,
             )
             val bm = _uiState.value.devLanguage == DevLanguage.BM
             result.onSuccess { created ->
                 val open = manager.fetchOpenBroadcasts().getOrDefault(listOf(created))
+                val hist = manager.fetchBroadcastHistory(10).getOrDefault(_uiState.value.broadcastHistory)
                 _uiState.update {
                     it.copy(
                         openBroadcasts = open,
+                        broadcastHistory = hist,
                         isBusy = false,
                         broadcastStatus = if (bm) "Broadcast dihantar (#${created.issueNumber})" else "Broadcast sent (#${created.issueNumber})",
                         broadcastStatusIsError = false,
@@ -533,6 +621,63 @@ class DeveloperConsoleViewModel @Inject constructor(
         }
     }
 
+    fun updateBroadcast(
+        issueNumber: Int,
+        title: String,
+        message: String,
+        type: BroadcastType,
+        imageUrl: String,
+        actionLabel: String,
+        actionUrl: String,
+        notify: Boolean,
+        displayMode: BroadcastDisplayMode,
+        minVersion: String,
+        maxVersion: String,
+        expiryDays: Int?,
+        onSuccess: () -> Unit,
+    ) {
+        if (!_uiState.value.isUnlocked) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, broadcastStatus = null, broadcastStatusIsError = false) }
+            val expiresAt = expiryDays?.let { System.currentTimeMillis() + it * 86_400_000L }
+            val result = manager.updateBroadcast(
+                issueNumber = issueNumber,
+                title = title,
+                message = message,
+                type = type,
+                imageUrl = imageUrl.ifBlank { null },
+                actionLabel = actionLabel.ifBlank { null },
+                actionUrl = actionUrl.ifBlank { null },
+                notify = notify,
+                displayMode = displayMode,
+                minVersion = minVersion.ifBlank { null },
+                maxVersion = maxVersion.ifBlank { null },
+                expiresAtEpochMs = expiresAt,
+            )
+            val bm = _uiState.value.devLanguage == DevLanguage.BM
+            result.onSuccess {
+                val open = manager.fetchOpenBroadcasts().getOrDefault(emptyList())
+                _uiState.update {
+                    it.copy(
+                        openBroadcasts = open,
+                        isBusy = false,
+                        broadcastStatus = if (bm) "Broadcast #$issueNumber dikemas kini" else "Broadcast #$issueNumber updated",
+                        broadcastStatusIsError = false,
+                    )
+                }
+                onSuccess()
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isBusy = false,
+                        broadcastStatus = err.message ?: if (bm) "Gagal kemas kini broadcast" else "Failed to update broadcast",
+                        broadcastStatusIsError = true,
+                    )
+                }
+            }
+        }
+    }
+
     fun closeBroadcast(issueNumber: Int) {
         if (!_uiState.value.isUnlocked) return
         viewModelScope.launch {
@@ -541,9 +686,11 @@ class DeveloperConsoleViewModel @Inject constructor(
             val bm = _uiState.value.devLanguage == DevLanguage.BM
             result.onSuccess {
                 val open = manager.fetchOpenBroadcasts().getOrDefault(emptyList())
+                val hist = manager.fetchBroadcastHistory(10).getOrDefault(_uiState.value.broadcastHistory)
                 _uiState.update {
                     it.copy(
                         openBroadcasts = open,
+                        broadcastHistory = hist,
                         isBusy = false,
                         broadcastStatus = if (bm) "Broadcast #$issueNumber ditamatkan" else "Broadcast #$issueNumber ended",
                         broadcastStatusIsError = false,
@@ -603,6 +750,18 @@ internal enum class DevMetricInfo(
         titleEn = "Installs — Total Devices",
         descBm = "Jumlah keseluruhan peranti unik yang pernah membuka versi app dengan statistik aktif sejak dilancarkan.",
         descEn = "Total unique devices that have opened app versions with telemetry enabled.",
+    ),
+    STICKINESS(
+        titleBm = "Stickiness (DAU / MAU)",
+        titleEn = "Stickiness (DAU / MAU)",
+        descBm = "Nisbah pengguna aktif harian (DAU) berbanding pengguna aktif 30 hari (MAU). Lebih tinggi bermakna pengguna kerap kembali setiap hari.",
+        descEn = "Ratio of daily active users (DAU) to monthly active users (MAU). Higher means stronger daily retention.",
+    ),
+    ADOPTION(
+        titleBm = "Adoptasi Versi",
+        titleEn = "Version Adoption",
+        descBm = "Peratusan peranti aktif yang sudah kemas kini ke versi app semasa berbanding versi lama.",
+        descEn = "Percentage of active devices already running the current app version vs older releases.",
     );
 
     fun title(lang: DevLanguage): String = if (lang == DevLanguage.BM) titleBm else titleEn
@@ -628,6 +787,13 @@ fun DeveloperConsoleScreen(
     var activeMetricHelp by remember { mutableStateOf<DevMetricInfo?>(null) }
     var previewMessage by remember { mutableStateOf<BroadcastMessage?>(null) }
     var zoomedScreenshot by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteFeedback by remember { mutableStateOf<UserFeedbackItem?>(null) }
+    var showLocalLogsDialog by rememberSaveable { mutableStateOf(false) }
+    val currentAppVersion = remember(context) {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+        }.getOrDefault("")
+    }
 
     val deviceUnlockLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -744,6 +910,16 @@ fun DeveloperConsoleScreen(
             DevMetricInfo.INSTALLS -> live?.let {
                 if (bm) "Sepanjang masa: ${formatStatsNumber(it.totalInstalls)} peranti" else "All time: ${formatStatsNumber(it.totalInstalls)} devices"
             }
+            DevMetricInfo.STICKINESS -> live?.let {
+                val pct = if (it.mau30d > 0) it.dauToday * 100 / it.mau30d else 0
+                "DAU/MAU: $pct% (${formatStatsNumber(it.dauToday)} / ${formatStatsNumber(it.mau30d)})"
+            }
+            DevMetricInfo.ADOPTION -> live?.let {
+                val total = it.byVersion.sumOf { b -> b.count }.coerceAtLeast(1)
+                val clean = currentAppVersion.removePrefix("v").trim()
+                val match = it.byVersion.firstOrNull { b -> b.label.removePrefix("v").trim() == clean } ?: it.byVersion.firstOrNull()
+                match?.let { b -> "${b.label}: ${b.count * 100 / total}% (${formatStatsNumber(b.count)} / ${formatStatsNumber(total)})" }
+            }
         }
         AlertDialog(
             onDismissRequest = { activeMetricHelp = null },
@@ -783,7 +959,47 @@ fun DeveloperConsoleScreen(
     zoomedScreenshot?.let { shotSource ->
         ScreenshotZoomDialog(
             source = shotSource,
+            lang = lang,
             onDismiss = { zoomedScreenshot = null },
+        )
+    }
+
+    pendingDeleteFeedback?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteFeedback = null },
+            title = { Text(if (bm) "Padam Laporan?" else "Delete Report?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (bm) {
+                        "Laporan #${target.id} (\"${target.title}\") akan dipadam secara kekal dari Inbox."
+                    } else {
+                        "Report #${target.id} (\"${target.title}\") will be permanently deleted from Inbox."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteFeedback(target.id)
+                        pendingDeleteFeedback = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(if (bm) "Padam" else "Delete", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteFeedback = null }) {
+                    Text(if (bm) "Batal" else "Cancel")
+                }
+            },
+        )
+    }
+
+    if (showLocalLogsDialog) {
+        LocalDiagnosticsDialog(
+            lang = lang,
+            onDismiss = { showLocalLogsDialog = false },
         )
     }
 
@@ -880,6 +1096,7 @@ fun DeveloperConsoleScreen(
             UnlockedConsoleContent(
                 ui = ui,
                 isComic = isComic,
+                currentAppVersion = currentAppVersion,
                 bottomClearance = bottomScrollClearance,
                 onBack = onBack,
                 onRefresh = viewModel::refreshAll,
@@ -888,14 +1105,17 @@ fun DeveloperConsoleScreen(
                 onSelectTranslateTarget = viewModel::setTranslateTarget,
                 onTestPing = viewModel::sendTestPing,
                 onHoldMetric = { activeMetricHelp = it },
+                onOpenLocalLogs = { showLocalLogsDialog = true },
                 onRefreshFeedback = viewModel::refreshFeedback,
                 onToggleAutoTranslate = viewModel::toggleAutoTranslate,
                 onTranslateFeedback = { item -> viewModel.translateFeedback(item) },
                 onOpenScreenshot = { zoomedScreenshot = it },
                 onToggleFeedbackResolved = viewModel::toggleFeedbackResolved,
-                onDeleteFeedback = viewModel::deleteFeedback,
+                onRequestDeleteFeedback = { item -> pendingDeleteFeedback = item },
+                onCreateGitHubIssue = { item, tr, digest -> viewModel.createGitHubIssue(item, tr, digest) },
                 onCloseBroadcast = viewModel::closeBroadcast,
                 onSendBroadcast = viewModel::sendBroadcast,
+                onUpdateBroadcast = viewModel::updateBroadcast,
                 onPreviewBroadcast = { previewMessage = it },
                 onHideShortcut = {
                     viewModel.hideShortcutFromSettings()
@@ -1332,6 +1552,7 @@ private fun PatLoginContent(
 private fun UnlockedConsoleContent(
     ui: DeveloperConsoleUiState,
     isComic: Boolean,
+    currentAppVersion: String,
     bottomClearance: androidx.compose.ui.unit.Dp,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
@@ -1340,12 +1561,14 @@ private fun UnlockedConsoleContent(
     onSelectTranslateTarget: (DevLanguage) -> Unit,
     onTestPing: () -> Unit,
     onHoldMetric: (DevMetricInfo) -> Unit,
+    onOpenLocalLogs: () -> Unit,
     onRefreshFeedback: () -> Unit,
     onToggleAutoTranslate: () -> Unit,
     onTranslateFeedback: (UserFeedbackItem) -> Unit,
     onOpenScreenshot: (String) -> Unit,
     onToggleFeedbackResolved: (UserFeedbackItem) -> Unit,
-    onDeleteFeedback: (Long) -> Unit,
+    onRequestDeleteFeedback: (UserFeedbackItem) -> Unit,
+    onCreateGitHubIssue: (UserFeedbackItem, FeedbackTranslation?, BugTriageDigest) -> Unit,
     onCloseBroadcast: (Int) -> Unit,
     onSendBroadcast: (
         title: String,
@@ -1356,18 +1579,43 @@ private fun UnlockedConsoleContent(
         actionUrl: String,
         notify: Boolean,
         displayMode: BroadcastDisplayMode,
+        minVersion: String,
+        maxVersion: String,
+        expiryDays: Int?,
+        onSuccess: () -> Unit,
+    ) -> Unit,
+    onUpdateBroadcast: (
+        issueNumber: Int,
+        title: String,
+        message: String,
+        type: BroadcastType,
+        imageUrl: String,
+        actionLabel: String,
+        actionUrl: String,
+        notify: Boolean,
+        displayMode: BroadcastDisplayMode,
+        minVersion: String,
+        maxVersion: String,
+        expiryDays: Int?,
         onSuccess: () -> Unit,
     ) -> Unit,
     onPreviewBroadcast: (BroadcastMessage) -> Unit,
     onHideShortcut: () -> Unit,
     onRequestSignOut: () -> Unit,
 ) {
+    val context = LocalContext.current
     val lang = ui.devLanguage
     val bm = lang == DevLanguage.BM
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     // Category (0 all, 1 bug, 2 suggestion, 3 feedback) and status (0 open, 1 resolved, 2 all) filter together.
     var inboxCategory by rememberSaveable { mutableIntStateOf(0) }
     var inboxStatus by rememberSaveable { mutableIntStateOf(0) }
+    var inboxSearchQuery by rememberSaveable { mutableStateOf("") }
+    // Priority filter: 0 all, 1 high, 2 medium, 3 low.
+    var inboxPriorityFilter by rememberSaveable { mutableIntStateOf(0) }
+    var inboxCurrentVersionOnly by rememberSaveable { mutableStateOf(false) }
+
+    var editingIssueNumber by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedType by rememberSaveable { mutableStateOf(BroadcastType.INFO) }
     var selectedDisplayMode by rememberSaveable { mutableStateOf(BroadcastDisplayMode.POPUP) }
     var title by rememberSaveable { mutableStateOf("") }
@@ -1375,7 +1623,44 @@ private fun UnlockedConsoleContent(
     var imageUrl by rememberSaveable { mutableStateOf("") }
     var actionLabel by rememberSaveable { mutableStateOf("") }
     var actionUrl by rememberSaveable { mutableStateOf("") }
+    var minVersion by rememberSaveable { mutableStateOf("") }
+    var maxVersion by rememberSaveable { mutableStateOf("") }
+    var expiryDays by rememberSaveable { mutableStateOf<Int?>(null) }
     var notify by rememberSaveable { mutableStateOf(true) }
+
+    fun loadBroadcastIntoComposer(msg: BroadcastMessage, asEdit: Boolean) {
+        editingIssueNumber = if (asEdit) msg.issueNumber else null
+        selectedType = msg.type
+        selectedDisplayMode = msg.displayMode
+        title = msg.title
+        message = msg.message
+        imageUrl = msg.imageUrl.orEmpty()
+        actionLabel = msg.actionLabel.orEmpty()
+        actionUrl = msg.actionUrl.orEmpty()
+        minVersion = msg.minVersion.orEmpty()
+        maxVersion = msg.maxVersion.orEmpty()
+        expiryDays = msg.expiresAtEpochMs?.let { exp ->
+            val remDays = ((exp - System.currentTimeMillis()) / 86_400_000L).toInt()
+            when {
+                remDays <= 1 -> 1
+                remDays <= 3 -> 3
+                else -> 7
+            }
+        }
+        notify = msg.notify
+    }
+
+    fun clearBroadcastComposer() {
+        editingIssueNumber = null
+        title = ""
+        message = ""
+        imageUrl = ""
+        actionLabel = ""
+        actionUrl = ""
+        minVersion = ""
+        maxVersion = ""
+        expiryDays = null
+    }
 
     val statsListState = rememberLazyListState()
     val inboxListState = rememberLazyListState()
@@ -1467,6 +1752,7 @@ private fun UnlockedConsoleContent(
                             isLoading = ui.isLoadingStats,
                             isComic = isComic,
                             lang = lang,
+                            currentAppVersion = currentAppVersion,
                             onHoldMetric = onHoldMetric,
                             onTestPing = onTestPing,
                             onRetry = onRefresh,
@@ -1517,6 +1803,22 @@ private fun UnlockedConsoleContent(
                         }
                     }
 
+                    item(key = "stats_local_logs") {
+                        val crashCount = remember(ui.stats?.fetchedAtMs) {
+                            runCatching { CrashRecorder.crashFiles(context).size }.getOrDefault(0)
+                        }
+                        val logLines = remember(ui.stats?.fetchedAtMs) {
+                            runCatching { AppLog.tail?.snapshot(200)?.size ?: 0 }.getOrDefault(0)
+                        }
+                        LocalDiagnosticsTile(
+                            crashCount = crashCount,
+                            logLineCount = logLines,
+                            isComic = isComic,
+                            lang = lang,
+                            onOpenLogs = onOpenLocalLogs,
+                        )
+                    }
+
                     item(key = "stats_session_strip") {
                         SessionSecurityStrip(
                             ownerLogin = ui.ownerLogin ?: "aayepp",
@@ -1534,10 +1836,31 @@ private fun UnlockedConsoleContent(
                     val allItems = snap?.items.orEmpty()
                     val categories = listOf(null, FeedbackCategory.BUG, FeedbackCategory.SUGGESTION, FeedbackCategory.FEEDBACK)
                     val inCategory = categories[inboxCategory]?.let { c -> allItems.filter { it.category == c } } ?: allItems
-                    val filtered = when (inboxStatus) {
+                    val byStatus = when (inboxStatus) {
                         0 -> inCategory.filter { !it.isResolved }
                         1 -> inCategory.filter { it.isResolved }
                         else -> inCategory
+                    }
+                    val queryTrim = inboxSearchQuery.trim().lowercase()
+                    val filtered = byStatus.filter { item ->
+                        val verOk = !inboxCurrentVersionOnly ||
+                            currentAppVersion.isBlank() ||
+                            item.appVersion.equals(currentAppVersion, ignoreCase = true)
+                        if (!verOk) return@filter false
+                        if (inboxPriorityFilter != 0) {
+                            val d = BugTriageAnalyzer.analyze(item, item.title, item.body, lang)
+                            val wanted = when (inboxPriorityFilter) {
+                                1 -> BugPriority.HIGH
+                                2 -> BugPriority.MEDIUM
+                                else -> BugPriority.LOW
+                            }
+                            if (d.priority != wanted) return@filter false
+                        }
+                        if (queryTrim.isNotEmpty()) {
+                            val hay = "${item.title} ${item.body} ${item.deviceModel} ${item.appVersion} ${item.contact}".lowercase()
+                            if (!hay.contains(queryTrim)) return@filter false
+                        }
+                        true
                     }
 
                     item(key = "inbox_translate_bar") {
@@ -1632,18 +1955,65 @@ private fun UnlockedConsoleContent(
                     }
 
                     item(key = "inbox_status") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(
-                                if (bm) "Belum selesai · ${inCategory.count { !it.isResolved }}" else "Open · ${inCategory.count { !it.isResolved }}",
-                                if (bm) "Selesai · ${inCategory.count { it.isResolved }}" else "Resolved · ${inCategory.count { it.isResolved }}",
-                                if (bm) "Semua" else "All",
-                            ).forEachIndexed { idx, label ->
-                                FilterChip(
-                                    selected = inboxStatus == idx,
-                                    onClick = { inboxStatus = idx },
-                                    label = { Text(label, fontWeight = if (inboxStatus == idx) FontWeight.Bold else FontWeight.Medium) },
-                                    shape = CircleShape,
-                                )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(
+                                    if (bm) "Belum selesai · ${inCategory.count { !it.isResolved }}" else "Open · ${inCategory.count { !it.isResolved }}",
+                                    if (bm) "Selesai · ${inCategory.count { it.isResolved }}" else "Resolved · ${inCategory.count { it.isResolved }}",
+                                    if (bm) "Semua" else "All",
+                                ).forEachIndexed { idx, label ->
+                                    FilterChip(
+                                        selected = inboxStatus == idx,
+                                        onClick = { inboxStatus = idx },
+                                        label = { Text(label, fontWeight = if (inboxStatus == idx) FontWeight.Bold else FontWeight.Medium) },
+                                        shape = CircleShape,
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = inboxSearchQuery,
+                                onValueChange = { inboxSearchQuery = it },
+                                placeholder = { Text(if (bm) "Cari laporan, model, atau versi..." else "Search reports, device, or version...") },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                                },
+                                trailingIcon = if (inboxSearchQuery.isNotEmpty()) {
+                                    {
+                                        IconButton(onClick = { inboxSearchQuery = "" }) {
+                                            Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                } else null,
+                                singleLine = true,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                listOf(
+                                    0 to if (bm) "Semua Prioriti" else "All Priorities",
+                                    1 to if (bm) "Tinggi" else "High",
+                                    2 to if (bm) "Sederhana" else "Medium",
+                                    3 to if (bm) "Ringan" else "Low",
+                                ).forEach { (pIdx, pLabel) ->
+                                    FilterChip(
+                                        selected = inboxPriorityFilter == pIdx,
+                                        onClick = { inboxPriorityFilter = pIdx },
+                                        label = { Text(pLabel, style = MaterialTheme.typography.labelSmall) },
+                                        shape = CircleShape,
+                                    )
+                                }
+                                if (currentAppVersion.isNotBlank()) {
+                                    FilterChip(
+                                        selected = inboxCurrentVersionOnly,
+                                        onClick = { inboxCurrentVersionOnly = !inboxCurrentVersionOnly },
+                                        label = { Text("v$currentAppVersion", style = MaterialTheme.typography.labelSmall) },
+                                        shape = CircleShape,
+                                    )
+                                }
                             }
                         }
                     }
@@ -1735,10 +2105,14 @@ private fun UnlockedConsoleContent(
                                     isBusy = ui.feedbackBusyId == item.id,
                                     translation = ui.translations[trKey],
                                     isTranslating = trKey in ui.translatingKeys,
+                                    isCreatingIssue = item.id in ui.creatingIssueIds,
+                                    createdIssue = ui.createdIssues[item.id],
+                                    issueError = ui.issueErrorById[item.id],
                                     onTranslate = { onTranslateFeedback(item) },
                                     onOpenScreenshot = onOpenScreenshot,
                                     onToggleResolved = { onToggleFeedbackResolved(item) },
-                                    onDelete = { onDeleteFeedback(item.id) },
+                                    onDelete = { onRequestDeleteFeedback(item) },
+                                    onCreateGitHubIssue = { digest -> onCreateGitHubIssue(item, ui.translations[trKey], digest) },
                                 )
                             }
                         }
@@ -1752,12 +2126,15 @@ private fun UnlockedConsoleContent(
                             isBusy = ui.isBusy,
                             isComic = isComic,
                             lang = lang,
+                            onEditBroadcast = { loadBroadcastIntoComposer(it, asEdit = true) },
                             onCloseBroadcast = onCloseBroadcast,
                         )
                     }
 
                     item(key = "broadcast_composer") {
                         NewBroadcastSection(
+                            editingIssueNumber = editingIssueNumber,
+                            onCancelEdit = { clearBroadcastComposer() },
                             selectedType = selectedType,
                             onSelectType = { selectedType = it },
                             selectedDisplayMode = selectedDisplayMode,
@@ -1772,6 +2149,12 @@ private fun UnlockedConsoleContent(
                             onActionLabelChange = { actionLabel = it },
                             actionUrl = actionUrl,
                             onActionUrlChange = { actionUrl = it },
+                            minVersion = minVersion,
+                            onMinVersionChange = { minVersion = it },
+                            maxVersion = maxVersion,
+                            onMaxVersionChange = { maxVersion = it },
+                            expiryDays = expiryDays,
+                            onExpiryDaysChange = { expiryDays = it },
                             notify = notify,
                             onNotifyChange = { notify = it },
                             statusMessage = ui.broadcastStatus,
@@ -1779,12 +2162,20 @@ private fun UnlockedConsoleContent(
                             isBusy = ui.isBusy,
                             isComic = isComic,
                             lang = lang,
+                            onApplyTemplate = { tTitle, tMsg, tType, tMode, tLabel, tUrl ->
+                                title = tTitle
+                                message = tMsg
+                                selectedType = tType
+                                selectedDisplayMode = tMode
+                                actionLabel = tLabel
+                                actionUrl = tUrl
+                            },
                             onPreview = {
                                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                                 onPreviewBroadcast(
                                     BroadcastMessage(
                                         id = "preview",
-                                        issueNumber = 0,
+                                        issueNumber = editingIssueNumber ?: 0,
                                         title = title.trim(),
                                         message = message.trim(),
                                         type = selectedType,
@@ -1794,28 +2185,61 @@ private fun UnlockedConsoleContent(
                                         actionUrl = actionUrl.trim().ifBlank { null },
                                         notify = notify,
                                         displayMode = selectedDisplayMode,
+                                        minVersion = minVersion.trim().ifBlank { null },
+                                        maxVersion = maxVersion.trim().ifBlank { null },
+                                        expiresAtEpochMs = expiryDays?.let { System.currentTimeMillis() + it * 86_400_000L },
                                     ),
                                 )
                             },
                             onSend = {
-                                onSendBroadcast(
-                                    title,
-                                    message,
-                                    selectedType,
-                                    imageUrl,
-                                    actionLabel,
-                                    actionUrl,
-                                    notify,
-                                    selectedDisplayMode,
-                                ) {
-                                    title = ""
-                                    message = ""
-                                    imageUrl = ""
-                                    actionLabel = ""
-                                    actionUrl = ""
+                                val editId = editingIssueNumber
+                                if (editId != null) {
+                                    onUpdateBroadcast(
+                                        editId,
+                                        title,
+                                        message,
+                                        selectedType,
+                                        imageUrl,
+                                        actionLabel,
+                                        actionUrl,
+                                        notify,
+                                        selectedDisplayMode,
+                                        minVersion,
+                                        maxVersion,
+                                        expiryDays,
+                                    ) {
+                                        clearBroadcastComposer()
+                                    }
+                                } else {
+                                    onSendBroadcast(
+                                        title,
+                                        message,
+                                        selectedType,
+                                        imageUrl,
+                                        actionLabel,
+                                        actionUrl,
+                                        notify,
+                                        selectedDisplayMode,
+                                        minVersion,
+                                        maxVersion,
+                                        expiryDays,
+                                    ) {
+                                        clearBroadcastComposer()
+                                    }
                                 }
                             },
                         )
+                    }
+
+                    if (ui.broadcastHistory.isNotEmpty()) {
+                        item(key = "broadcast_history") {
+                            BroadcastHistorySection(
+                                history = ui.broadcastHistory,
+                                isComic = isComic,
+                                lang = lang,
+                                onReuse = { loadBroadcastIntoComposer(it, asEdit = false) },
+                            )
+                        }
                     }
 
                     item(key = "broadcast_session_strip") {
@@ -1856,11 +2280,17 @@ private fun InboxFeedbackCard(
     isBusy: Boolean,
     translation: FeedbackTranslation?,
     isTranslating: Boolean,
+    isCreatingIssue: Boolean,
+    createdIssue: Pair<Int, String>?,
+    issueError: String?,
     onTranslate: () -> Unit,
     onOpenScreenshot: (String) -> Unit,
     onToggleResolved: () -> Unit,
     onDelete: () -> Unit,
+    onCreateGitHubIssue: (BugTriageDigest) -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val bm = lang == DevLanguage.BM
     var showOriginal by rememberSaveable(item.id, translateTarget.code) { mutableStateOf(false) }
     var showAssistant by rememberSaveable(item.id) {
@@ -2153,6 +2583,89 @@ private fun InboxFeedbackCard(
                                 fontWeight = FontWeight.Bold,
                             )
                         }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val prompt = BugTriageAnalyzer.buildAiAgentPrompt(item, translation, digest, lang)
+                                    scope.launch {
+                                        shareBugPack(context, prompt, item.screenshots).onFailure {
+                                            Toast.makeText(
+                                                context,
+                                                if (bm) "Gagal kongsi bug pack" else "Failed to share bug pack",
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }
+                                    }
+                                },
+                                shape = CircleShape,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    text = if (bm) "Kongsi" else "Share Pack",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                )
+                            }
+                            if (createdIssue != null) {
+                                val (num, url) = createdIssue
+                                OutlinedButton(
+                                    onClick = {
+                                        if (url.isNotBlank()) {
+                                            runCatching {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            }
+                                        }
+                                    },
+                                    shape = CircleShape,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(
+                                        text = "Issue #$num",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                    )
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onCreateGitHubIssue(digest) },
+                                    enabled = !isCreatingIssue,
+                                    shape = CircleShape,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    if (isCreatingIssue) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(Icons.Filled.BugReport, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(5.dp))
+                                        Text(
+                                            text = if (bm) "Buka Issue" else "GitHub Issue",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (!issueError.isNullOrBlank()) {
+                            Text(
+                                text = issueError,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
             }
@@ -2280,8 +2793,21 @@ private fun FeedbackScreenshotThumbnail(
 @Composable
 private fun ScreenshotZoomDialog(
     source: String,
+    lang: DevLanguage,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val bm = lang == DevLanguage.BM
+    var scale by remember(source) { mutableStateOf(1f) }
+    var offset by remember(source) { mutableStateOf(Offset.Zero) }
+    var isWorking by remember(source) { mutableStateOf(false) }
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        val nextScale = (scale * zoomChange).coerceIn(1f, 4f)
+        scale = nextScale
+        offset = if (nextScale > 1.05f) offset + panChange else Offset.Zero
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -2293,55 +2819,223 @@ private fun ScreenshotZoomDialog(
                 .fillMaxWidth()
                 .padding(16.dp),
         ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                if (source.startsWith("data:image/", ignoreCase = true)) {
-                    val bitmap by produceState<ImageBitmap?>(initialValue = null, source) {
-                        value = decodeDataUriBitmap(source)
-                    }
-                    val bmp = bitmap
-                    if (bmp != null) {
-                        Image(
-                            bitmap = bmp,
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                        .pointerInput(source) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (scale > 1.05f) {
+                                        scale = 1f
+                                        offset = Offset.Zero
+                                    } else {
+                                        scale = 2.2f
+                                    }
+                                },
+                            )
+                        }
+                        .transformable(state = transformState),
+                ) {
+                    val imgModifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y
+                        }
+                    if (source.startsWith("data:image/", ignoreCase = true)) {
+                        val bitmap by produceState<ImageBitmap?>(initialValue = null, source) {
+                            value = decodeDataUriBitmap(source)
+                        }
+                        val bmp = bitmap
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = "Screenshot",
+                                contentScale = ContentScale.Fit,
+                                modifier = imgModifier,
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(240.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                    } else {
+                        AsyncImage(
+                            model = source,
                             contentDescription = "Screenshot",
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
+                            modifier = imgModifier,
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(240.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator()
-                        }
                     }
-                } else {
-                    AsyncImage(
-                        model = source,
-                        contentDescription = "Screenshot",
-                        contentScale = ContentScale.Fit,
+                    IconButton(
+                        onClick = onDismiss,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                    )
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Close",
+                        )
+                    }
                 }
-                IconButton(
-                    onClick = onDismiss,
+                Row(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Close",
+                    Text(
+                        text = if (bm) "Cubit untuk zoom · Ketik 2x reset" else "Pinch to zoom · Double-tap reset",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                     )
+                    OutlinedButton(
+                        enabled = !isWorking,
+                        onClick = {
+                            scope.launch {
+                                isWorking = true
+                                val res = saveScreenshotToGallery(context, source)
+                                isWorking = false
+                                val msg = res.fold(
+                                    onSuccess = { if (bm) "Disimpan ke Galeri" else "Saved to Pictures" },
+                                    onFailure = { it.message ?: if (bm) "Gagal simpan" else "Save failed" },
+                                )
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        shape = CircleShape,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (bm) "Simpan" else "Save", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        enabled = !isWorking,
+                        onClick = {
+                            scope.launch {
+                                isWorking = true
+                                val res = shareScreenshot(context, source)
+                                isWorking = false
+                                res.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        if (bm) "Gagal kongsi gambar" else "Share failed",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
+                        },
+                        shape = CircleShape,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (bm) "Kongsi" else "Share", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun LocalDiagnosticsDialog(
+    lang: DevLanguage,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val bm = lang == DevLanguage.BM
+    var refreshKey by remember { mutableIntStateOf(0) }
+    val diagnosticsText = remember(refreshKey) {
+        buildString {
+            val crashes = runCatching { CrashRecorder.crashFiles(context) }.getOrDefault(emptyList())
+            appendLine("=== CRASH FILES (${crashes.size}) ===")
+            val latest = crashes.firstOrNull()
+            if (latest != null) {
+                appendLine(latest.name)
+                appendLine(runCatching { latest.readText(Charsets.UTF_8).take(1800) }.getOrDefault("(unreadable)"))
+            } else {
+                appendLine(if (bm) "(Tiada fail crash direkod)" else "(No crash files recorded)")
+            }
+            appendLine()
+            appendLine("=== RECENT LOG TAIL ===")
+            val tail = runCatching { AppLog.tail?.snapshot(40).orEmpty() }.getOrDefault(emptyList())
+            if (tail.isEmpty()) {
+                appendLine(if (bm) "(Log memori kosong)" else "(In-memory log tail empty)")
+            } else {
+                tail.forEach { appendLine(it.toString()) }
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = if (bm) "Log & Crash Peranti" else "Device Logs & Crashes",
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(340.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = diagnosticsText,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    clipboard.setText(AnnotatedString(diagnosticsText))
+                    Toast.makeText(
+                        context,
+                        if (bm) "Log disalin" else "Logs copied",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                },
+            ) {
+                Text(if (bm) "Salin" else "Copy", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = {
+                        runCatching { CrashRecorder.deleteAll(context) }
+                        refreshKey++
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(if (bm) "Padam Crash" else "Clear Crashes")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(if (bm) "Tutup" else "Close")
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -2406,6 +3100,7 @@ private fun ActiveBroadcastsSection(
     isBusy: Boolean,
     isComic: Boolean,
     lang: DevLanguage,
+    onEditBroadcast: (BroadcastMessage) -> Unit,
     onCloseBroadcast: (Int) -> Unit,
 ) {
     val bm = lang == DevLanguage.BM
@@ -2471,6 +3166,12 @@ private fun ActiveBroadcastsSection(
                                 )
                             }
                             TextButton(
+                                onClick = { onEditBroadcast(item) },
+                                enabled = !isBusy,
+                            ) {
+                                Text(if (bm) "Edit" else "Edit", fontWeight = FontWeight.SemiBold)
+                            }
+                            TextButton(
                                 onClick = { onCloseBroadcast(item.issueNumber) },
                                 enabled = !isBusy,
                                 colors = ButtonDefaults.textButtonColors(
@@ -2490,6 +3191,8 @@ private fun ActiveBroadcastsSection(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NewBroadcastSection(
+    editingIssueNumber: Int?,
+    onCancelEdit: () -> Unit,
     selectedType: BroadcastType,
     onSelectType: (BroadcastType) -> Unit,
     selectedDisplayMode: BroadcastDisplayMode,
@@ -2504,6 +3207,12 @@ private fun NewBroadcastSection(
     onActionLabelChange: (String) -> Unit,
     actionUrl: String,
     onActionUrlChange: (String) -> Unit,
+    minVersion: String,
+    onMinVersionChange: (String) -> Unit,
+    maxVersion: String,
+    onMaxVersionChange: (String) -> Unit,
+    expiryDays: Int?,
+    onExpiryDaysChange: (Int?) -> Unit,
     notify: Boolean,
     onNotifyChange: (Boolean) -> Unit,
     statusMessage: String?,
@@ -2511,17 +3220,41 @@ private fun NewBroadcastSection(
     isBusy: Boolean,
     isComic: Boolean,
     lang: DevLanguage,
+    onApplyTemplate: (
+        title: String,
+        message: String,
+        type: BroadcastType,
+        displayMode: BroadcastDisplayMode,
+        actionLabel: String,
+        actionUrl: String,
+    ) -> Unit,
     onPreview: () -> Unit,
     onSend: () -> Unit,
 ) {
     val bm = lang == DevLanguage.BM
     val fieldShape = RoundedCornerShape(14.dp)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = if (bm) "Broadcast Baru" else "New Broadcast",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = when {
+                    editingIssueNumber != null && bm -> "Edit Broadcast #$editingIssueNumber"
+                    editingIssueNumber != null -> "Edit Broadcast #$editingIssueNumber"
+                    bm -> "Broadcast Baru"
+                    else -> "New Broadcast"
+                },
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (editingIssueNumber != null) {
+                TextButton(onClick = onCancelEdit, enabled = !isBusy) {
+                    Text(if (bm) "Batal Edit" else "Cancel Edit", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
         Surface(
             shape = RoundedCornerShape(22.dp),
             color = glassCardColor(MaterialTheme.colorScheme.surfaceContainer),
@@ -2534,6 +3267,61 @@ private fun NewBroadcastSection(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (editingIssueNumber == null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = if (bm) "Templat Pantas" else "Quick Templates",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            listOf(
+                                (if (bm) "Update Baru" else "New Update") to {
+                                    onApplyTemplate(
+                                        if (bm) "Versi Baru Kini Tersedia!" else "New Version Available!",
+                                        if (bm) "Kemas kini ke versi terkini untuk pembetulan audio dan kestabilan." else "Update to the latest version for audio fixes and stability.",
+                                        BroadcastType.UPDATE,
+                                        BroadcastDisplayMode.BOTH,
+                                        if (bm) "Kemas Kini" else "Update Now",
+                                        "claudewaves://update",
+                                    )
+                                },
+                                (if (bm) "Selenggara" else "Maintenance") to {
+                                    onApplyTemplate(
+                                        if (bm) "Penyelenggaraan Server" else "Server Maintenance",
+                                        if (bm) "Sebahagian ciri carian/stream mungkin perlahan buat sementara waktu." else "Some search/streaming features may be temporarily slower.",
+                                        BroadcastType.MAINTENANCE,
+                                        BroadcastDisplayMode.TICKER,
+                                        "",
+                                        "",
+                                    )
+                                },
+                                "Hotfix" to {
+                                    onApplyTemplate(
+                                        if (bm) "Penting: Sila Kemas Kini" else "Important: Please Update",
+                                        if (bm) "Kami telah membaiki isu main balik. Sila pasang versi terbaru." else "We fixed an urgent playback issue. Please install the latest build.",
+                                        BroadcastType.WARNING,
+                                        BroadcastDisplayMode.POPUP,
+                                        if (bm) "Semak Update" else "Check Update",
+                                        "claudewaves://update",
+                                    )
+                                },
+                            ).forEach { (tplLabel, applyFn) ->
+                                FilterChip(
+                                    selected = false,
+                                    onClick = applyFn,
+                                    label = { Text(tplLabel, style = MaterialTheme.typography.labelSmall) },
+                                    shape = CircleShape,
+                                )
+                            }
+                        }
+                    }
+                }
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2669,11 +3457,89 @@ private fun NewBroadcastSection(
                         OutlinedTextField(
                             value = actionUrl,
                             onValueChange = onActionUrlChange,
-                            placeholder = { Text("URL") },
+                            placeholder = { Text("https://... / claudewaves://...") },
                             singleLine = true,
                             shape = fieldShape,
                             modifier = Modifier.weight(0.58f),
                         )
+                    }
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(
+                            Triple("Update App", if (bm) "Kemas Kini" else "Update", "claudewaves://update"),
+                            Triple("Feedback", if (bm) "Hantar Laporan" else "Feedback", "claudewaves://feedback"),
+                            Triple("Audio", if (bm) "Tetapan Audio" else "Audio Settings", "claudewaves://settings/audio"),
+                            Triple(if (bm) "Tema" else "Themes", if (bm) "Lihat Tema" else "Themes", "claudewaves://themes"),
+                        ).forEach { (chipTitle, ctaLabel, deepUrl) ->
+                            FilterChip(
+                                selected = actionUrl.equals(deepUrl, ignoreCase = true),
+                                onClick = {
+                                    onActionLabelChange(ctaLabel)
+                                    onActionUrlChange(deepUrl)
+                                },
+                                label = { Text(chipTitle, style = MaterialTheme.typography.labelSmall) },
+                                shape = CircleShape,
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (bm) "Sasaran Versi App (pilihan)" else "Target App Version (optional)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = minVersion,
+                            onValueChange = onMinVersionChange,
+                            placeholder = { Text(if (bm) "Min (cth: 1.0.50)" else "Min (e.g. 1.0.50)") },
+                            singleLine = true,
+                            shape = fieldShape,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = maxVersion,
+                            onValueChange = onMaxVersionChange,
+                            placeholder = { Text(if (bm) "Max (cth: 1.0.59)" else "Max (e.g. 1.0.59)") },
+                            singleLine = true,
+                            shape = fieldShape,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (bm) "Tempoh Tamat Automatik" else "Auto-Expiry",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(
+                            null to if (bm) "Tiada had" else "No limit",
+                            1 to if (bm) "24 jam" else "24h",
+                            3 to if (bm) "3 hari" else "3 days",
+                            7 to if (bm) "7 hari" else "7 days",
+                        ).forEach { (days, label) ->
+                            FilterChip(
+                                selected = expiryDays == days,
+                                onClick = { onExpiryDaysChange(days) },
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                shape = CircleShape,
+                            )
+                        }
                     }
                 }
 
@@ -2756,12 +3622,81 @@ private fun NewBroadcastSection(
                             )
                         } else {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                imageVector = if (editingIssueNumber != null) Icons.Filled.Edit else Icons.AutoMirrored.Filled.Send,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(if (bm) "Hantar Broadcast" else "Send Broadcast", fontWeight = FontWeight.Bold)
+                            Text(
+                                text = when {
+                                    editingIssueNumber != null && bm -> "Kemas Kini"
+                                    editingIssueNumber != null -> "Update Broadcast"
+                                    bm -> "Hantar Broadcast"
+                                    else -> "Send Broadcast"
+                                },
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BroadcastHistorySection(
+    history: List<BroadcastMessage>,
+    isComic: Boolean,
+    lang: DevLanguage,
+    onReuse: (BroadcastMessage) -> Unit,
+) {
+    val bm = lang == DevLanguage.BM
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = if (bm) "Sejarah Broadcast Lepas" else "Past Broadcasts",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            history.forEach { item ->
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = glassCardColor(MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = devCardBorder(isComic),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = item.type.icon(),
+                            contentDescription = item.type.localizedLabel(lang),
+                            tint = if (isComic) ComicInk else item.type.accent(),
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            val datePart = item.publishedAt.takeIf { it.isNotBlank() }?.let { " · ${formatBroadcastDate(it)}" }.orEmpty()
+                            Text(
+                                text = "#${item.issueNumber} · ${item.displayMode.localizedLabel(lang)}$datePart",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
+                        TextButton(onClick = { onReuse(item) }) {
+                            Text(if (bm) "Guna Semula" else "Reuse", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

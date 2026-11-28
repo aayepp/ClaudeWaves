@@ -66,6 +66,11 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
             notifyBroadcast(announcement)
             broadcasts.showDialog()
         }
+        if (broadcasts.hasOwnerToken()) {
+            runCatching { deps.appStatsManager().checkNewDeveloperFeedbackToNotify() }
+                .getOrNull()
+                ?.let(::notifyNewFeedback)
+        }
         runCatching { deps.appStatsManager().sendHeartbeatIfDue() }
         return Result.success()
     }
@@ -117,11 +122,45 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         notifications.notify(BROADCAST_NOTIFICATION_ID, notification)
     }
 
+    @SuppressLint("MissingPermission")
+    private fun notifyNewFeedback(alert: NewFeedbackAlert) {
+        val context = applicationContext
+        val notifications = NotificationManagerCompat.from(context)
+        if (!notifications.areNotificationsEnabled()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notifications.createNotificationChannel(
+                NotificationChannel(INBOX_ALERT_CHANNEL_ID, "Inbox Alerts", NotificationManager.IMPORTANCE_DEFAULT),
+            )
+        }
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        val open = PendingIntent.getActivity(context, 2, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val catLabel = when (alert.latestCategory) {
+            FeedbackCategory.BUG -> "Bug"
+            FeedbackCategory.SUGGESTION -> "Cadangan"
+            FeedbackCategory.FEEDBACK -> "Feedback"
+        }
+        val title = if (alert.newCount > 1) {
+            "${alert.newCount} laporan baru ($catLabel)"
+        } else {
+            "Laporan baru: $catLabel"
+        }
+        val notification = NotificationCompat.Builder(context, INBOX_ALERT_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_wave)
+            .setContentTitle(title)
+            .setContentText(alert.latestTitle)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        notifications.notify(INBOX_ALERT_NOTIFICATION_ID, notification)
+    }
+
     companion object {
         private const val CHANNEL_ID = "app_updates"
         private const val NOTIFICATION_ID = 4210
         private const val BROADCAST_CHANNEL_ID = "app_broadcasts"
         private const val BROADCAST_NOTIFICATION_ID = 4211
+        private const val INBOX_ALERT_CHANNEL_ID = "dev_inbox_alerts"
+        private const val INBOX_ALERT_NOTIFICATION_ID = 4212
         // Renamed with the period: KEEP would leave existing installs on the old 12 h
         // schedule, and WorkManager 2.7 has no UPDATE policy.
         private const val WORK_NAME = "app_update_check_hourly"

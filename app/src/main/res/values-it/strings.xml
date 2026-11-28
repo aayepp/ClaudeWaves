@@ -1486,4 +1486,19 @@
     <string name="feedback_screenshots_add">Aggiungi altri</string>
     <string name="feedback_screenshots_remove">Rimuovi</string>
     <string name="feedback_send_bug">Invia segnalazione</string>
+    <string name="broadcast_type_info">Info</string>
+    <string name="broadcast_type_warning">Avviso</string>
+    <string name="broadcast_type_maintenance">Manutenzione</string>
+    <string name="broadcast_type_update">Aggiornamento</string>
+    <string name="broadcast_close">Chiudi</string>
+    <string name="broadcast_more_info">Scopri di più</string>
+    <string name="feedback_include_diagnostics">Includi diagnostica errori e audio</string>
+    <string name="feedback_include_diagnostics_sub">Allega log recenti ripuliti senza dati personali</string>
+    <string name="feedback_clear_draft">Cancella bozza</string>
+    <string name="feedback_recent_title">I tuoi invii recenti (%1$d)</string>
+    <string name="feedback_recent_ticket">#%1$d · %2$s</string>
+    <string name="crash_prompt_title">ClaudeWaves si è chiuso in modo imprevisto</string>
+    <string name="crash_prompt_body">È stato salvato un log di crash (%1$s). Vuoi inviarlo per aiutare a risolvere?</string>
+    <string name="crash_prompt_report">Segnala bug</string>
+    <string name="crash_prompt_dismiss">Chiudi</string>
 </resources>

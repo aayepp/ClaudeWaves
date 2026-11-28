@@ -106,6 +106,8 @@ import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.NavigationBarItem
@@ -953,14 +955,22 @@ private fun FloatingNavBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     items.forEachIndexed { index, item ->
+                        val isSelected = selectedIndex == index
+                        val useExpandedCompact = items.size >= DockItem.MAX || LocalMd3NavBar.current
+                        val slotWeight by animateFloatAsState(
+                            targetValue = if (useExpandedCompact && isSelected) 1.75f else 1f,
+                            animationSpec = spring(dampingRatio = 0.80f, stiffness = 360f),
+                            label = "floatingNavSlotWeight",
+                        )
                         val onClick = remember(index) { { onSelect(index) } }
                         FloatingNavItem(
                             label = labels[index],
                             icon = item.icon,
-                            selected = selectedIndex == index,
+                            selected = isSelected,
+                            compact = useExpandedCompact,
                             onClick = onClick,
                             adaptiveUseLightInk = if (glassActive) dockUseLightInk[if (dockRtl) items.size - 1 - index else index] else null,
-                            modifier = Modifier.weight(1f).onGloballyPositioned { coords ->
+                            modifier = Modifier.weight(slotWeight).onGloballyPositioned { coords ->
                                 glassNavBounds[index] = coords.boundsInParent()
                                 if (coords.isAttached) dockTabRootBounds[index] = coords.boundsInRoot()
                             },
@@ -1062,6 +1072,7 @@ private fun FloatingNavItem(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     adaptiveUseLightInk: Boolean? = null,
 ) {
     val comic = LocalComicTheme.current
@@ -1079,35 +1090,64 @@ private fun FloatingNavItem(
         label = "navItemContent",
     )
 
-    // Every tab keeps its label: a dock of bare icons made the unselected tabs a guess.
+    // Three-tab mode keeps stacked labels on every slot; 4-item compact mode keeps the active pill
+    // wide [Icon + Label] while unselected slots recede to crisp icons across full dock width.
     Surface(
         onClick = onClick,
         shape = PillShape,
         // The selection is [NavSelectionPill], drawn once behind the row.
         color = Color.Transparent,
-        modifier = modifier.height(52.dp),
+        modifier = modifier
+            .height(52.dp)
+            .then(if (compact) Modifier.semantics { contentDescription = label } else Modifier),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        ) {
-            // Halo only over adaptive glass, where the backdrop can be any tone.
-            val halo = if (adaptiveUseLightInk != null) com.lastwave.app.ui.theme.inkHalo(contentColor) else Color.Transparent
-            Box(Modifier.size(22.dp)) {
-                if (adaptiveUseLightInk != null) {
-                    Icon(icon, null, tint = halo, modifier = Modifier.matchParentSize().drawBlur(3.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded))
+        val halo = if (adaptiveUseLightInk != null) com.lastwave.app.ui.theme.inkHalo(contentColor) else Color.Transparent
+        if (compact) {
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+            ) {
+                Box(Modifier.size(22.dp)) {
+                    if (adaptiveUseLightInk != null) {
+                        Icon(icon, null, tint = halo, modifier = Modifier.matchParentSize().drawBlur(3.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded))
+                    }
+                    Icon(icon, null, tint = contentColor, modifier = Modifier.matchParentSize())
                 }
-                Icon(icon, null, tint = contentColor, modifier = Modifier.matchParentSize())
+                if (selected) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium.copy(shadow = androidx.compose.ui.graphics.Shadow(halo, blurRadius = 8f)),
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall.copy(shadow = androidx.compose.ui.graphics.Shadow(halo, blurRadius = 8f)),
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = contentColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        } else {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            ) {
+                // Halo only over adaptive glass, where the backdrop can be any tone.
+                Box(Modifier.size(22.dp)) {
+                    if (adaptiveUseLightInk != null) {
+                        Icon(icon, null, tint = halo, modifier = Modifier.matchParentSize().drawBlur(3.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded))
+                    }
+                    Icon(icon, null, tint = contentColor, modifier = Modifier.matchParentSize())
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(shadow = androidx.compose.ui.graphics.Shadow(halo, blurRadius = 8f)),
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

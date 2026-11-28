@@ -113,6 +113,7 @@ class SettingsViewModel @Inject constructor(
     val appChangelogManager: com.lastwave.app.data.update.AppChangelogManager,
     private val broadcastManager: com.lastwave.app.data.update.BroadcastManager,
     private val appStatsManager: com.lastwave.app.data.update.AppStatsManager,
+    private val feedbackDiagnosticsStore: com.lastwave.app.data.update.FeedbackDiagnosticsStore,
     private val spotifyPreferences: com.lastwave.app.data.spotify.SpotifyPreferences,
     private val autoMixPreferences: com.lastwave.app.playback.automix.api.AutoMixPreferences,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
@@ -123,12 +124,20 @@ class SettingsViewModel @Inject constructor(
     val authState: StateFlow<com.lastwave.app.data.model.AuthState> = authRepository.authState
     val updateInfo = appUpdateManager.updateInfo
     val isDeveloperShortcutVisible: StateFlow<Boolean> = broadcastManager.devShortcutVisible
+    val pendingSettingsDeepLink = feedbackDiagnosticsStore.pendingSettingsDeepLink
 
     fun onSecretDeveloperTrigger() = broadcastManager.revealDeveloperShortcutIfAuthenticated()
+    fun consumeSettingsDeepLink() = feedbackDiagnosticsStore.consumeSettingsDeepLink()
 
     fun checkForUpdates() = appUpdateManager.checkForUpdate(isSilent = false)
     fun openUpdate(context: android.content.Context) = appUpdateManager.openUpdate(context)
     fun openChangelog() = appChangelogManager.openChangelog()
+
+    fun loadFeedbackDraft() = feedbackDiagnosticsStore.loadDraft()
+    fun saveFeedbackDraft(draft: com.lastwave.app.data.update.FeedbackDraft) =
+        feedbackDiagnosticsStore.saveDraft(draft)
+    fun clearFeedbackDraft() = feedbackDiagnosticsStore.clearDraft()
+    fun getRecentFeedbackSubmissions() = feedbackDiagnosticsStore.getRecentSubmissions()
 
     suspend fun submitUserFeedback(
         category: com.lastwave.app.data.update.FeedbackCategory,
@@ -136,6 +145,7 @@ class SettingsViewModel @Inject constructor(
         body: String,
         contact: String,
         includeDeviceInfo: Boolean,
+        includeDiagnostics: Boolean = true,
         screenshots: List<android.net.Uri> = emptyList(),
     ): Result<Long> {
         val capped = screenshots.take(5)
@@ -143,7 +153,20 @@ class SettingsViewModel @Inject constructor(
         val encodedScreenshots = capped.mapNotNull { uri ->
             appStatsManager.encodeScreenshotToDataUri(uri, maxDimension = maxDim)
         }
-        return appStatsManager.submitFeedback(category, title, body, contact, includeDeviceInfo, encodedScreenshots)
+        val finalBody = if (includeDiagnostics && category == com.lastwave.app.data.update.FeedbackCategory.BUG) {
+            val runtimeSummary =
+                "Theme=${theme.value.themeMode.name} glass=${theme.value.liquidGlass} " +
+                    "usb=${usbExclusiveEnabled.value} eq=${equalizer.value.enabled}"
+            val snapshot = feedbackDiagnosticsStore.buildCompactDiagnosticsSnapshot(runtimeSummary)
+            if (snapshot.isNotBlank()) "$body\n\n--- Diagnostics ---\n$snapshot" else body
+        } else {
+            body
+        }
+        return appStatsManager.submitFeedback(category, title, finalBody, contact, includeDeviceInfo, encodedScreenshots)
+            .onSuccess { rowId ->
+                feedbackDiagnosticsStore.recordSubmission(rowId, category, title)
+                feedbackDiagnosticsStore.clearDraft()
+            }
     }
 
     fun saveCustomProfileName(name: String) {

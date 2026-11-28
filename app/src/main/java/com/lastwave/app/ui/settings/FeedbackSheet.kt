@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +47,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,19 +61,27 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.lastwave.app.R
 import com.lastwave.app.data.update.FeedbackCategory
+import com.lastwave.app.data.update.FeedbackDraft
+import com.lastwave.app.data.update.PendingCrashReport
+import com.lastwave.app.data.update.SubmittedFeedbackReceipt
 import com.lastwave.app.ui.comic.Button
 import com.lastwave.app.ui.comic.FilterChip
 import com.lastwave.app.ui.comic.Surface
 import com.lastwave.app.ui.comic.Switch
+import com.lastwave.app.ui.comic.TextButton
 import com.lastwave.app.ui.theme.LocalComicTheme
 import com.lastwave.app.ui.theme.LocalSakugaTheme
 import com.lastwave.app.ui.theme.sakugaTypingInput
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private data class BugChipOption(
     val wireKey: String,
@@ -99,12 +109,18 @@ private val BUG_FREQUENCIES = listOf(
 @Composable
 internal fun FeedbackBottomSheet(
     onDismiss: () -> Unit,
+    initialDraft: FeedbackDraft? = null,
+    prefillCrash: PendingCrashReport? = null,
+    recentSubmissions: List<SubmittedFeedbackReceipt> = emptyList(),
+    onDraftChange: (FeedbackDraft) -> Unit = {},
+    onClearDraft: () -> Unit = {},
     onSubmit: suspend (
         category: FeedbackCategory,
         title: String,
         body: String,
         contact: String,
         includeDeviceInfo: Boolean,
+        includeDiagnostics: Boolean,
         screenshots: List<Uri>,
     ) -> Result<Long>,
 ) {
@@ -113,17 +129,62 @@ internal fun FeedbackBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isFlatCel = LocalComicTheme.current || LocalSakugaTheme.current
 
-    var categoryKey by rememberSaveable { mutableStateOf(FeedbackCategory.BUG.wireKey) }
-    var bugAreaKey by rememberSaveable { mutableStateOf(BUG_AREAS.first().wireKey) }
-    var bugFreqKey by rememberSaveable { mutableStateOf(BUG_FREQUENCIES.first().wireKey) }
-    var title by rememberSaveable { mutableStateOf("") }
-    var body by rememberSaveable { mutableStateOf("") }
-    var contact by rememberSaveable { mutableStateOf("") }
-    var includeDevice by rememberSaveable { mutableStateOf(true) }
+    val crashTitleSeed = prefillCrash?.let { "Crash: ${it.headline}".take(120) }
+    val crashBodySeed = prefillCrash?.let {
+        "${it.crashType}\n${it.compactTrace}".trim().take(2000)
+    }
+
+    var categoryKey by rememberSaveable {
+        mutableStateOf(
+            if (prefillCrash != null) FeedbackCategory.BUG.wireKey
+            else initialDraft?.categoryKey ?: FeedbackCategory.BUG.wireKey,
+        )
+    }
+    var bugAreaKey by rememberSaveable {
+        mutableStateOf(initialDraft?.bugAreaKey ?: BUG_AREAS.first().wireKey)
+    }
+    var bugFreqKey by rememberSaveable {
+        mutableStateOf(initialDraft?.bugFreqKey ?: BUG_FREQUENCIES.first().wireKey)
+    }
+    var title by rememberSaveable { mutableStateOf(crashTitleSeed ?: initialDraft?.title.orEmpty()) }
+    var body by rememberSaveable { mutableStateOf(crashBodySeed ?: initialDraft?.body.orEmpty()) }
+    var contact by rememberSaveable { mutableStateOf(initialDraft?.contact.orEmpty()) }
+    var includeDevice by rememberSaveable { mutableStateOf(initialDraft?.includeDevice ?: true) }
+    var includeDiagnostics by rememberSaveable {
+        mutableStateOf(if (prefillCrash != null) true else initialDraft?.includeDiagnostics ?: true)
+    }
+    var showRecentHistory by rememberSaveable { mutableStateOf(false) }
     var pickedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var isSending by rememberSaveable { mutableStateOf(false) }
     var sentSuccess by rememberSaveable { mutableStateOf(false) }
     var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(
+        categoryKey,
+        bugAreaKey,
+        bugFreqKey,
+        title,
+        body,
+        contact,
+        includeDevice,
+        includeDiagnostics,
+        sentSuccess,
+    ) {
+        if (prefillCrash == null && !sentSuccess) {
+            onDraftChange(
+                FeedbackDraft(
+                    categoryKey = categoryKey,
+                    bugAreaKey = bugAreaKey,
+                    bugFreqKey = bugFreqKey,
+                    title = title,
+                    body = body,
+                    contact = contact,
+                    includeDevice = includeDevice,
+                    includeDiagnostics = includeDiagnostics,
+                ),
+            )
+        }
+    }
 
     val shortErr = stringResource(R.string.feedback_error_short)
     val rateErr = stringResource(R.string.feedback_error_rate_limit)
@@ -163,21 +224,45 @@ internal fun FeedbackBottomSheet(
                 .navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = stringResource(R.string.feedback_sheet_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = if (isBugMode) {
-                        stringResource(R.string.feedback_bug_sub)
-                    } else {
-                        stringResource(R.string.feedback_sheet_sub)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = stringResource(R.string.feedback_sheet_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (isBugMode) {
+                            stringResource(R.string.feedback_bug_sub)
+                        } else {
+                            stringResource(R.string.feedback_sheet_sub)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if ((title.isNotBlank() || body.isNotBlank()) && !isSending && !sentSuccess && prefillCrash == null) {
+                    TextButton(
+                        onClick = {
+                            title = ""
+                            body = ""
+                            contact = ""
+                            pickedUris = emptyList()
+                            errorMsg = null
+                            onClearDraft()
+                        },
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feedback_clear_draft),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
             }
 
             Row(
@@ -496,6 +581,39 @@ internal fun FeedbackBottomSheet(
                 }
             }
 
+            if (isBugMode) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = if (isFlatCel) 1f else 0.55f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.feedback_include_diagnostics),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = stringResource(R.string.feedback_include_diagnostics_sub),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = includeDiagnostics,
+                            onCheckedChange = { if (!isSending && !sentSuccess) includeDiagnostics = it },
+                        )
+                    }
+                }
+            }
+
             errorMsg?.let { msg ->
                 Text(
                     text = msg,
@@ -550,6 +668,7 @@ internal fun FeedbackBottomSheet(
                                 formattedBody,
                                 contact,
                                 includeDevice,
+                                isBugMode && includeDiagnostics,
                                 pickedUris,
                             )
                             isSending = false
@@ -589,6 +708,62 @@ internal fun FeedbackBottomSheet(
                             ),
                             fontWeight = FontWeight.Bold,
                         )
+                    }
+                }
+            }
+
+            if (recentSubmissions.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(
+                        onClick = { showRecentHistory = !showRecentHistory },
+                        modifier = Modifier.align(Alignment.Start),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feedback_recent_title, recentSubmissions.size),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    AnimatedVisibility(visible = showRecentHistory) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            recentSubmissions.take(5).forEach { receipt ->
+                                val dateStr = remember(receipt.submittedAtMs) {
+                                    SimpleDateFormat("d MMM HH:mm", Locale.getDefault())
+                                        .format(Date(receipt.submittedAtMs))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = if (isFlatCel) 1f else 0.4f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = if (receipt.id > 0L) {
+                                                stringResource(R.string.feedback_recent_ticket, receipt.id.toInt(), receipt.title)
+                                            } else {
+                                                receipt.title
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f).padding(end = 8.dp),
+                                        )
+                                        Text(
+                                            text = dateStr,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

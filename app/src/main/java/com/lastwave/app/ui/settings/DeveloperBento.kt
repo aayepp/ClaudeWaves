@@ -3,6 +3,7 @@ package com.lastwave.app.ui.settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -135,6 +136,7 @@ internal fun LiveStatsBento(
     isLoading: Boolean,
     isComic: Boolean,
     lang: DevLanguage,
+    currentAppVersion: String,
     onHoldMetric: (DevMetricInfo) -> Unit,
     onTestPing: () -> Unit,
     onRetry: () -> Unit,
@@ -202,6 +204,98 @@ internal fun LiveStatsBento(
                     onHoldMetric = onHoldMetric,
                     modifier = Modifier.weight(1f),
                 )
+            }
+            HealthMetricsRow(
+                live = live,
+                currentAppVersion = currentAppVersion,
+                isComic = isComic,
+                lang = lang,
+                onHoldMetric = onHoldMetric,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HealthMetricsRow(
+    live: LiveUserStats,
+    currentAppVersion: String,
+    isComic: Boolean,
+    lang: DevLanguage,
+    onHoldMetric: (DevMetricInfo) -> Unit,
+) {
+    val bm = lang == DevLanguage.BM
+    val stickinessPct = if (live.mau30d > 0) (live.dauToday * 100 / live.mau30d).coerceIn(0, 100) else 0
+    val dauWauPct = if (live.wau7d > 0) (live.dauToday * 100 / live.wau7d).coerceIn(0, 100) else 0
+
+    val totalVer = live.byVersion.sumOf { it.count }.coerceAtLeast(1)
+    val cleanVer = currentAppVersion.removePrefix("v").trim()
+    val targetBucket = live.byVersion.firstOrNull {
+        val lbl = it.label.removePrefix("v").trim()
+        lbl == cleanVer
+    } ?: live.byVersion.firstOrNull()
+    val adoptionPct = if (targetBucket != null) (targetBucket.count * 100 / totalVer).coerceIn(0, 100) else 0
+    val adoptionNote = targetBucket?.let { "${it.label}: ${formatStatsNumber(it.count)}" } ?: "-"
+
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        MetricTile(
+            label = if (bm) "Stickiness" else "Stickiness",
+            value = "$stickinessPct%",
+            note = "DAU/WAU: $dauWauPct%",
+            isComic = isComic,
+            info = DevMetricInfo.STICKINESS,
+            onHoldMetric = onHoldMetric,
+            modifier = Modifier.weight(1f),
+        )
+        MetricTile(
+            label = if (bm) "Adoptasi Versi" else "Version Share",
+            value = "$adoptionPct%",
+            note = adoptionNote,
+            isComic = isComic,
+            info = DevMetricInfo.ADOPTION,
+            onHoldMetric = onHoldMetric,
+            modifier = Modifier.weight(1f),
+            noteColor = if (adoptionPct >= 50) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+internal fun LocalDiagnosticsTile(
+    crashCount: Int,
+    logLineCount: Int,
+    isComic: Boolean,
+    lang: DevLanguage,
+    onOpenLogs: () -> Unit,
+) {
+    val bm = lang == DevLanguage.BM
+    BentoTile(
+        isComic = isComic,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .clickable(onClick = onOpenLogs),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                TileLabel(if (bm) "Log & Crash Peranti" else "Device Logs & Crashes")
+                Text(
+                    text = if (bm) {
+                        "$crashCount fail crash · $logLineCount baris log memori"
+                    } else {
+                        "$crashCount crash file(s) · $logLineCount buffered log lines"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (crashCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            TextButton(onClick = onOpenLogs) {
+                Text(if (bm) "Buka ›" else "Inspect ›", fontWeight = FontWeight.Bold)
             }
         }
     }
