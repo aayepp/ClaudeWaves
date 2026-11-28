@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.60] - 2026-11-28
+
+### Added
+- **One-tap post-crash bug reporting:** if ClaudeWaves closes unexpectedly, the next launch offers a single non-intrusive prompt to send a pre-filled bug report with the captured crash summary.
+- **Feedback drafts, diagnostics & history:** bug reports now support opt-in sanitized error/audio diagnostics, automatic draft saving when closing the sheet, and a compact list of your recent submissions.
+- **In-app announcement links:** announcements can now navigate directly to relevant screens inside the app (Updates, Feedback, Audio settings, Themes, Downloads, Discover, and Search).
+
+### Fixed
+- **4-button Home dock width & active pill:** kept the 4-button bottom dock at full 3-tab width aligned cleanly with the MiniPlayer across Liquid Glass, Light/Dark/AMOLED, and Comic Pop, with a spacious expanding active capsule and zero width jumping between tabs.
+- **Announcements localization & dismissal:** localized announcement type badges, dates, and buttons across all 15 supported languages, fixed popups reappearing after dismissal when paired with the Home banner, and added version-targeted and auto-expiring announcement support.
+
 ## [1.0.59] - 2026-11-28
 
 ### Fixed
