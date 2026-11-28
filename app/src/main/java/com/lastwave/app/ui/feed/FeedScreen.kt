@@ -112,6 +112,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import com.lastwave.app.ui.navigation.FEED_TAP_DEBOUNCE_MS
 import com.lastwave.app.ui.navigation.FeedTapAction
 import com.lastwave.app.ui.navigation.resolveFeedTapAction
@@ -241,7 +244,6 @@ fun FeedScreen(
     val musicPlayer = LocalMusicPlayer.current
     val context = LocalContext.current
     val playbackState by musicPlayer.listPlaybackState.collectAsStateWithLifecycle()
-    val fullPlaybackState by musicPlayer.stateWithoutProgress.collectAsStateWithLifecycle()
     var menuTrack by remember { mutableStateOf<YouTubeMusicTrack?>(null) }
     // Long-press (deep press) mini tray â€” 3-dot buttons keep the full sheet.
     var miniTrayTrack by remember { mutableStateOf<TrackMiniTrayData?>(null) }
@@ -253,7 +255,6 @@ fun FeedScreen(
     val homeDownloads by viewModel.homeDownloads.collectAsStateWithLifecycle()
     val homeLocalSongs by viewModel.homeLocalSongs.collectAsStateWithLifecycle()
     val rediscoverTracks by viewModel.rediscoverTracks.collectAsStateWithLifecycle()
-    val losslessBadges = LocalLosslessBadgeViewModel.current?.badges?.collectAsStateWithLifecycle()?.value.orEmpty()
     var rearrangingHome by rememberSaveable { mutableStateOf(false) }
     if (rearrangingHome) {
         HomeLayoutSheet(
@@ -543,9 +544,9 @@ fun FeedScreen(
                         list.toList()
                     }
 
-                    val currentVideoId = fullPlaybackState.current?.videoId
-                    val currentTitleNorm = fullPlaybackState.current?.title?.trim()?.lowercase().orEmpty()
-                    val currentArtistNorm = fullPlaybackState.current?.artist?.trim()?.lowercase().orEmpty()
+                    val currentVideoId = playbackState.current?.videoId
+                    val currentTitleNorm = playbackState.current?.title?.trim()?.lowercase().orEmpty()
+                    val currentArtistNorm = playbackState.current?.artist?.trim()?.lowercase().orEmpty()
 
                     fun isMatchingPlayingTrack(videoId: String?, title: String, artist: String): Boolean {
                         if (!videoId.isNullOrBlank() && !currentVideoId.isNullOrBlank()) {
@@ -596,7 +597,7 @@ fun FeedScreen(
                     }
 
                     val continueTracks = remember(
-                        fullPlaybackState.current,
+                        playbackState.current,
                         recentPlayedStats,
                         state.feedData.ytRecentSongs,
                         state.feedData.jumpBackIn,
@@ -604,7 +605,7 @@ fun FeedScreen(
                         recommendedTracks,
                     ) {
                         buildContinueListeningTracks(
-                            currentTrack = fullPlaybackState.current,
+                            currentTrack = playbackState.current,
                             recentPlayedStats = recentPlayedStats,
                             ytRecentSongs = state.feedData.ytRecentSongs,
                             jumpBackIn = state.feedData.jumpBackIn,
@@ -852,9 +853,13 @@ fun FeedScreen(
                     ObserveLosslessProbeTargets(
                         remember(hiResPool) { hiResPool.map { LosslessProbeTarget(it.title, it.artist, it.album, it.durationSeconds) } },
                     )
-                    val hiResTracks = remember(hiResPool, losslessBadges) {
-                        hiResPool.filter { losslessBadges[losslessTrackKey(it.title, it.artist)] == LosslessListTier.HI_RES }
-                    }
+                    val badgeViewModel = LocalLosslessBadgeViewModel.current
+                    val hiResTracks by remember(badgeViewModel, hiResPool) {
+                        badgeViewModel?.badges
+                            ?.map { badges -> hiResPool.filter { badges[losslessTrackKey(it.title, it.artist)] == LosslessListTier.HI_RES } }
+                            ?.distinctUntilChanged()
+                            ?: flowOf(emptyList())
+                    }.collectAsStateWithLifecycle(initialValue = emptyList())
                     val hiResCards = remember(hiResTracks) {
                         trackCards("hr", hiResTracks.take(15), "Hi-Res Picks")
                     }
@@ -1040,7 +1045,7 @@ fun FeedScreen(
                                     QuickPicksRows(
                                         tracks = quickPickTracks,
                                         currentPlayingVideoId = currentVideoId,
-                                        isPlaying = fullPlaybackState.isPlaying,
+                                        isPlaying = playbackState.isPlaying,
                                         onTrackClick = { idx -> viewModel.playTracksQueue(quickPickTracks, idx, "Quick Picks") },
                                         onMenuClick = { track -> menuTrack = track },
                                     )

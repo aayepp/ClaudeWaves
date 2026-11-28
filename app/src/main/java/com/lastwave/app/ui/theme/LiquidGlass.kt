@@ -502,7 +502,11 @@ fun LiquidGlassSurface(
     content: @Composable () -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    val jiggleFallback = if (!isLiquidGlassBackdropSupported()) Modifier.waterDropJiggle(amplitude = 0.045f) else Modifier
+    val jiggleFallback = if (!isLiquidGlassBackdropSupported() && !LocalLowTierDevice.current) {
+        Modifier.waterDropJiggle(amplitude = 0.045f)
+    } else {
+        Modifier
+    }
     Surface(
         onClick = onClick,
         modifier = modifier
@@ -539,6 +543,7 @@ fun isDeviceGlassCapable(): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
     if (!view.isHardwareAccelerated) return false
     val context = LocalContext.current
+    if (com.lastwave.app.util.DevicePerformanceTier.isLowTier(context)) return false
     val am = remember(context) {
         runCatching { context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager }.getOrNull()
     }
@@ -684,6 +689,7 @@ fun Modifier.waterDropJiggle(
     tiltDegrees: Float = 2.0f,
     dipDp: Dp = 3.5.dp,
 ): Modifier {
+    if (LocalLowTierDevice.current) return this
     val interaction = rememberGlassInteraction()
     val isDark = LocalIsDarkTheme.current
     val isComic = LocalComicTheme.current

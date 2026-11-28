@@ -847,7 +847,7 @@ fun SettingsScreen(
                                         iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
                                         title = "Developer Console",
-                                        subtitle = "Statistik, Inbox Feedback & Broadcast • Kunci biometrik/PIN",
+                                        subtitle = "Stats, Feedback Inbox & Broadcast • Biometric/PIN lock",
                                         onClick = onOpenDeveloperConsole,
                                         position = position,
                                     )
@@ -988,17 +988,17 @@ fun SettingsScreen(
                                 icon = Icons.Filled.Bolt,
                                 iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                 iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                title = "AutoMix",
+                                title = stringResource(R.string.settings_automix_title),
                                 subtitle = if (hfSettings.autoMixEnabled && misc.isBitPerfectEnabled) {
-                                    "Paused while Bit-Perfect is enabled"
+                                    stringResource(R.string.settings_automix_paused_bit_perfect)
                                 } else if (hfSettings.autoMixEnabled) {
                                     if (hfSettings.durationMode == com.lastwave.app.playback.automix.api.TransitionDurationMode.AUTO) {
-                                        "Active \u2022 Phrase-matched transition (Auto)"
+                                        stringResource(R.string.settings_automix_active_auto)
                                     } else {
-                                        "Active \u2022 Custom DJ blend (${hfSettings.targetDurationSeconds}s)"
+                                        stringResource(R.string.settings_automix_active_manual, hfSettings.targetDurationSeconds)
                                     }
                                 } else {
-                                    "Beat-matched, key-locked seamless dual-deck mixing"
+                                    stringResource(R.string.settings_automix_sub)
                                 },
                                 checked = hfSettings.autoMixEnabled,
                                 onCheckedChange = viewModel::setAutoMixEnabled,
@@ -1070,11 +1070,11 @@ fun SettingsScreen(
                                 iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                                 title = stringResource(R.string.settings_crossfade),
                                 subtitle = if (misc.crossfadeEnabled && misc.isBitPerfectEnabled) {
-                                    "Paused while Bit-Perfect is enabled"
+                                    stringResource(R.string.settings_automix_paused_bit_perfect)
                                 } else if (misc.crossfadeEnabled) {
-                                    "Smooth transition between tracks \u2022 ${misc.crossfadeSeconds} sec"
+                                    stringResource(R.string.settings_crossfade_active, misc.crossfadeSeconds)
                                 } else {
-                                    "Blend the end of a track into the next one"
+                                    stringResource(R.string.settings_crossfade_sub)
                                 },
                                 checked = misc.crossfadeEnabled,
                                 onCheckedChange = viewModel::setCrossfadeEnabled,

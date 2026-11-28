@@ -387,11 +387,12 @@ internal fun AutoMixControlsCard(
     }
 
     val isAuto = sliderValue.roundToInt() <= 11
-    val displayValue = if (isAuto) "Auto" else "${sliderValue.roundToInt()}s"
+    val autoLabel = stringResource(R.string.settings_automix_duration_auto)
+    val displayValue = if (isAuto) autoLabel else "${sliderValue.roundToInt()}s"
     val durationDesc = if (isAuto) {
-        "Auto \u2022 Phrase-matched transition"
+        stringResource(R.string.settings_automix_duration_auto_desc)
     } else {
-        "${sliderValue.roundToInt()}s \u2022 Custom DJ blend"
+        stringResource(R.string.settings_automix_duration_manual_desc, sliderValue.roundToInt())
     }
 
     Card(
@@ -409,7 +410,7 @@ internal fun AutoMixControlsCard(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "Transition Duration",
+                        stringResource(R.string.settings_automix_duration_title),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                     )
@@ -479,7 +480,7 @@ internal fun AutoMixControlsCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Auto", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Text(autoLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 Text("20s", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 Text("30s", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
             }
@@ -500,8 +501,8 @@ internal fun AutoMixControlsCard(
                 )
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("DJ Spectral Filter Sweeps", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                    Text("3-band Linkwitz-Riley sub-bass swap and resonant filter sweeps", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_automix_spectral_title), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.settings_automix_spectral_sub), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(
                     checked = settings.spectralFilterSweepsEnabled,

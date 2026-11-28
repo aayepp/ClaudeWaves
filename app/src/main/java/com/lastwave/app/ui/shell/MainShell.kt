@@ -357,13 +357,13 @@ fun MainShell(
         }
     }
     val ytConnection by mainShellViewModel.ytConnection.collectAsStateWithLifecycle()
-    val settings by mainShellViewModel.settings.collectAsStateWithLifecycle(initialValue = null)
+    val suppressYouTubeLoginPrompt by remember(mainShellViewModel) {
+        mainShellViewModel.settings.map { it.suppressYouTubeLoginPrompt }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
     var promptDismissedThisSession by rememberSaveable { mutableStateOf(false) }
 
-    val currentSettings = settings
-    val shouldShowLoginPrompt = currentSettings != null &&
+    val shouldShowLoginPrompt = suppressYouTubeLoginPrompt == false &&
         !ytConnection.isConnected &&
-        !currentSettings.suppressYouTubeLoginPrompt &&
         !promptDismissedThisSession
 
     if (shouldShowLoginPrompt) {
@@ -509,14 +509,12 @@ fun MainShell(
             if (selectedTabIndex > tabs.lastIndex) selectedTabIndex = homeIndex
             if (pagerState.currentPage > tabs.lastIndex) pagerState.scrollToPage(homeIndex)
         }
+        val isLowTier = com.lastwave.app.ui.theme.LocalLowTierDevice.current
         HorizontalPager(
             state = pagerState,
-            // Keep every tab composed. With 1, jumping Playlists -> Home
-            // (dock tap = instant scrollToPage) disposed and rebuilt the whole
-            // Feed (sections, shelves, covers) on that frame, and Statistics
-            // was rebuilt the same way from the far tab. Only 3 tabs, and
-            // off-screen pages are not drawn, so this is cheap.
-            beyondViewportPageCount = tabs.size - 1,
+            // Keep adjacent tabs cached on capable hardware; on low-RAM / entry SoCs
+            // compose only the visible tab so 2-4 GB devices don't hold 3 heavy trees.
+            beyondViewportPageCount = if (isLowTier) 0 else (tabs.size - 1).coerceAtLeast(0),
             modifier = Modifier.fillMaxSize()
                 .then(if (chromeCollapse != null) Modifier.nestedScroll(chromeCollapse.connection) else Modifier)
                 .then(
@@ -745,7 +743,7 @@ fun MainShell(
                         // Read here, not captured outside: the slot lives across selection changes.
                         val selectedDockIndex = dockItems.indexOfFirst { it.tab == tabs.getOrNull(currentSelectedIndex) }.coerceAtLeast(0)
                         val labels = dockItems.map { item ->
-                            item.tab?.let { androidx.compose.ui.res.stringResource(it.labelRes) } ?: item.label
+                            androidx.compose.ui.res.stringResource(item.labelRes)
                         }
                         if (navigationLiquidState != null) {
                             val items = remember(dockItems, labels) {

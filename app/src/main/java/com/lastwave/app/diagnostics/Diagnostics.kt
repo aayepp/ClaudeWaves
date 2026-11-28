@@ -54,30 +54,46 @@ object Diagnostics {
             // A native crash, a low-memory kill, or a system-recorded ANR leave
             // no Java stack trace for the crash handler to see. Android 11+
             // records them itself and this surfaces them as crash files.
-            runCatching { ExitReasonReader.recordHistoricalExits(context) }
+            val exitResult = runCatching { ExitReasonReader.recordHistoricalExits(context) }
+                .getOrDefault(ExitReasonReader.HistoricalExitsResult())
 
             if (uncleanSession != null) {
-                // Not a crash on its own: the marker cannot tell a system kill
-                // from the user swiping the app away, and says so.
-                CrashRecorder.record(
-                    type = CrashType.UNKNOWN_TERMINATION,
-                    detail = buildString {
-                        appendLine("The previous session ended without a clean-shutdown marker.")
-                        appendLine("The system may have killed the process, or the app may have been")
-                        appendLine("swiped from recents. Recorded marker: $uncleanSession")
-                        when {
-                            uncleanSession.contains("playing=true") ->
-                                appendLine("Music WAS playing: the system stopped an active playback session.")
-                            uncleanSession.contains("uiVisible=false") ->
-                                appendLine("Idle in the background (no playback): a routine low-memory reclaim or swipe.")
-                        }
-                    },
-                )
+                val previousPid = parsePid(uncleanSession)
+                val wasPlaying = uncleanSession.contains("playing=true")
+                val wasVisible = uncleanSession.contains("uiVisible=true")
+                when {
+                    previousPid != null && previousPid in exitResult.recordedCrashPids -> {
+                        AppLog.i(TAG, "Previous session pid=$previousPid already recorded via ExitReasonReader; skipping UNKNOWN_TERMINATION")
+                    }
+                    previousPid != null && previousPid in exitResult.benignExitPids -> {
+                        AppLog.i(TAG, "Previous session pid=$previousPid ended via benign OS/user exit; skipping UNKNOWN_TERMINATION")
+                    }
+                    !wasPlaying && !wasVisible -> {
+                        AppLog.i(TAG, "Previous background idle session ended without clean marker ($uncleanSession); skipping UNKNOWN_TERMINATION")
+                    }
+                    else -> {
+                        // Active playback or visible UI stopped unexpectedly with no OS exit record.
+                        CrashRecorder.record(
+                            type = CrashType.UNKNOWN_TERMINATION,
+                            detail = buildString {
+                                appendLine("The previous session ended without a clean-shutdown marker.")
+                                appendLine("The system may have killed the process, or the app may have been")
+                                appendLine("swiped from recents. Recorded marker: $uncleanSession")
+                                if (wasPlaying) {
+                                    appendLine("Music WAS playing: the system stopped an active playback session.")
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }.onFailure {
             android.util.Log.e(TAG, "Previous session exit records unavailable", it)
         }
     }
+
+    private fun parsePid(marker: String): Int? =
+        Regex("""\bpid=(\d+)\b""").find(marker)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     /**
      * Marks the session as ended deliberately. Called when the last activity

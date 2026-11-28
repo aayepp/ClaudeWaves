@@ -308,6 +308,9 @@ fun isFluidSupported(): Boolean {
     if (activityManager?.isLowRamDevice == true) {
         return false
     }
+    if (com.lastwave.app.util.DevicePerformanceTier.isLowTier(context)) {
+        return false
+    }
 
     return true
 }

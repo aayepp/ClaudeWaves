@@ -15,7 +15,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +24,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -31,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.lastwave.app.data.repository.ThemeUiState
@@ -46,6 +51,8 @@ val LocalIsDarkTheme = staticCompositionLocalOf { true }
 val LocalHideNavTabs = staticCompositionLocalOf { false }
 /** Settings "Use Bold Font": every text, lyrics included, drawn heavier. */
 val LocalUseBoldFont = staticCompositionLocalOf { false }
+/** True on constrained RAM / entry-level SoC devices (e.g. 2–4 GB phones). */
+val LocalLowTierDevice = staticCompositionLocalOf { false }
 
 /** Custom default profile chosen during startup tutorial (shown across Home UI & Settings). */
 data class UserProfile(
@@ -60,44 +67,57 @@ private object SilentHapticFeedback : HapticFeedback {
     override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) = Unit
 }
 
-private const val THEME_TRANSITION_MS = 600
+private const val THEME_TRANSITION_MS = 320
 
 /** App-wide UI scale. Below 1 fits more on screen; 1f is the system's own size. */
 private const val UI_SCALE = 0.95f
 
+private fun lerpColorScheme(a: ColorScheme, b: ColorScheme, t: Float): ColorScheme = a.copy(
+    primary = lerp(a.primary, b.primary, t),
+    onPrimary = lerp(a.onPrimary, b.onPrimary, t),
+    primaryContainer = lerp(a.primaryContainer, b.primaryContainer, t),
+    onPrimaryContainer = lerp(a.onPrimaryContainer, b.onPrimaryContainer, t),
+    inversePrimary = lerp(a.inversePrimary, b.inversePrimary, t),
+    secondary = lerp(a.secondary, b.secondary, t),
+    onSecondary = lerp(a.onSecondary, b.onSecondary, t),
+    secondaryContainer = lerp(a.secondaryContainer, b.secondaryContainer, t),
+    onSecondaryContainer = lerp(a.onSecondaryContainer, b.onSecondaryContainer, t),
+    tertiary = lerp(a.tertiary, b.tertiary, t),
+    onTertiary = lerp(a.onTertiary, b.onTertiary, t),
+    tertiaryContainer = lerp(a.tertiaryContainer, b.tertiaryContainer, t),
+    onTertiaryContainer = lerp(a.onTertiaryContainer, b.onTertiaryContainer, t),
+    background = lerp(a.background, b.background, t),
+    onBackground = lerp(a.onBackground, b.onBackground, t),
+    surface = lerp(a.surface, b.surface, t),
+    onSurface = lerp(a.onSurface, b.onSurface, t),
+    surfaceVariant = lerp(a.surfaceVariant, b.surfaceVariant, t),
+    onSurfaceVariant = lerp(a.onSurfaceVariant, b.onSurfaceVariant, t),
+    surfaceTint = lerp(a.surfaceTint, b.surfaceTint, t),
+    surfaceContainerLowest = lerp(a.surfaceContainerLowest, b.surfaceContainerLowest, t),
+    surfaceContainerLow = lerp(a.surfaceContainerLow, b.surfaceContainerLow, t),
+    surfaceContainer = lerp(a.surfaceContainer, b.surfaceContainer, t),
+    surfaceContainerHigh = lerp(a.surfaceContainerHigh, b.surfaceContainerHigh, t),
+    surfaceContainerHighest = lerp(a.surfaceContainerHighest, b.surfaceContainerHighest, t),
+    outline = lerp(a.outline, b.outline, t),
+    outlineVariant = lerp(a.outlineVariant, b.outlineVariant, t),
+)
+
 @Composable
-private fun animateColorScheme(target: ColorScheme): ColorScheme {
-    @Composable
-    fun a(color: Color) = animateColorAsState(color, tween(THEME_TRANSITION_MS), label = "themeColor").value
-    return target.copy(
-        primary = a(target.primary),
-        onPrimary = a(target.onPrimary),
-        primaryContainer = a(target.primaryContainer),
-        onPrimaryContainer = a(target.onPrimaryContainer),
-        inversePrimary = a(target.inversePrimary),
-        secondary = a(target.secondary),
-        onSecondary = a(target.onSecondary),
-        secondaryContainer = a(target.secondaryContainer),
-        onSecondaryContainer = a(target.onSecondaryContainer),
-        tertiary = a(target.tertiary),
-        onTertiary = a(target.onTertiary),
-        tertiaryContainer = a(target.tertiaryContainer),
-        onTertiaryContainer = a(target.onTertiaryContainer),
-        background = a(target.background),
-        onBackground = a(target.onBackground),
-        surface = a(target.surface),
-        onSurface = a(target.onSurface),
-        surfaceVariant = a(target.surfaceVariant),
-        onSurfaceVariant = a(target.onSurfaceVariant),
-        surfaceTint = a(target.surfaceTint),
-        surfaceContainerLowest = a(target.surfaceContainerLowest),
-        surfaceContainerLow = a(target.surfaceContainerLow),
-        surfaceContainer = a(target.surfaceContainer),
-        surfaceContainerHigh = a(target.surfaceContainerHigh),
-        surfaceContainerHighest = a(target.surfaceContainerHighest),
-        outline = a(target.outline),
-        outlineVariant = a(target.outlineVariant),
-    )
+private fun animateColorScheme(target: ColorScheme, animate: Boolean): ColorScheme {
+    if (!animate) return target
+    var fromScheme by remember { mutableStateOf(target) }
+    var toScheme by remember { mutableStateOf(target) }
+    val progress = remember { Animatable(1f) }
+    LaunchedEffect(target) {
+        if (target != toScheme) {
+            fromScheme = lerpColorScheme(fromScheme, toScheme, progress.value)
+            toScheme = target
+            progress.snapTo(0f)
+            progress.animateTo(1f, tween(THEME_TRANSITION_MS, easing = FastOutSlowInEasing))
+        }
+    }
+    val t = progress.value
+    return if (t >= 1f) toScheme else lerpColorScheme(fromScheme, toScheme, t)
 }
 
 /**
@@ -117,14 +137,18 @@ fun LastWaveTheme(
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
     }
-    // ThemeRepository resolves the scheme (now-playing artwork, else wallpaper
-    // Monet on S+), so the UI, widgets and notification agree. Animated so
-    // the theme glides between songs instead of jumping.
-    val activeColorScheme = animateColorScheme(
-        if (isDark) themeState.darkColorScheme else themeState.lightColorScheme,
-    )
-
     val view = LocalView.current
+    val context = LocalContext.current
+    val isLowTier = remember(context) {
+        if (view.isInEditMode) false else com.lastwave.app.util.DevicePerformanceTier.isLowTier(context)
+    }
+    // ThemeRepository resolves the scheme (now-playing artwork, else wallpaper
+    // Monet on S+), so the UI, widgets and notification agree. Single progress animatable
+    // glides smoothly on capable devices without 28 parallel coroutines.
+    val activeColorScheme = animateColorScheme(
+        target = if (isDark) themeState.darkColorScheme else themeState.lightColorScheme,
+        animate = !isLowTier,
+    )
     if (!view.isInEditMode) {
         SideEffect { applySystemBarIcons(view, isDark) }
         // The first application can be lost: on a cold start the window's bar
@@ -193,7 +217,6 @@ fun LastWaveTheme(
             // fontWeight. Not used for the app font: its stroke is set by the
             // wght axis above, and adjusting the requested weight would only
             // fake-bold it on top.
-            val context = LocalContext.current
             val defaultFontResolver = LocalFontFamilyResolver.current
             val fontResolver = remember(context, themeState.useBoldFont, themeState.useCustomFont, defaultFontResolver) {
                 if (themeState.useBoldFont && !themeState.useCustomFont &&
@@ -213,11 +236,12 @@ fun LastWaveTheme(
                 Density(baseDensity.density * UI_SCALE, baseDensity.fontScale)
             }
             SideEffect { LiquidGlassIntensity.value = themeState.liquidGlassIntensity }
-            GlassTiltEffect(enabled = glass)
+            GlassTiltEffect(enabled = glass && isDeviceGlassCapable() && !isLowTier)
             CompositionLocalProvider(
                 LocalDensity provides compactDensity,
                 LocalFontFamilyResolver provides fontResolver,
                 LocalHapticFeedback provides appHaptics,
+                LocalLowTierDevice provides isLowTier,
                 // Comic/Sakuga panels are flat ink and paper; glass would blur the line work.
                 LocalLiquidGlass provides (themeState.liquidGlass && !flatCel),
                 LocalComicTheme provides flatCel,

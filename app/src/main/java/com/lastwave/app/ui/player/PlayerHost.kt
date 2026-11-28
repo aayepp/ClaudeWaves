@@ -406,7 +406,6 @@ fun PlayerHost(
     val likedTrackKeys by viewModel.likedTrackKeys.collectAsStateWithLifecycle()
     val likeNudge by viewModel.likeNudge.collectAsStateWithLifecycle()
     val miniLiked = state.current?.let { viewModel.isLiked(it, likedTrackKeys) } == true
-    val playbackState by viewModel.player.stateWithoutProgress.collectAsStateWithLifecycle()
     val activeDownloads by viewModel.activeDownloads.collectAsStateWithLifecycle()
     var expanded by rememberSaveable { mutableStateOf(false) }
     var currentTab by rememberSaveable { mutableStateOf(FullPlayerTab.NOW_PLAYING) }
@@ -755,14 +754,9 @@ fun PlayerHost(
                 )
             }
 
-            // Sleep Timer Overlay Button (shown whenever timer is active, regardless of mini-player or button mode)
-            if (!expanded && (playbackState.sleepTimerRemainingMs != null || playbackState.sleepTimerEndOfTrack)) {
-                DraggableSleepTimerOverlay(
-                    sleepTimerRemainingMs = playbackState.sleepTimerRemainingMs,
-                    sleepTimerEndOfTrack = playbackState.sleepTimerEndOfTrack,
-                    onCycleTimer = { viewModel.player.cycleSleepTimer() },
-                    onCloseTimer = { viewModel.player.setSleepTimerMinutes(0) },
-                )
+            // Sleep Timer Overlay Button (isolated in its own leaf collector so timer ticks never recompose PlayerHost)
+            if (!expanded) {
+                SleepTimerOverlayHost(player = viewModel.player)
             }
             val currentTrack = state.current
             if (currentTrack != null && !expanded && settings.buttonNowPlayingEnabled) {
@@ -1055,10 +1049,28 @@ fun PlayerHost(
     }
 }
 
+@Composable
+private fun SleepTimerOverlayHost(player: MusicPlayer) {
+    val sleepTimer by remember(player) {
+        player.stateWithoutProgress
+            .map { it.sleepTimerRemainingMs to it.sleepTimerEndOfTrack }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null to false)
+    val (remainingMs, endOfTrack) = sleepTimer
+    if (remainingMs != null || endOfTrack) {
+        DraggableSleepTimerOverlay(
+            sleepTimerRemainingMs = remainingMs,
+            sleepTimerEndOfTrack = endOfTrack,
+            onCycleTimer = { player.cycleSleepTimer() },
+            onCloseTimer = { player.setSleepTimerMinutes(0) },
+        )
+    }
+}
+
 /**
  * Screen-edge band that softens content scrolling under the status bar ([atTop]) or
- * the bottom chrome. With glass it blurs the captured page; without, the page colour
- * fades in. Either way a gradient mask ramps it from nothing to full at the edge.
+ * the bottom chrome. With glass it blurs the captured page; without, a direct gradient
+ * fades cleanly into the page colour with zero offscreen FBO passes.
  */
 @Composable
 private fun EdgeFade(
@@ -1069,6 +1081,26 @@ private fun EdgeFade(
     modifier: Modifier,
 ) {
     val page = MaterialTheme.colorScheme.background
+    if (backdrop == null) {
+        val directBrush = remember(page, atTop) {
+            val ramp = arrayOf(
+                0f to Color.Transparent,
+                0.5f to page.copy(alpha = 0.9f),
+                1f to page,
+            )
+            Brush.verticalGradient(
+                *if (atTop) ramp.map { (1f - it.first) to it.second }.reversed().toTypedArray() else ramp,
+            )
+        }
+        Box(
+            modifier
+                .fillMaxWidth()
+                .height(height)
+                .graphicsLayer { this.alpha = alpha() }
+                .drawBehind { drawRect(directBrush) },
+        )
+        return
+    }
     val mask = remember(atTop) {
         val ramp = arrayOf(0f to Color.Transparent, 0.5f to Color.Black.copy(alpha = 0.9f), 1f to Color.Black)
         Brush.verticalGradient(*if (atTop) ramp.map { (1f - it.first) to it.second }.reversed().toTypedArray() else ramp)
@@ -1085,19 +1117,13 @@ private fun EdgeFade(
                 drawContent()
                 drawRect(mask, blendMode = BlendMode.DstIn)
             }
-            .then(
-                if (backdrop != null) {
-                    Modifier.drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { RoundedCornerShape(0.dp) },
-                        effects = { blur(24.dp.toPx()) },
-                        highlight = null,
-                        shadow = null,
-                        onDrawSurface = { drawRect(page.copy(alpha = 0.3f)) },
-                    )
-                } else {
-                    Modifier.background(page)
-                },
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(0.dp) },
+                effects = { blur(24.dp.toPx()) },
+                highlight = null,
+                shadow = null,
+                onDrawSurface = { drawRect(page.copy(alpha = 0.3f)) },
             ),
     )
 }

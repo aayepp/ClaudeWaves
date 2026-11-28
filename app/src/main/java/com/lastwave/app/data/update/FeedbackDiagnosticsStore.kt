@@ -3,6 +3,7 @@ package com.lastwave.app.data.update
 import android.content.Context
 import com.lastwave.app.diagnostics.AppLog
 import com.lastwave.app.diagnostics.CrashRecorder
+import com.lastwave.app.diagnostics.CrashType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -153,60 +154,67 @@ class FeedbackDiagnosticsStore @Inject constructor(
     }
 
     /**
-     * Checks whether the app recorded a crash within the last 48 hours that has not yet
-     * been offered for one-tap bug reporting.
+     * Checks whether the app recorded a real crash (exception, native crash, ANR, or
+     * excessive resource use) within the last 48 hours that has not yet been offered
+     * for one-tap bug reporting.
      */
     fun findUnpromptedRecentCrash(nowMs: Long = System.currentTimeMillis()): PendingCrashReport? {
-        val latestFile = runCatching { CrashRecorder.crashFiles(context).firstOrNull() }.getOrNull()
-            ?: return null
-        val ageMs = nowMs - latestFile.lastModified()
-        if (ageMs < 0L || ageMs > RECENT_CRASH_MAX_AGE_MS) return null
+        val crashFiles = runCatching { CrashRecorder.crashFiles(context) }.getOrNull().orEmpty()
         val alreadyPrompted = prefs.getString(KEY_LAST_PROMPTED_CRASH, null)
-        if (alreadyPrompted == latestFile.name) return null
 
-        val rawText = runCatching { latestFile.readText(Charsets.UTF_8) }.getOrNull().orEmpty()
-        if (rawText.isBlank()) return null
+        for (file in crashFiles) {
+            val ageMs = nowMs - file.lastModified()
+            if (ageMs > RECENT_CRASH_MAX_AGE_MS) break
+            if (ageMs < 0L) continue
+            if (alreadyPrompted == file.name) return null
 
-        var crashType = "App Crash"
-        val lines = rawText.lines()
+            val rawText = runCatching { file.readText(Charsets.UTF_8) }.getOrNull().orEmpty()
+            if (rawText.isBlank()) continue
+
+            val lines = rawText.lines()
+            val crashType = parseCrashType(lines) ?: continue
+            if (crashType.lowercase() !in PROMPTABLE_CRASH_TYPES) continue
+
+            val exceptionIndex = lines.indexOfFirst { it.trim().equals("--- exception ---", ignoreCase = true) }
+            val detailIndex = lines.indexOfFirst { it.trim().equals("--- detail ---", ignoreCase = true) }
+            val startIndex = when {
+                exceptionIndex >= 0 -> exceptionIndex + 1
+                detailIndex >= 0 -> detailIndex + 1
+                else -> 0
+            }
+            val traceLines = lines.drop(startIndex)
+                .takeWhile { line ->
+                    val t = line.trim()
+                    !t.equals("--- other threads ---", ignoreCase = true) &&
+                        !t.startsWith("--- log lead-up", ignoreCase = true) &&
+                        !t.equals("--- end ---", ignoreCase = true)
+                }
+                .map { sanitizeLine(it) }
+                .filter { it.isNotBlank() }
+                .take(10)
+
+            val headline = traceLines.firstOrNull()?.take(90)?.ifBlank { crashType } ?: crashType
+            val compactTrace = traceLines.joinToString("\n").take(600)
+
+            return PendingCrashReport(
+                fileName = file.name,
+                crashType = crashType,
+                headline = headline,
+                compactTrace = compactTrace,
+                recordedAtMs = file.lastModified(),
+            )
+        }
+        return null
+    }
+
+    private fun parseCrashType(lines: List<String>): String? {
         for (line in lines) {
             if (line.startsWith("Crash type", ignoreCase = true)) {
                 val parsed = line.substringAfter(':', "").trim()
-                if (parsed.isNotEmpty()) {
-                    crashType = parsed
-                    break
-                }
+                if (parsed.isNotEmpty()) return parsed
             }
         }
-
-        val exceptionIndex = lines.indexOfFirst { it.trim().equals("--- exception ---", ignoreCase = true) }
-        val detailIndex = lines.indexOfFirst { it.trim().equals("--- detail ---", ignoreCase = true) }
-        val startIndex = when {
-            exceptionIndex >= 0 -> exceptionIndex + 1
-            detailIndex >= 0 -> detailIndex + 1
-            else -> 0
-        }
-        val traceLines = lines.drop(startIndex)
-            .takeWhile { line ->
-                val t = line.trim()
-                !t.equals("--- other threads ---", ignoreCase = true) &&
-                    !t.startsWith("--- log lead-up", ignoreCase = true) &&
-                    !t.equals("--- end ---", ignoreCase = true)
-            }
-            .map { sanitizeLine(it) }
-            .filter { it.isNotBlank() }
-            .take(10)
-
-        val headline = traceLines.firstOrNull()?.take(90)?.ifBlank { crashType } ?: crashType
-        val compactTrace = traceLines.joinToString("\n").take(600)
-
-        return PendingCrashReport(
-            fileName = latestFile.name,
-            crashType = crashType,
-            headline = headline,
-            compactTrace = compactTrace,
-            recordedAtMs = latestFile.lastModified(),
-        )
+        return null
     }
 
     fun markCrashPromptHandled(fileName: String) {
@@ -214,7 +222,7 @@ class FeedbackDiagnosticsStore @Inject constructor(
     }
 
     /**
-     * Builds a compact, redacted diagnostics block (runtime flags + latest crash header +
+     * Builds a compact, redacted diagnostics block (runtime flags + latest real crash header +
      * recent warnings/errors) capped safely at [MAX_SNAPSHOT_CHARS] so it fits inside `/feedback`.
      */
     fun buildCompactDiagnosticsSnapshot(extraSummary: String = ""): String {
@@ -222,9 +230,14 @@ class FeedbackDiagnosticsStore @Inject constructor(
         if (extraSummary.isNotBlank()) {
             sb.appendLine(sanitizeLine(extraSummary))
         }
-        val latestCrash = runCatching { CrashRecorder.crashFiles(context).firstOrNull() }.getOrNull()
-        if (latestCrash != null && System.currentTimeMillis() - latestCrash.lastModified() <= CRASH_INCLUDE_MAX_AGE_MS) {
-            val crashLines = runCatching { latestCrash.readText(Charsets.UTF_8).lines() }.getOrNull().orEmpty()
+        val now = System.currentTimeMillis()
+        val crashFiles = runCatching { CrashRecorder.crashFiles(context) }.getOrNull().orEmpty()
+        val unknownMarkerLabel = CrashType.UNKNOWN_TERMINATION.label
+        for (crashFile in crashFiles) {
+            if (now - crashFile.lastModified() > CRASH_INCLUDE_MAX_AGE_MS) break
+            val crashLines = runCatching { crashFile.readText(Charsets.UTF_8).lines() }.getOrNull().orEmpty()
+            val parsedType = parseCrashType(crashLines)
+            if (parsedType != null && parsedType.equals(unknownMarkerLabel, ignoreCase = true)) continue
             val typeLine = crashLines.firstOrNull { it.startsWith("Crash type", ignoreCase = true) }?.trim()
             val excIdx = crashLines.indexOfFirst { it.trim().equals("--- exception ---", ignoreCase = true) }
             val excSnippet = if (excIdx >= 0) {
@@ -233,9 +246,10 @@ class FeedbackDiagnosticsStore @Inject constructor(
                 emptyList()
             }
             if (typeLine != null || excSnippet.isNotEmpty()) {
-                sb.appendLine("Crash: ${sanitizeLine(typeLine ?: latestCrash.name)}")
+                sb.appendLine("Crash: ${sanitizeLine(typeLine ?: crashFile.name)}")
                 excSnippet.forEach { sb.appendLine(sanitizeLine(it).take(140)) }
             }
+            break
         }
 
         val tailEntries = runCatching { AppLog.tail?.snapshot(20).orEmpty() }.getOrDefault(emptyList())
@@ -267,6 +281,13 @@ class FeedbackDiagnosticsStore @Inject constructor(
         private const val MAX_SNAPSHOT_CHARS = 750
         private const val RECENT_CRASH_MAX_AGE_MS = 48L * 60L * 60L * 1000L
         private const val CRASH_INCLUDE_MAX_AGE_MS = 7L * 24L * 60L * 60L * 1000L
+
+        private val PROMPTABLE_CRASH_TYPES = setOf(
+            CrashType.UNCAUGHT_EXCEPTION.label.lowercase(),
+            CrashType.NATIVE_CRASH.label.lowercase(),
+            CrashType.ANR.label.lowercase(),
+            CrashType.EXCESSIVE_RESOURCE_USE.label.lowercase(),
+        )
 
         private val PAT_REGEX = Regex("""(github_pat_|ghp_|gho_|ghu_|ghs_)[A-Za-z0-9_]+""")
         private val BEARER_REGEX = Regex("""(?i)\b(Bearer|Basic)\s+[A-Za-z0-9\-._~+/]+=*""")

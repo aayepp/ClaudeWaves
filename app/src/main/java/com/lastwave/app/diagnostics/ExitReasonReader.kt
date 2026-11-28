@@ -27,19 +27,36 @@ object ExitReasonReader {
     private const val KEY_LAST_EXIT_MILLIS = "last_exit_timestamp"
     private const val MAX_HISTORY = 10
 
-    /** Records any abnormal exit since the last check. Safe to call on every launch. */
-    fun recordHistoricalExits(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+    data class HistoricalExitsResult(
+        /** PIDs for which Android reported a real crash / ANR / LMK / excessive-resource exit. */
+        val recordedCrashPids: Set<Int> = emptySet(),
+        /** PIDs whose exit Android explicitly attributed to normal/user/OS actions (swipe, update, stop, etc.). */
+        val benignExitPids: Set<Int> = emptySet(),
+    )
 
-        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
+    /** Records any abnormal exit since the last check. Safe to call on every launch. */
+    fun recordHistoricalExits(context: Context): HistoricalExitsResult {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return HistoricalExitsResult()
+
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return HistoricalExitsResult()
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val handledUpTo = prefs.getLong(KEY_LAST_EXIT_MILLIS, 0L)
 
         val history = runCatching {
             manager.getHistoricalProcessExitReasons(context.packageName, 0, MAX_HISTORY)
-        }.getOrNull() ?: return
+        }.getOrNull() ?: return HistoricalExitsResult()
 
         val newest = history.maxOfOrNull { it.timestamp } ?: 0L
+        val recordedCrashPids = HashSet<Int>()
+        val benignExitPids = HashSet<Int>()
+
+        history.forEach { exit ->
+            when {
+                typeFor(exit.reason) != null -> recordedCrashPids.add(exit.pid)
+                isBenignExitReason(exit.reason) -> benignExitPids.add(exit.pid)
+            }
+        }
 
         history.asSequence()
             .filter { it.timestamp > handledUpTo }
@@ -55,6 +72,10 @@ object ExitReasonReader {
         if (newest > handledUpTo) {
             prefs.edit().putLong(KEY_LAST_EXIT_MILLIS, newest).apply()
         }
+        return HistoricalExitsResult(
+            recordedCrashPids = recordedCrashPids,
+            benignExitPids = benignExitPids,
+        )
     }
 
     /** Maps an exit reason to a [CrashType], or null when it was a normal exit. */
@@ -67,6 +88,18 @@ object ExitReasonReader {
         // one is missing, recording the system description is better than silence.
         ApplicationExitInfo.REASON_CRASH -> CrashType.UNCAUGHT_EXCEPTION
         else -> null
+    }
+
+    private fun isBenignExitReason(reason: Int): Boolean = when (reason) {
+        ApplicationExitInfo.REASON_EXIT_SELF,
+        ApplicationExitInfo.REASON_USER_REQUESTED,
+        ApplicationExitInfo.REASON_USER_STOPPED,
+        ApplicationExitInfo.REASON_PERMISSION_CHANGE,
+        ApplicationExitInfo.REASON_FREEZER,
+        ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE,
+        ApplicationExitInfo.REASON_PACKAGE_UPDATED,
+        ApplicationExitInfo.REASON_OTHER -> true
+        else -> false
     }
 
     private fun describe(exit: ApplicationExitInfo): String = buildString {

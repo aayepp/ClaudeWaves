@@ -39,8 +39,8 @@ import javax.inject.Singleton
 /** [emoji] marks the type in the notification shade, which cannot show a vector icon. */
 enum class BroadcastType(val key: String, val label: String, val emoji: String) {
     INFO("info", "Info", "\uD83D\uDCE2"),
-    WARNING("warning", "Amaran", "\u26A0\uFE0F"),
-    MAINTENANCE("maintenance", "Selenggara", "\uD83D\uDD27"),
+    WARNING("warning", "Warning", "\u26A0\uFE0F"),
+    MAINTENANCE("maintenance", "Maintenance", "\uD83D\uDD27"),
     UPDATE("update", "Update", "\uD83C\uDD95");
 
     companion object {
@@ -50,9 +50,9 @@ enum class BroadcastType(val key: String, val label: String, val emoji: String) 
 }
 
 enum class BroadcastDisplayMode(val key: String, val label: String) {
-    POPUP("popup", "Popup Sahaja"),
-    TICKER("ticker", "Top Home Bergerak"),
-    BOTH("both", "Kedua-dua");
+    POPUP("popup", "Popup Only"),
+    TICKER("ticker", "Scrolling Top Banner"),
+    BOTH("both", "Both");
 
     companion object {
         fun fromKey(raw: String?): BroadcastDisplayMode =

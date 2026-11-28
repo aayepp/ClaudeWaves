@@ -129,17 +129,26 @@ fun ArtworkImage(
         else -> displayUrl
     }
 
+    val isLowTier = com.lastwave.app.ui.theme.LocalLowTierDevice.current
+    val effectiveDecodeSizePx = if (isLowTier && decodeSizePx != null && decodeSizePx <= 384) {
+        minOf(decodeSizePx, 224)
+    } else {
+        decodeSizePx
+    }
+    val effectiveCrossfadeMs = if (isLowTier) 0 else crossfadeMs
+
     val retainedPainter = lastSuccessfulPainter
     Box(modifier = modifier, contentAlignment = alignment) {
         if (!requestUrl.isNullOrBlank()) {
-            val model = remember(requestUrl, decodeSizePx, transformations, crossfadeMs, context) {
+            val model = remember(requestUrl, effectiveDecodeSizePx, transformations, effectiveCrossfadeMs, isLowTier, context) {
                 val builder = ImageRequest.Builder(context)
                     .data(requestUrl)
                     .diskCacheKey(requestUrl)
                     .precision(coil.size.Precision.INEXACT)
                     .allowHardware(transformations.isEmpty())
-                    .apply { if (crossfadeMs > 0) crossfade(crossfadeMs) else crossfade(false) }
-                if (decodeSizePx != null) builder.size(decodeSizePx)
+                    .allowRgb565(isLowTier && transformations.isEmpty())
+                    .apply { if (effectiveCrossfadeMs > 0) crossfade(effectiveCrossfadeMs) else crossfade(false) }
+                if (effectiveDecodeSizePx != null) builder.size(effectiveDecodeSizePx)
                 if (transformations.isNotEmpty()) builder.transformations(transformations)
                 builder.build()
             }

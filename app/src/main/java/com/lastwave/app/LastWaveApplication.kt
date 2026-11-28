@@ -234,19 +234,17 @@ class LastWaveApplication : Application(), ImageLoaderFactory {
 
     @OptIn(ExperimentalCoilApi::class)
     override fun newImageLoader(): ImageLoader {
-        val lowRamDevice = runCatching {
-            (getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.isLowRamDevice == true
-        }.getOrDefault(false)
+        val lowTierDevice = com.lastwave.app.util.DevicePerformanceTier.isLowTier(this)
         val imageClient = try {
             okHttpClient.get().newBuilder()
             .dispatcher(okhttp3.Dispatcher().apply {
                 // Bound decode/network bursts: artwork hosts are shared by
                 // many visible rows, and 128 simultaneous responses can turn
                 // into a GC/decode storm on mobile CPUs.
-                maxRequests = if (lowRamDevice) 16 else 48
-                maxRequestsPerHost = if (lowRamDevice) 4 else 8
+                maxRequests = if (lowTierDevice) 12 else 48
+                maxRequestsPerHost = if (lowTierDevice) 4 else 8
             })
-            .connectionPool(okhttp3.ConnectionPool(if (lowRamDevice) 8 else 16, 5, java.util.concurrent.TimeUnit.MINUTES))
+            .connectionPool(okhttp3.ConnectionPool(if (lowTierDevice) 8 else 16, 5, java.util.concurrent.TimeUnit.MINUTES))
             .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             .build()
@@ -262,7 +260,7 @@ class LastWaveApplication : Application(), ImageLoaderFactory {
             .okHttpClient(imageClient)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(if (lowRamDevice) 0.08 else 0.18)
+                    .maxSizePercent(if (lowTierDevice) 0.10 else 0.18)
                     .build()
             }
             .diskCache {
@@ -274,7 +272,7 @@ class LastWaveApplication : Application(), ImageLoaderFactory {
                     }
                 }.getOrDefault(CacheStoragePolicy.DEFAULT_LIMIT_MB)
                 CacheStoragePolicy.setLimitMb(cacheLimitMb)
-                val imageCacheLimitBytes = CacheStoragePolicy.imageCacheBytes(lowRamDevice)
+                val imageCacheLimitBytes = CacheStoragePolicy.imageCacheBytes(lowTierDevice)
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
                     .maxSizeBytes(imageCacheLimitBytes)
@@ -301,7 +299,8 @@ class LastWaveApplication : Application(), ImageLoaderFactory {
             }
             .respectCacheHeaders(false)
             .allowHardware(true)
-            .crossfade(150)
+            .allowRgb565(lowTierDevice)
+            .crossfade(if (lowTierDevice) 0 else 150)
             .build()
         cacheTrackingImageLoader = imageLoader
         applicationScope.launch(Dispatchers.IO) { refreshArtworkCacheUsage() }

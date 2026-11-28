@@ -691,6 +691,7 @@ class MusicPlaybackService : MediaBrowserServiceCompat() {
         if (musicPlayer.isUsbExclusiveActive) {
             // Playback cannot continue without the DAC, and holding it silences every other app.
             musicPlayer.releaseUsbDacOnTaskRemoved()
+            com.lastwave.app.diagnostics.Diagnostics.markCleanShutdown(this)
             super.onTaskRemoved(rootIntent)
             return
         }
@@ -701,6 +702,7 @@ class MusicPlaybackService : MediaBrowserServiceCompat() {
             // next launch while still stopping audio, notification, cast and
             // wake/wifi locks immediately.
             musicPlayer.stopAndClear(clearSession = false)
+            com.lastwave.app.diagnostics.Diagnostics.markCleanShutdown(this)
         }
         super.onTaskRemoved(rootIntent)
     }

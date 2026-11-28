@@ -527,7 +527,7 @@ class MusicPlayer @Inject constructor(
                 queueSize = it.queue.size,
                 currentIndex = it.currentIndex,
                 shuffleEnabled = it.shuffleEnabled,
-                deckBlendTelemetry = it.deckBlendTelemetry,
+                deckBlendTelemetry = it.deckBlendTelemetry.copy(blendProgress = 0f),
                 isCrossfading = it.isCrossfading,
                 qualityTier = resolveAudioQualityTier(
                     codec = it.audioCodec,
@@ -2151,6 +2151,9 @@ class MusicPlayer @Inject constructor(
         }
         val autoMixCoord = autoMixCoordinator.get()
         autoMixCoord.engineResolver = { target -> engineForPlayer(target) }
+        autoMixCoord.nativeDspActiveResolver = { target ->
+            playerToSink[target]?.isNativeProcessingReadyOrActive() ?: true
+        }
         autoMixCoord.onPerformDeckSwap = { outgoing, incoming ->
             // Carry the exact play order across. Walking only from the
             // incoming song onward produced a partial order that failed the
@@ -2163,7 +2166,7 @@ class MusicPlayer @Inject constructor(
                 }
             }
             incoming.shuffleModeEnabled = outgoing.shuffleModeEnabled
-            incoming.repeatMode = outgoing.repeatMode
+            incoming.repeatMode = _state.value.repeatMode
             incoming.playbackParameters = outgoing.playbackParameters
             crossfadeStandbyArmed = false
             crossfadeStandbyPreparing = false
@@ -2292,14 +2295,16 @@ class MusicPlayer @Inject constructor(
 
                             val repeatOne = player.repeatMode == Player.REPEAT_MODE_ONE || _state.value.repeatMode == Player.REPEAT_MODE_ONE
                             val isPodcast = _state.value.current?.mediaType == MediaType.PODCAST_EPISODE
+                            val abLoopActive = abLoopStartMs != null && abLoopEndMs != null
                             val timingDurationMs = player.duration.takeIf { it > 0L }
                                 ?: player.currentMediaItem?.localConfiguration?.customCacheKey
                                     ?.let(preparedStreams::get)?.durationMs?.takeIf { it > 0L }
                                 ?: dur.takeIf { it > 0L && durationOwnerMediaId == player.currentMediaItem?.mediaId }
                                 ?: 0L
 
-                            val transitionActive = !sleepTimerEndOfTrack && !repeatOne && !isPodcast &&
+                            val transitionActive = !sleepTimerEndOfTrack && !abLoopActive && !repeatOne && !isPodcast &&
                                 !bitPerfectEnabled && !exclusiveUsbOutput.isActive() &&
+                                outgoingPlayer == null && !autoMixCoordinator.get().isBlending &&
                                 (crossfadeEnabled || autoMixCoordinator.get().isEnabled)
                             if (transitionActive && upcomingIdx != C.INDEX_UNSET && nextItem != null) {
                                 val remainingMs = timingDurationMs - pos
@@ -2350,6 +2355,8 @@ class MusicPlayer @Inject constructor(
                                 nextMediaId = nextItem?.mediaId,
                                 isRepeatOne = repeatOne,
                                 isPodcast = isPodcast,
+                                isSleepTimerEndOfTrack = sleepTimerEndOfTrack,
+                                isAbLoopActive = abLoopActive,
                             )
                             if (autoMixCoordinator.get().isBlending || updateCrossfade(pos)) {
                                 cadenceMs = 60L
@@ -3752,8 +3759,8 @@ class MusicPlayer @Inject constructor(
         cancelActiveUpgrade()
         currentTrackCacheJob?.cancel()
         currentTrackCacheJob = null
-        preloadJob?.cancel()
-        preloadJob = null
+        // Allow immediate next-track resolve retry if the user scrubbed near the end.
+        lastCrossfadeResolveKickMs = 0L
         val target = positionMs.coerceAtLeast(0)
         val now = SystemClock.elapsedRealtime()
         lastSeekTargetMs = target

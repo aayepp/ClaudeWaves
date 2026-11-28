@@ -1080,6 +1080,14 @@ class NativeProcessingAudioSink(
 
     fun isInternalDirectActive(): Boolean = internalActive
 
+    /** True when decoded PCM is flowing (or ready to flow) through the native C++ DSP. */
+    fun isNativeProcessingReadyOrActive(): Boolean =
+        if (hasConfigured) {
+            processingActive
+        } else {
+            !nativePathDisabled && !bitPerfectRequested && !usbExclusive && !internalActive && processor.isAvailable
+        }
+
     /**
      * The audio route changed (Bluetooth, jack…): a previous refusal or a lost
      * stream may not apply to the new output, so allow one fresh attempt at

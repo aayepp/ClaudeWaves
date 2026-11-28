@@ -148,7 +148,13 @@ import kotlin.random.Random
 
 
     @MainThread
-internal fun MusicPlayer.cancelCrossfade() {
+internal fun MusicPlayer.cancelCrossfade(cancelAutoMix: Boolean = true) {
+        if (cancelAutoMix) {
+            val coord = autoMixCoordinator.get()
+            if (coord.isBlending || coord.telemetry.value.phase != com.lastwave.app.playback.automix.api.BlendPhase.IDLE) {
+                coord.cancelTransition(revertToPrimary = true)
+            }
+        }
         crossfadeStandbyArmed = false
         crossfadeStandbyPreparing = false
         lastCrossfadeLogKey = null
@@ -158,7 +164,7 @@ internal fun MusicPlayer.cancelCrossfade() {
         outgoingPlayer = null
         outgoingToStop?.stop()
         outgoingToStop?.clearMediaItems()
-        if (!autoMixCoordinator.get().isEnabled) {
+        if (cancelAutoMix || !autoMixCoordinator.get().isEnabled) {
             val standby = if (player === secondaryPlayer) playerDelegate.value else secondaryPlayer
             standby?.stop()
             standby?.clearMediaItems()
@@ -261,7 +267,7 @@ internal fun MusicPlayer.updateCrossfade(positionMs: Long): Boolean {
         if (crossfadeBlocked) {
             // finish a fade that was already running, otherwise isCrossfading
             // stays true and the badge sticks on "Crossfade"
-            if (_state.value.isCrossfading) cancelCrossfade()
+            if (_state.value.isCrossfading) cancelCrossfade(cancelAutoMix = false)
             return false
         }
         outgoingPlayer?.let { outgoing ->
@@ -533,6 +539,7 @@ internal fun MusicPlayer.updateSystemEffectsState() {
             engines.forEach { engine ->
                 runCatching { engine.setEqualizer(false, zeros) }
                 runCatching { engine.setStudioMasterClarity(false) }
+                runCatching { engine.setAutoMixBandGains(false, 1f, 1f, 1f) }
                 engine.systemFlattened = true
             }
         } else {

@@ -1,5 +1,6 @@
 package com.lastwave.app.ui.shell
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -49,9 +50,11 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.lastwave.app.R
 import com.lastwave.app.ui.comic.Button
 import com.lastwave.app.ui.comic.Checkbox
 import com.lastwave.app.ui.common.ModalBottomSheet
@@ -61,19 +64,24 @@ import kotlin.math.roundToInt
  * One home-dock button: a pager tab when [tab] is set, otherwise a shortcut that opens a
  * screen or acts. Ids are persisted, so never rename one.
  */
-internal enum class DockItem(val id: String, val label: String, val icon: ImageVector, val tab: MainTab? = null) {
-    FEED("feed", "Feed", Icons.Filled.Home, MainTab.FEED),
-    STATS("stats", "Stats", Icons.Filled.Leaderboard, MainTab.STATS),
-    PLAYLISTS("playlists", "Library", Icons.AutoMirrored.Filled.QueueMusic, MainTab.PLAYLISTS),
-    LIKED("liked", "Liked", Icons.Filled.Favorite),
-    SHUFFLE_LIKED("shuffle_liked", "Shuffle", Icons.Filled.Shuffle),
-    DOWNLOADS("downloads", "Downloads", Icons.Filled.Download),
-    DISCOVER("discover", "Discover", Icons.Filled.Explore),
-    PODCASTS("podcasts", "Podcasts", Icons.Filled.Podcasts),
-    NEW_RELEASES("new_releases", "New", Icons.Filled.NewReleases),
-    GENRES("genres", "Genres", Icons.Filled.Category),
-    JAM("jam", "Jam", Icons.Filled.Groups),
-    SETTINGS("settings", "Settings", Icons.Filled.Settings),
+internal enum class DockItem(
+    val id: String,
+    @StringRes val labelRes: Int,
+    val icon: ImageVector,
+    val tab: MainTab? = null,
+) {
+    FEED("feed", R.string.nav_feed, Icons.Filled.Home, MainTab.FEED),
+    STATS("stats", R.string.nav_stats, Icons.Filled.Leaderboard, MainTab.STATS),
+    PLAYLISTS("playlists", R.string.nav_playlists, Icons.AutoMirrored.Filled.QueueMusic, MainTab.PLAYLISTS),
+    LIKED("liked", R.string.dock_item_liked, Icons.Filled.Favorite),
+    SHUFFLE_LIKED("shuffle_liked", R.string.dock_item_shuffle, Icons.Filled.Shuffle),
+    DOWNLOADS("downloads", R.string.dock_item_downloads, Icons.Filled.Download),
+    DISCOVER("discover", R.string.dock_item_discover, Icons.Filled.Explore),
+    PODCASTS("podcasts", R.string.dock_item_podcasts, Icons.Filled.Podcasts),
+    NEW_RELEASES("new_releases", R.string.dock_item_new, Icons.Filled.NewReleases),
+    GENRES("genres", R.string.dock_item_genres, Icons.Filled.Category),
+    JAM("jam", R.string.dock_item_jam, Icons.Filled.Groups),
+    SETTINGS("settings", R.string.dock_item_settings, Icons.Filled.Settings),
     ;
 
     val isTab: Boolean get() = tab != null
@@ -123,9 +131,13 @@ internal fun DockEditorSheet(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Susun dock", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        "Pilih hingga ${DockItem.MAX}. Seret ≡ untuk tukar susunan.",
+                        stringResource(R.string.dock_editor_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.dock_editor_subtitle, DockItem.MAX),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -200,7 +212,7 @@ internal fun DockEditorSheet(
                 shape = CircleShape,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
-                Text("Siap", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.dock_editor_done), fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -217,6 +229,7 @@ private fun DockEditorRow(
     modifier: Modifier,
 ) {
     val faded = !checked && !enabled
+    val itemLabel = stringResource(item.labelRes)
     Row(
         modifier = modifier.fillMaxWidth().graphicsLayer { alpha = if (faded) 0.45f else 1f },
         verticalAlignment = Alignment.CenterVertically,
@@ -225,7 +238,7 @@ private fun DockEditorRow(
         if (handle != null) {
             Icon(
                 Icons.Filled.DragHandle,
-                contentDescription = "Seret untuk susun ${item.label}",
+                contentDescription = stringResource(R.string.dock_editor_drag_cd, itemLabel),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = handle.size(24.dp),
             )
@@ -233,10 +246,10 @@ private fun DockEditorRow(
             Spacer(Modifier.width(24.dp))
         }
         Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
-        Text(item.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(itemLabel, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         if (item.isTab) {
             Text(
-                "Tab",
+                stringResource(R.string.dock_editor_tab_badge),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(end = 4.dp),

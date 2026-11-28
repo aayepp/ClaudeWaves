@@ -110,7 +110,15 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
         val open = PendingIntent.getActivity(context, 1, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val body = message.message.ifBlank { message.type.label }
+        val typeLabel = context.getString(
+            when (message.type) {
+                BroadcastType.INFO -> R.string.broadcast_type_info
+                BroadcastType.WARNING -> R.string.broadcast_type_warning
+                BroadcastType.MAINTENANCE -> R.string.broadcast_type_maintenance
+                BroadcastType.UPDATE -> R.string.broadcast_type_update
+            },
+        )
+        val body = message.message.ifBlank { typeLabel }
         val notification = NotificationCompat.Builder(context, BROADCAST_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_wave)
             .setContentTitle("${message.type.emoji} ${message.title}")

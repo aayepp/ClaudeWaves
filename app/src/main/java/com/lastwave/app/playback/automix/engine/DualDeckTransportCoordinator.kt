@@ -48,7 +48,7 @@ class DualDeckTransportCoordinator @Inject constructor(
 
     fun setBaseVolume(vol: Float) {
         baseVolume = vol.coerceIn(0f, 1f)
-        if (activeSpliceJob == null || activeSpliceJob?.isActive != true) {
+        if (!blendLoopActive) {
             currentPrimaryPlayer?.volume = baseVolume
         }
     }
@@ -62,7 +62,12 @@ class DualDeckTransportCoordinator @Inject constructor(
     private var isJamRoomActive = false
 
     private var activeTrackKey: String? = null
+    private var activeNextTrackKey: String? = null
     private var activeSpliceJob: Job? = null
+    private var idleResetJob: Job? = null
+    private var blendLoopActive = false
+    private var deckSwapped = false
+    private var savedOutgoingRepeatMode: Int? = null
     private var currentSplicePlan: SplicePlan? = null
     /** Outgoing duration the current plan was built for. */
     private var planDurationMs: Long = 0L
@@ -76,10 +81,13 @@ class DualDeckTransportCoordinator @Inject constructor(
     private var transportPaused = false
 
     /** True while a blend (both decks audible) is in progress. */
-    val isBlending: Boolean get() = activeSpliceJob?.isActive == true
+    val isBlending: Boolean get() = blendLoopActive
 
     /** Resolves the [NativeAudioEngine] bound to an ExoPlayer deck for 3-band spectral DSP. */
     var engineResolver: ((ExoPlayer) -> NativeAudioEngine?)? = null
+
+    /** Resolves whether decoded PCM for a deck actually enters the native C++ DSP. */
+    var nativeDspActiveResolver: ((ExoPlayer) -> Boolean)? = null
 
     /**
      * Pause / resume coming from the player transport. During a blend both
@@ -90,7 +98,7 @@ class DualDeckTransportCoordinator @Inject constructor(
     fun setTransportPaused(paused: Boolean) {
         if (transportPaused == paused) return
         transportPaused = paused
-        if (activeSpliceJob?.isActive != true) return
+        if (!blendLoopActive) return
         runCatching {
             if (paused) {
                 currentPrimaryPlayer?.pause()
@@ -128,16 +136,25 @@ class DualDeckTransportCoordinator @Inject constructor(
         nextMediaId: String? = null,
         isRepeatOne: Boolean = false,
         isPodcast: Boolean = false,
+        isSleepTimerEndOfTrack: Boolean = false,
+        isAbLoopActive: Boolean = false,
     ) {
-        if (!currentSettings.autoMixEnabled || isHardwareBypassEngaged || isJamRoomActive || isRepeatOne || isPodcast) {
-            if (activeSpliceJob?.isActive == true || _telemetry.value.phase != BlendPhase.IDLE) {
+        if (!currentSettings.autoMixEnabled ||
+            isHardwareBypassEngaged ||
+            isJamRoomActive ||
+            isRepeatOne ||
+            isPodcast ||
+            isSleepTimerEndOfTrack ||
+            isAbLoopActive
+        ) {
+            if (blendLoopActive || _telemetry.value.phase != BlendPhase.IDLE) {
                 cancelTransition(revertToPrimary = true)
             }
             return
         }
 
         // If a blend is actively running, do not interfere with the transition in progress
-        if (activeSpliceJob?.isActive == true) {
+        if (blendLoopActive) {
             return
         }
 
@@ -147,8 +164,10 @@ class DualDeckTransportCoordinator @Inject constructor(
         if (currentTrack == null || nextTrack == null || durationMs <= 0L) return
 
         val trackKey = currentTrack.videoId ?: "${currentTrack.artist}|${currentTrack.title}"
-        if (activeTrackKey != trackKey) {
+        val nextKey = nextMediaId ?: nextTrack.videoId ?: "${nextTrack.artist}|${nextTrack.title}"
+        if (activeTrackKey != trackKey || activeNextTrackKey != nextKey) {
             activeTrackKey = trackKey
+            activeNextTrackKey = nextKey
             currentSplicePlan = null
             immediatePlan = false
             // Only reset telemetry if no blend is active or completing —
@@ -192,7 +211,8 @@ class DualDeckTransportCoordinator @Inject constructor(
                 signatureExtractor.preAnalyzeTrack(nextTrack, nextTrackStreamUrl ?: nextTrack.playbackUrl) { sig ->
                     val phaseNow = _telemetry.value.phase
                     if (activeTrackKey != trackKey ||
-                        activeSpliceJob?.isActive == true ||
+                        activeNextTrackKey != nextKey ||
+                        blendLoopActive ||
                         (phaseNow != BlendPhase.PRE_ANALYZING && phaseNow != BlendPhase.ARMED)
                     ) {
                         return@preAnalyzeTrack
@@ -276,12 +296,14 @@ class DualDeckTransportCoordinator @Inject constructor(
                 val isSecondaryReady = secondaryPlayer.playbackState == Player.STATE_READY &&
                     secondaryPlayer.playerError == null &&
                     matchesNext
-                val enoughRunway = immediatePlan || remainingMs >= 1_500L
+                val speed = primaryPlayer.playbackParameters.speed.coerceAtLeast(0.25f)
+                val remainingWallMs = (remainingMs / speed).toLong()
+                val enoughRunway = immediatePlan || remainingWallMs >= 1_500L
                 if (isSecondaryReady && enoughRunway) {
                     val effectiveDurationMs = if (immediatePlan) {
                         plan.durationMs
                     } else {
-                        minOf(plan.durationMs, maxOf(3_000L, remainingMs))
+                        minOf(plan.durationMs, maxOf(3_000L, remainingWallMs))
                     }
                     startBlendExecution(
                         primaryPlayer = primaryPlayer,
@@ -299,7 +321,11 @@ class DualDeckTransportCoordinator @Inject constructor(
         plan: SplicePlan,
     ) {
         activeSpliceJob?.cancel()
+        idleResetJob?.cancel()
+        idleResetJob = null
         immediatePlan = false
+        blendLoopActive = true
+        deckSwapped = false
         currentPrimaryPlayer = primaryPlayer
         currentSecondaryPlayer = secondaryPlayer
         val durationMs = plan.durationMs.coerceAtLeast(1_000L)
@@ -312,8 +338,11 @@ class DualDeckTransportCoordinator @Inject constructor(
         val useSpectralDsp = currentSettings.spectralFilterSweepsEnabled &&
             outEngine != null && inEngine != null &&
             outEngine.isAvailable && inEngine.isAvailable &&
-            !outEngine.systemFlattened && !inEngine.systemFlattened
+            !outEngine.systemFlattened && !inEngine.systemFlattened &&
+            nativeDspActiveResolver?.invoke(primaryPlayer) != false &&
+            nativeDspActiveResolver?.invoke(secondaryPlayer) != false
 
+        savedOutgoingRepeatMode = primaryPlayer.repeatMode
         primaryPlayer.repeatMode = Player.REPEAT_MODE_OFF
 
         _telemetry.update {
@@ -326,8 +355,7 @@ class DualDeckTransportCoordinator @Inject constructor(
             )
         }
 
-        primaryPlayer.setPlaybackSpeed(1.0f)
-        secondaryPlayer.setPlaybackSpeed(1.0f)
+        secondaryPlayer.playbackParameters = primaryPlayer.playbackParameters
 
         // Avoid calling seekTo(0) when already parked near 0ms; seekTo flushes ExoPlayer buffers.
         val secPos = runCatching { secondaryPlayer.currentPosition }.getOrDefault(0L)
@@ -353,10 +381,10 @@ class DualDeckTransportCoordinator @Inject constructor(
         secondaryPlayer.play()
 
         activeSpliceJob = scope.launch {
+            val myJob = coroutineContext[Job]
             var elapsed = 0L
             var waitingBufferMs = 0L
             var lastTick = android.os.SystemClock.elapsedRealtime()
-            var swapped = false
             var aborted = false
 
             try {
@@ -384,9 +412,9 @@ class DualDeckTransportCoordinator @Inject constructor(
 
                     elapsed += dt
                     var progress = (elapsed.toFloat() / durationMs.toFloat()).coerceIn(0.0f, 1.0f)
-                    if (!swapped && primaryPlayer.playbackState == Player.STATE_ENDED) {
+                    if (!deckSwapped && primaryPlayer.playbackState == Player.STATE_ENDED) {
                         progress = progress.coerceAtLeast(0.65f)
-                    } else if (swapped && primaryPlayer.playbackState == Player.STATE_ENDED) {
+                    } else if (deckSwapped && primaryPlayer.playbackState == Player.STATE_ENDED) {
                         progress = 1.0f
                     }
 
@@ -410,8 +438,8 @@ class DualDeckTransportCoordinator @Inject constructor(
                     }
 
                     // Dominant energy handoff point (65% through transition window):
-                    if (progress >= 0.65f && !swapped) {
-                        swapped = true
+                    if (progress >= 0.65f && !deckSwapped) {
+                        deckSwapped = true
                         runCatching {
                             onPerformDeckSwap?.invoke(primaryPlayer, secondaryPlayer)
                         }.onFailure { e ->
@@ -424,14 +452,22 @@ class DualDeckTransportCoordinator @Inject constructor(
                 }
 
                 if (!aborted) {
-                    if (!swapped) {
-                        swapped = true
+                    if (!deckSwapped) {
+                        deckSwapped = true
                         runCatching { onPerformDeckSwap?.invoke(primaryPlayer, secondaryPlayer) }
                     }
                     resetAutoMixEngines()
                     primaryPlayer.volume = 0.0f
                     secondaryPlayer.volume = baseVolume
                     runCatching { primaryPlayer.pause() }
+
+                    blendLoopActive = false
+                    deckSwapped = false
+                    savedOutgoingRepeatMode = null
+                    currentSplicePlan = null
+                    currentPrimaryPlayer = null
+                    currentSecondaryPlayer = null
+                    if (activeSpliceJob === myJob) activeSpliceJob = null
 
                     _telemetry.update {
                         it.copy(
@@ -442,14 +478,20 @@ class DualDeckTransportCoordinator @Inject constructor(
 
                     runCatching { onTransitionComplete?.invoke() }
 
-                    delay(1_500L)
-                    _telemetry.update { DeckBlendTelemetry.IDLE }
-                    currentSplicePlan = null
-                    currentPrimaryPlayer = null
-                    currentSecondaryPlayer = null
+                    idleResetJob?.cancel()
+                    idleResetJob = scope.launch {
+                        delay(1_500L)
+                        if (!blendLoopActive) {
+                            _telemetry.update { DeckBlendTelemetry.IDLE }
+                        }
+                    }
                 }
             } finally {
-                resetAutoMixEngines()
+                if (activeSpliceJob === myJob) {
+                    blendLoopActive = false
+                    activeSpliceJob = null
+                    resetAutoMixEngines()
+                }
             }
         }
     }
@@ -517,32 +559,70 @@ class DualDeckTransportCoordinator @Inject constructor(
     }
 
     override fun cancelTransition(revertToPrimary: Boolean) {
-        activeSpliceJob?.cancel()
+        val job = activeSpliceJob
         activeSpliceJob = null
+        job?.cancel()
+        idleResetJob?.cancel()
+        idleResetJob = null
+
+        val wasSwapped = deckSwapped
+        val savedRepeat = savedOutgoingRepeatMode
+        val primary = currentPrimaryPlayer
+        val secondary = currentSecondaryPlayer
+
+        blendLoopActive = false
+        deckSwapped = false
+        savedOutgoingRepeatMode = null
         currentSplicePlan = null
         immediatePlan = false
-        resetAutoMixEngines()
-        _telemetry.update { DeckBlendTelemetry.IDLE }
-        if (revertToPrimary) {
-            runCatching {
-                currentPrimaryPlayer?.volume = baseVolume
-                currentSecondaryPlayer?.volume = 0.0f
-                currentSecondaryPlayer?.pause()
-            }
-        }
         currentPrimaryPlayer = null
         currentSecondaryPlayer = null
+        resetAutoMixEngines()
+        _telemetry.update { DeckBlendTelemetry.IDLE }
+
+        if (wasSwapped) {
+            // Deck swap already promoted secondary as active player; stop outgoing primary cleanly.
+            runCatching {
+                secondary?.volume = baseVolume
+                primary?.volume = 0.0f
+                primary?.pause()
+                onTransitionComplete?.invoke()
+            }
+        } else if (revertToPrimary) {
+            runCatching {
+                savedRepeat?.let { primary?.repeatMode = it }
+                primary?.volume = baseVolume
+                secondary?.volume = 0.0f
+                secondary?.pause()
+            }
+        }
     }
 
     override fun forceCommitTransition() {
-        activeSpliceJob?.cancel()
+        val job = activeSpliceJob
         activeSpliceJob = null
-        resetAutoMixEngines()
+        job?.cancel()
+        idleResetJob?.cancel()
+        idleResetJob = null
+
+        val wasSwapped = deckSwapped
         val primary = currentPrimaryPlayer
         val secondary = currentSecondaryPlayer
+
+        blendLoopActive = false
+        deckSwapped = false
+        savedOutgoingRepeatMode = null
+        currentSplicePlan = null
+        immediatePlan = false
+        currentPrimaryPlayer = null
+        currentSecondaryPlayer = null
+        resetAutoMixEngines()
+
         if (primary != null && secondary != null) {
             runCatching {
-                onPerformDeckSwap?.invoke(primary, secondary)
+                if (!wasSwapped) {
+                    onPerformDeckSwap?.invoke(primary, secondary)
+                }
                 primary.volume = 0.0f
                 secondary.volume = baseVolume
                 primary.pause()
@@ -555,12 +635,11 @@ class DualDeckTransportCoordinator @Inject constructor(
                 blendProgress = 1.0f,
             )
         }
-        scope.launch {
+        idleResetJob = scope.launch {
             delay(1_500L)
-            _telemetry.update { DeckBlendTelemetry.IDLE }
-            currentSplicePlan = null
-            currentPrimaryPlayer = null
-            currentSecondaryPlayer = null
+            if (!blendLoopActive) {
+                _telemetry.update { DeckBlendTelemetry.IDLE }
+            }
         }
     }
 
@@ -577,13 +656,17 @@ class DualDeckTransportCoordinator @Inject constructor(
     }
 
     override fun handleSeekEvent(targetPositionMs: Long) {
+        if (!blendLoopActive) return
+        if (deckSwapped) {
+            // Active player is already incoming track; finish outgoing tail cleanly.
+            forceCommitTransition()
+            return
+        }
         val plan = currentSplicePlan ?: return
-        if (_telemetry.value.phase == BlendPhase.BLENDING || _telemetry.value.phase == BlendPhase.LOOP_LOCKED) {
-            if (targetPositionMs < plan.cueOutStartMs) {
-                cancelTransition(revertToPrimary = true)
-            } else if (targetPositionMs >= plan.cueOutStartMs + (plan.durationMs * 0.65f)) {
-                forceCommitTransition()
-            }
+        if (targetPositionMs >= plan.cueOutStartMs + (plan.durationMs * 0.65f)) {
+            forceCommitTransition()
+        } else {
+            cancelTransition(revertToPrimary = true)
         }
     }
 

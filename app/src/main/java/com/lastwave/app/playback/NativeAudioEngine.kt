@@ -144,7 +144,7 @@ class NativeAudioEngine @Inject constructor(
 
     /** Thread-safe per-deck 3-band Linkwitz-Riley AutoMix gain modulation (active, low, mid, high). */
     fun setAutoMixBandGains(active: Boolean, lowGain: Float, midGain: Float, highGain: Float) {
-        if (systemFlattened) return
+        if (systemFlattened && active) return
         val safeLow = if (lowGain.isFinite()) lowGain.coerceIn(0f, 1f) else 1f
         val safeMid = if (midGain.isFinite()) midGain.coerceIn(0f, 1f) else 1f
         val safeHigh = if (highGain.isFinite()) highGain.coerceIn(0f, 1f) else 1f
